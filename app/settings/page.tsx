@@ -3,6 +3,7 @@ import { requireLogin } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { COUNTRIES, PLATFORMS, countryByCode } from "@/lib/countries";
 import { fmtDate } from "@/lib/format";
+import { SubmitButton } from "./submit-button";
 import { chooseRef, createAccount, deleteAccount, resetDiscovery, syncNow, toggleAccount, updatePassword } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -55,11 +56,11 @@ export default async function SettingsPage({
                   <div className="row-actions">
                     <form action={syncNow}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="btn primary" type="submit" disabled={!a.enabled}>Sincronizar ahora</button>
+                      <SubmitButton className="btn primary" disabled={!a.enabled} pending="Sincronizando…">Sincronizar ahora</SubmitButton>
                     </form>
                     <form action={toggleAccount}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="btn" type="submit">{a.enabled ? "Pausar" : "Activar"}</button>
+                      <SubmitButton pending="…">{a.enabled ? "Pausar" : "Activar"}</SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -80,7 +81,7 @@ export default async function SettingsPage({
                         {available.map((x) => <option key={x.ref} value={x.ref}>{x.name}</option>)}
                       </select>
                     </label>
-                    <button className="btn" type="submit">Usar esta cuenta</button>
+                    <SubmitButton pending="Conectando…">Usar esta cuenta</SubmitButton>
                   </form>
                 )}
 
@@ -90,12 +91,12 @@ export default async function SettingsPage({
                     <input type="hidden" name="id" value={a.id} />
                     <label>Correo<input name="email" type="email" defaultValue={a.login_email} /></label>
                     <label>Nueva contraseña<input name="password" type="password" autoComplete="new-password" placeholder="(sin cambios)" /></label>
-                    <button className="btn" type="submit">Guardar acceso</button>
+                    <SubmitButton pending="Conectando…">Guardar acceso</SubmitButton>
                   </form>
                   <form action={resetDiscovery} className="inline-form">
                     <input type="hidden" name="id" value={a.id} />
                     <span className="small">Ruta de órdenes: <code>{a.orders_path ?? "sin descubrir"}</code></span>
-                    <button className="btn" type="submit">Volver a detectar</button>
+                    <SubmitButton pending="Detectando…">Volver a detectar</SubmitButton>
                   </form>
                   {a.debug?.probe ? (
                     <details className="raw" style={{ padding: 0 }}>
@@ -106,7 +107,7 @@ export default async function SettingsPage({
                   <form action={deleteAccount} className="inline-form">
                     <input type="hidden" name="id" value={a.id} />
                     <label>Escribe ELIMINAR para borrar la cuenta y sus pedidos<input name="confirm" autoComplete="off" /></label>
-                    <button className="btn danger" type="submit">Eliminar</button>
+                    <SubmitButton className="btn danger" pending="Eliminando…">Eliminar</SubmitButton>
                   </form>
                 </details>
               </div>
@@ -145,7 +146,7 @@ export default async function SettingsPage({
             <input name="password" type="password" required autoComplete="new-password" />
           </label>
           <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn primary" type="submit">Guardar y conectar</button>
+            <SubmitButton className="btn primary" pending="Conectando con la plataforma…">Guardar y conectar</SubmitButton>
           </div>
         </form>
         <p className="small" style={{ marginTop: 12 }}>

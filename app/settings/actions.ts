@@ -30,6 +30,18 @@ export async function createAccount(form: FormData) {
   if (!p || !country || !email || !password) back("Completa plataforma, país, correo y contraseña.", false);
 
   const name = field(form, "name") || `${p.id === "soydrop" ? "Drop" : "Dropi"} ${country.name}`;
+
+  // evita duplicados (p. ej. doble clic): misma plataforma + correo + país
+  const dup = await db()
+    .from("accounts")
+    .select("name")
+    .eq("platform", platform)
+    .eq("login_email", email)
+    .eq("country", country.code)
+    .limit(1);
+  if (dup.data?.length) {
+    back(`Ya existe "${dup.data[0].name}" con ese correo y país. Si ese correo tiene varias cuentas en el mismo país, elige otro nombre y cámbiala en "Cuenta dentro de este correo".`, false);
+  }
   const { data, error } = await db()
     .from("accounts")
     .insert({
