@@ -1,0 +1,718 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T23:19:12.816732+00:00",
+  "title": "Design System: Miranova",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Azul Marino Tinta",
+        "canonical": "#0a2540",
+        "tonalRamp": [
+          "#0a2642",
+          "#124273",
+          "#195ea3",
+          "#217ad4",
+          "#4f99e3",
+          "#83b8ec",
+          "#b8d6f4",
+          "#e9f2fc"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Pizarra",
+        "canonical": "#425466",
+        "tonalRamp": [
+          "#1e262e",
+          "#344251",
+          "#4a5e73",
+          "#607a95",
+          "#8399af",
+          "#a8b8c7",
+          "#cdd6df",
+          "#f0f2f5"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Gris Azulado",
+        "canonical": "#5f6b7a",
+        "tonalRamp": [
+          "#21262b",
+          "#3a414b",
+          "#535d6a",
+          "#6b798a",
+          "#8c98a6",
+          "#afb7c0",
+          "#d1d6db",
+          "#f1f2f4"
+        ]
+      },
+      "ink-4": {
+        "role": "neutral",
+        "displayName": "Gris Niebla",
+        "canonical": "#8792a2",
+        "tonalRamp": [
+          "#21252b",
+          "#3a414b",
+          "#525c6a",
+          "#6b788a",
+          "#8c97a6",
+          "#afb6c1",
+          "#d1d5db",
+          "#f1f2f4"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Índigo Acción",
+        "canonical": "#635bff",
+        "tonalRamp": [
+          "#04004c",
+          "#060085",
+          "#0900bd",
+          "#0c00f5",
+          "#3d33ff",
+          "#7770ff",
+          "#b1adff",
+          "#e7e5ff"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Índigo Hover",
+        "canonical": "#5249f0",
+        "tonalRamp": [
+          "#090647",
+          "#100a7b",
+          "#170eae",
+          "#1e13e2",
+          "#4c43ef",
+          "#827bf4",
+          "#b7b4f9",
+          "#e9e7fd"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Índigo Tinta",
+        "canonical": "#4a42d6",
+        "tonalRamp": [
+          "#100e3f",
+          "#1c186d",
+          "#28229b",
+          "#342cc9",
+          "#5e57db",
+          "#8f8ae6",
+          "#bfbcf0",
+          "#ebeafa"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Lavanda Selección",
+        "canonical": "#f1f0ff",
+        "tonalRamp": [
+          "#05004c",
+          "#090085",
+          "#0d00bd",
+          "#1000f5",
+          "#4133ff",
+          "#7a70ff",
+          "#b3adff",
+          "#e7e5ff"
+        ]
+      },
+      "accent-bg": {
+        "role": "primary",
+        "displayName": "Lavanda Píldora",
+        "canonical": "#efeeff",
+        "tonalRamp": [
+          "#04004c",
+          "#080085",
+          "#0b00bd",
+          "#0e00f5",
+          "#3f33ff",
+          "#7970ff",
+          "#b2adff",
+          "#e7e5ff"
+        ]
+      },
+      "bg-surface": {
+        "role": "neutral",
+        "displayName": "Blanco Superficie",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "bg-app": {
+        "role": "neutral",
+        "displayName": "Papel Frío",
+        "canonical": "#f6f8fa",
+        "tonalRamp": [
+          "#1b2631",
+          "#2f4255",
+          "#435e79",
+          "#577a9d",
+          "#7c99b6",
+          "#a3b8cc",
+          "#cbd6e2",
+          "#eff2f6"
+        ]
+      },
+      "bg-hover": {
+        "role": "neutral",
+        "displayName": "Hover Frío",
+        "canonical": "#f1f4f8",
+        "tonalRamp": [
+          "#192433",
+          "#2c3f58",
+          "#3f5a7e",
+          "#5275a3",
+          "#7794bb",
+          "#a0b4cf",
+          "#c9d4e4",
+          "#eef2f6"
+        ]
+      },
+      "bg-active": {
+        "role": "neutral",
+        "displayName": "Presionado Frío",
+        "canonical": "#eaeef4",
+        "tonalRamp": [
+          "#1a2432",
+          "#2e3e57",
+          "#41587c",
+          "#5473a1",
+          "#7993b9",
+          "#a1b3ce",
+          "#c9d4e3",
+          "#eef1f6"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Línea",
+        "canonical": "#e3e8ee",
+        "tonalRamp": [
+          "#1d2530",
+          "#324153",
+          "#475c75",
+          "#5c7898",
+          "#8097b2",
+          "#a6b6c9",
+          "#ccd5e0",
+          "#eff2f5"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Línea Fuerte",
+        "canonical": "#d0d7de",
+        "tonalRamp": [
+          "#20262d",
+          "#37424e",
+          "#4e5e6f",
+          "#657a90",
+          "#8799ab",
+          "#abb8c4",
+          "#cfd6dd",
+          "#f0f2f4"
+        ]
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Éxito (texto)",
+        "canonical": "#0e6245",
+        "tonalRamp": [
+          "#0a432f",
+          "#117452",
+          "#18a574",
+          "#1fd697",
+          "#4ce6b1",
+          "#82edc8",
+          "#b8f5e0",
+          "#e9fcf5"
+        ]
+      },
+      "success-bg": {
+        "role": "status",
+        "displayName": "Éxito (fondo)",
+        "canonical": "#e5f6ee",
+        "tonalRamp": [
+          "#143927",
+          "#226344",
+          "#318c61",
+          "#3fb67e",
+          "#67cb9c",
+          "#95daba",
+          "#c2ead7",
+          "#ecf8f3"
+        ]
+      },
+      "success-dot": {
+        "role": "status",
+        "displayName": "Éxito (punto)",
+        "canonical": "#1ea672",
+        "tonalRamp": [
+          "#0c412c",
+          "#14704d",
+          "#1da06e",
+          "#25cf8e",
+          "#52e0aa",
+          "#86e9c3",
+          "#baf3dd",
+          "#e9fbf4"
+        ]
+      },
+      "info": {
+        "role": "status",
+        "displayName": "Información (texto)",
+        "canonical": "#0055bc",
+        "tonalRamp": [
+          "#00234c",
+          "#003c85",
+          "#0055bd",
+          "#006ff5",
+          "#338fff",
+          "#70b1ff",
+          "#add2ff",
+          "#e5f1ff"
+        ]
+      },
+      "info-bg": {
+        "role": "status",
+        "displayName": "Información (fondo)",
+        "canonical": "#e6f0fd",
+        "tonalRamp": [
+          "#062247",
+          "#0a3b7b",
+          "#0e54af",
+          "#126de3",
+          "#428ef0",
+          "#7bb0f4",
+          "#b3d2f9",
+          "#e7f1fd"
+        ]
+      },
+      "info-dot": {
+        "role": "status",
+        "displayName": "Información (punto)",
+        "canonical": "#2d7ff9",
+        "tonalRamp": [
+          "#021f4a",
+          "#043681",
+          "#054db7",
+          "#0764ee",
+          "#3986f9",
+          "#74aafb",
+          "#b0cffd",
+          "#e6f0fe"
+        ]
+      },
+      "warning": {
+        "role": "status",
+        "displayName": "Advertencia (texto)",
+        "canonical": "#983705",
+        "tonalRamp": [
+          "#4a1b02",
+          "#802e04",
+          "#b74206",
+          "#ed5608",
+          "#f97a39",
+          "#faa275",
+          "#fccab0",
+          "#feeee6"
+        ]
+      },
+      "warning-bg": {
+        "role": "status",
+        "displayName": "Advertencia (fondo)",
+        "canonical": "#fdf3e2",
+        "tonalRamp": [
+          "#482f05",
+          "#7c5109",
+          "#b1740c",
+          "#e59610",
+          "#f2b040",
+          "#f6c879",
+          "#fadfb3",
+          "#fdf5e7"
+        ]
+      },
+      "warning-dot": {
+        "role": "status",
+        "displayName": "Advertencia (punto)",
+        "canonical": "#e5850b",
+        "tonalRamp": [
+          "#492a04",
+          "#7f4906",
+          "#b46909",
+          "#ea880b",
+          "#f6a43c",
+          "#f8bf77",
+          "#fbdbb1",
+          "#fef4e7"
+        ]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Peligro (texto)",
+        "canonical": "#b3093c",
+        "tonalRamp": [
+          "#490418",
+          "#7e062a",
+          "#b4093c",
+          "#e90c4e",
+          "#f53d74",
+          "#f8779e",
+          "#fbb1c7",
+          "#fee7ee"
+        ]
+      },
+      "danger-bg": {
+        "role": "status",
+        "displayName": "Peligro (fondo)",
+        "canonical": "#fdebef",
+        "tonalRamp": [
+          "#460715",
+          "#790c24",
+          "#ac1133",
+          "#df1643",
+          "#ec466b",
+          "#f27d97",
+          "#f8b5c4",
+          "#fde8ec"
+        ]
+      },
+      "danger-dot": {
+        "role": "status",
+        "displayName": "Peligro (punto)",
+        "canonical": "#e5424d",
+        "tonalRamp": [
+          "#43090d",
+          "#751017",
+          "#a61720",
+          "#d71e2a",
+          "#e64c56",
+          "#ee8189",
+          "#f5b7bb",
+          "#fce9ea"
+        ]
+      },
+      "neutral": {
+        "role": "status",
+        "displayName": "Neutro (texto)",
+        "canonical": "#4f566b",
+        "tonalRamp": [
+          "#20232c",
+          "#383d4c",
+          "#50576d",
+          "#68718d",
+          "#8a91a8",
+          "#adb2c2",
+          "#d0d3dc",
+          "#f0f1f4"
+        ]
+      },
+      "neutral-bg": {
+        "role": "status",
+        "displayName": "Neutro (fondo)",
+        "canonical": "#eef1f5",
+        "tonalRamp": [
+          "#1c2530",
+          "#314053",
+          "#465b77",
+          "#5b769a",
+          "#7f95b3",
+          "#a5b5ca",
+          "#ccd5e1",
+          "#eff2f6"
+        ]
+      },
+      "neutral-dot": {
+        "role": "status",
+        "displayName": "Neutro (punto)",
+        "canonical": "#a3acb9",
+        "tonalRamp": [
+          "#21252b",
+          "#39414b",
+          "#525c6b",
+          "#6a778b",
+          "#8b96a7",
+          "#aeb6c1",
+          "#d1d5dc",
+          "#f1f2f4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Valores de la franja de métricas (23px en celular)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Título de página (22px en celular)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Encabezados de panel y títulos de cuenta; 20px/650 para drawer y login."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texto base, navegación y pestañas."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "Celdas de tabla, botones, inputs, listas clave-valor."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Encabezados de tabla, píldoras, leyendas y metadatos; sentence case."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Solo JSON crudo y códigos."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-sm",
+        "value": "0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06)",
+        "purpose": "Asiento: paneles, tablas, métricas, botones, inputs, nav activa."
+      },
+      {
+        "name": "shadow-float",
+        "value": "0 18px 36px -12px rgba(10, 37, 64, 0.18), 0 6px 14px -6px rgba(10, 37, 64, 0.1)",
+        "purpose": "Flotante: menú de cuenta, tooltip, tarjeta de login, sidebar móvil abierta."
+      },
+      {
+        "name": "shadow-drawer",
+        "value": "-24px 0 48px -16px rgba(10, 37, 64, 0.22)",
+        "purpose": "Panel lateral de detalle de orden."
+      },
+      {
+        "name": "focus-ring-input",
+        "value": "0 0 0 3px rgba(99, 91, 255, 0.35)",
+        "purpose": "Halo de foco en inputs y selects (accent-ring)."
+      },
+      {
+        "name": "focus-outline",
+        "value": "2px solid #635bff, offset 2px",
+        "purpose": "Foco visible global por teclado."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Entradas de drawer, menú, sidebar móvil y desplazamiento de flechas."
+      },
+      {
+        "name": "state",
+        "value": "120ms",
+        "purpose": "Hover/active de color, fondo y borde."
+      },
+      {
+        "name": "pop",
+        "value": "160ms ease-out; translateY(-4px) scale(0.98) → 0",
+        "purpose": "Aparición del menú de cuenta."
+      },
+      {
+        "name": "drawer-in",
+        "value": "280ms ease-out; translateX(28px) + fade",
+        "purpose": "Entrada del drawer de detalle."
+      },
+      {
+        "name": "sidebar-mobile",
+        "value": "240ms ease-out",
+        "purpose": "Apertura del sidebar off-canvas."
+      },
+      {
+        "name": "overlay-fade",
+        "value": "200ms ease-out",
+        "purpose": "Scrim rgba(10,37,64,0.28)."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "prefers-reduced-motion anula animaciones y transiciones."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "xl",
+        "value": "1700px"
+      },
+      {
+        "name": "l",
+        "value": "1300px"
+      },
+      {
+        "name": "lg",
+        "value": "1100px"
+      },
+      {
+        "name": "md",
+        "value": "900px"
+      },
+      {
+        "name": "sm",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal de la vista; una por zona.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 3v7m-3-3 3 3 3-3M3 13h10\"/></svg>Exportar CSV</button>",
+      "css": ":host{--ink:#0a2540;--ink-2:#425466;--ink-3:#5f6b7a;--ink-4:#8792a2;--accent:#635bff;--accent-hover:#5249f0;--accent-ink:#4a42d6;--accent-soft:#f1f0ff;--accent-ring:rgba(99,91,255,.35);--bg-surface:#fff;--bg-app:#f6f8fa;--bg-hover:#f1f4f8;--bg-active:#eaeef4;--line:#e3e8ee;--line-strong:#d0d7de;--r-sm:5px;--r:7px;--r-lg:10px;--shadow-sm:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06)}.ds-btn-primary{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r,7px);font-size:13px;font-weight:550;line-height:1;cursor:pointer;transition:background 120ms,border-color 120ms,color 120ms;background:#635bff;border:1px solid #635bff;color:#fff;box-shadow:0 1px 1px rgba(50,50,93,.12),inset 0 1px 0 rgba(255,255,255,.12)}.ds-btn-primary svg{color:rgba(255,255,255,.85)}.ds-btn-primary:hover{background:#5249f0;border-color:#5249f0}.ds-btn-primary:active{background:#463ee0}.ds-btn-primary:focus-visible{outline:2px solid #635bff;outline-offset:2px}"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acciones de apoyo: blanco con borde y sombra de asiento.",
+      "html": "<button class=\"ds-btn\">Ver guía</button>",
+      "css": ":host{--ink:#0a2540;--ink-2:#425466;--ink-3:#5f6b7a;--ink-4:#8792a2;--accent:#635bff;--accent-hover:#5249f0;--accent-ink:#4a42d6;--accent-soft:#f1f0ff;--accent-ring:rgba(99,91,255,.35);--bg-surface:#fff;--bg-app:#f6f8fa;--bg-hover:#f1f4f8;--bg-active:#eaeef4;--line:#e3e8ee;--line-strong:#d0d7de;--r-sm:5px;--r:7px;--r-lg:10px;--shadow-sm:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06)}.ds-btn{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r,7px);font-size:13px;font-weight:550;line-height:1;cursor:pointer;transition:background 120ms,border-color 120ms,color 120ms;background:#fff;border:1px solid #d0d7de;color:#0a2540;box-shadow:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06)}.ds-btn:hover{background:#f1f4f8;border-color:#c1cad3}.ds-btn:active{background:#eaeef4}.ds-btn:focus-visible{outline:2px solid #635bff;outline-offset:2px}"
+    },
+    {
+      "name": "Botón fantasma",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acciones terciarias y de barra, sin borde.",
+      "html": "<button class=\"ds-btn-ghost\">Cancelar</button>",
+      "css": ".ds-btn-ghost{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r,7px);font-size:13px;font-weight:550;line-height:1;cursor:pointer;transition:background 120ms,border-color 120ms,color 120ms;background:transparent;border:1px solid transparent;color:#425466}.ds-btn-ghost:hover{background:#f1f4f8}.ds-btn-ghost:focus-visible{outline:2px solid #635bff;outline-offset:2px}"
+    },
+    {
+      "name": "Campo de búsqueda",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Input de 32px con icono y halo índigo al foco.",
+      "html": "<label class=\"ds-search\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"><circle cx=\"7\" cy=\"7\" r=\"4.5\"/><path d=\"m10.5 10.5 3 3\"/></svg><input class=\"ds-input\" placeholder=\"Número, cliente, teléfono o guía\"></label>",
+      "css": ".ds-search{position:relative;display:flex;align-items:center;width:320px}.ds-search svg{position:absolute;left:10px;color:#8792a2;pointer-events:none}.ds-input{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;width:100%;height:32px;padding:0 10px 0 32px;border-radius:7px;font-size:13px;color:#0a2540;background:#fff;border:1px solid #d0d7de;box-shadow:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06);transition:border-color 120ms,box-shadow 120ms}.ds-input::placeholder{color:#8792a2}.ds-input:hover{border-color:#c1cad3}.ds-input:focus{outline:none;border-color:#635bff;box-shadow:0 0 0 3px rgba(99,91,255,.35)}"
+    },
+    {
+      "name": "Píldoras de estado",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "Punto + texto en seis tonos; nunca solo color.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-pill\" data-tone=\"success\">Entregado</span><span class=\"ds-pill\" data-tone=\"info\">En ruta a destino</span><span class=\"ds-pill\" data-tone=\"warning\">Verificar</span><span class=\"ds-pill\" data-tone=\"danger\">Problemas en gestión</span><span class=\"ds-pill\" data-tone=\"accent\">Creado en sistema</span><span class=\"ds-pill\">Orden cancelada</span></div>",
+      "css": ".ds-row{display:flex;flex-wrap:wrap;gap:8px}.ds-pill{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 7px;border-radius:999px;font-size:12px;font-weight:550;white-space:nowrap;color:#4f566b;background:#eef1f5}.ds-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:#a3acb9}.ds-pill[data-tone=success]{color:#0e6245;background:#e5f6ee}.ds-pill[data-tone=success]::before{background:#1ea672}.ds-pill[data-tone=info]{color:#0055bc;background:#e6f0fd}.ds-pill[data-tone=info]::before{background:#2d7ff9}.ds-pill[data-tone=warning]{color:#983705;background:#fdf3e2}.ds-pill[data-tone=warning]::before{background:#e5850b}.ds-pill[data-tone=danger]{color:#b3093c;background:#fdebef}.ds-pill[data-tone=danger]::before{background:#e5424d}.ds-pill[data-tone=accent]{color:#4a42d6;background:#efeeff}.ds-pill[data-tone=accent]::before{background:#635bff}"
+    },
+    {
+      "name": "Franja de métricas",
+      "kind": "custom",
+      "refersTo": "metric",
+      "description": "Cifras urgentes en una franja con divisores; cada celda enlaza a su lista.",
+      "html": "<div class=\"ds-metrics\"><a class=\"ds-metric\" href=\"#\"><span class=\"ds-ml\"><i style=\"background:#e5850b\"></i>Por despachar</span><span class=\"ds-mv\">67</span><span class=\"ds-mf\">Pendientes o con guía creada<b>→</b></span></a><a class=\"ds-metric\" href=\"#\" data-alert=\"true\"><span class=\"ds-ml\"><i style=\"background:#e5424d\"></i>Con problemas</span><span class=\"ds-mv\">43</span><span class=\"ds-mf\">Por verificar o en gestión<b>→</b></span></a><a class=\"ds-metric\" href=\"#\"><span class=\"ds-ml\"><i style=\"background:#1ea672\"></i>Por liquidar</span><span class=\"ds-mv\">L 7,100.00</span><span class=\"ds-mf\">18 entregadas sin pagar<b>→</b></span></a></div>",
+      "css": ".ds-metrics{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #e3e8ee;border-radius:10px;background:#fff;box-shadow:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06);overflow:hidden}.ds-metric{display:flex;flex-direction:column;gap:2px;padding:16px 20px 14px;border-left:1px solid #e3e8ee;color:#0a2540;text-decoration:none;transition:background 120ms}.ds-metric:first-child{border-left:0}.ds-metric:hover{background:#f6f8fa}.ds-metric:focus-visible{outline:2px solid #635bff;outline-offset:-2px}.ds-ml{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:550;color:#425466}.ds-ml i{width:8px;height:8px;border-radius:50%}.ds-mv{font-size:28px;font-weight:600;letter-spacing:-.025em;line-height:1.2;margin-top:6px;font-variant-numeric:tabular-nums}.ds-metric[data-alert=true] .ds-mv{color:#b3093c}.ds-mf{margin-top:6px;font-size:13px;color:#5f6b7a;display:flex;gap:4px}.ds-mf b{margin-left:auto;font-weight:400;color:#8792a2;transition:transform 160ms cubic-bezier(.16,1,.3,1),color 120ms}.ds-metric:hover .ds-mf b{color:#635bff;transform:translateX(2px)}"
+    },
+    {
+      "name": "Navegación lateral",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sidebar Papel Frío; activo blanco con sombra de asiento y texto índigo.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"><path d=\"M2.5 7 8 2.5 13.5 7v6.5h-11z\"/></svg>Inicio</a><a href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><rect x=\"3\" y=\"2.5\" width=\"10\" height=\"11\" rx=\"1.5\"/><path d=\"M5.5 6h5M5.5 9h5\"/></svg>Órdenes<span class=\"ds-count\">43</span></a><a href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><rect x=\"2\" y=\"4\" width=\"12\" height=\"8\" rx=\"1.5\"/><circle cx=\"8\" cy=\"8\" r=\"1.5\"/></svg>Dinero</a></nav>",
+      "css": ".ds-nav{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;width:208px;padding:12px;background:#f6f8fa;display:flex;flex-direction:column;gap:1px}.ds-nav a{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:7px;color:#425466;font-weight:500;font-size:14px;text-decoration:none;transition:background 120ms,color 120ms}.ds-nav a svg{color:#8792a2}.ds-nav a:hover{background:#f1f4f8;color:#0a2540}.ds-nav a:focus-visible{outline:2px solid #635bff;outline-offset:2px}.ds-nav a[aria-current=page]{color:#4a42d6;background:#fff;box-shadow:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06)}.ds-nav a[aria-current=page] svg{color:#635bff}.ds-count{margin-left:auto;min-width:20px;height:18px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;font-size:11px;font-weight:600;color:#b3093c;background:#fdebef;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Pestañas",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "Filtros por grupo de estado con subrayado índigo de 2px y contador.",
+      "html": "<div class=\"ds-tabs\"><a href=\"#\" aria-current=\"true\">Todas <span>420</span></a><a href=\"#\">Por despachar <span>67</span></a><a href=\"#\">En tránsito <span>58</span></a></div>",
+      "css": ".ds-tabs{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;display:flex;gap:2px;border-bottom:1px solid #e3e8ee}.ds-tabs a{position:relative;display:inline-flex;align-items:center;gap:7px;padding:8px 10px 10px;font-size:14px;font-weight:550;color:#5f6b7a;text-decoration:none;transition:color 120ms}.ds-tabs a:hover{color:#0a2540}.ds-tabs a:focus-visible{outline:2px solid #635bff;outline-offset:2px}.ds-tabs a span{font-size:12px;color:#5f6b7a;background:#f6f8fa;border-radius:999px;padding:1px 7px;font-variant-numeric:tabular-nums}.ds-tabs a[aria-current=true]{color:#4a42d6}.ds-tabs a[aria-current=true] span{background:#f1f0ff;color:#4a42d6}.ds-tabs a[aria-current=true]::after{content:'';position:absolute;left:8px;right:8px;bottom:-1px;height:2px;border-radius:2px;background:#635bff}"
+    },
+    {
+      "name": "Tabla de órdenes",
+      "kind": "card",
+      "refersTo": "table-cell",
+      "description": "Contenedor de 10px con cabecera Papel Frío, líneas de 1px y cifras tabulares a la derecha.",
+      "html": "<div class=\"ds-tw\"><table class=\"ds-table\"><thead><tr><th>Orden</th><th>Cliente</th><th>Estado</th><th class=\"r\">Total</th></tr></thead><tbody><tr><td class=\"no\">#1790370542942</td><td>Marvin Reyes<div class=\"sub\">Comayagua, Comayagua</div></td><td><span class=\"ds-pill\" data-tone=\"danger\">Problemas en gestión</span></td><td class=\"num\">L 1,150.56</td></tr><tr aria-selected=\"true\"><td class=\"no\">#1790372031714</td><td>Yesenia López<div class=\"sub\">La Ceiba, Atlántida</div></td><td><span class=\"ds-pill\" data-tone=\"warning\">Verificar</span></td><td class=\"num\">L 799.00</td></tr></tbody></table></div>",
+      "css": ".ds-tw{font-family:\"Inter Variable\",\"Inter\",ui-sans-serif,system-ui,sans-serif;border:1px solid #e3e8ee;border-radius:10px;background:#fff;box-shadow:0 1px 1px rgba(10, 37, 64, 0.04), 0 1px 2px rgba(10, 37, 64, 0.06);overflow:hidden}.ds-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}.ds-table th{text-align:left;font-weight:550;font-size:12px;color:#5f6b7a;padding:9px 14px;background:#f6f8fa;border-bottom:1px solid #e3e8ee}.ds-table th.r{text-align:right}.ds-table td{padding:11px 14px;border-bottom:1px solid #e3e8ee;vertical-align:top;color:#0a2540}.ds-table tr:last-child td{border-bottom:0}.ds-table tbody tr{cursor:pointer;transition:background 100ms}.ds-table tbody tr:hover{background:#f6f8fa}.ds-table tbody tr:hover .no{color:#4a42d6}.ds-table tr[aria-selected=true]{background:#f1f0ff}.ds-table .no{font-weight:600;font-variant-numeric:tabular-nums}.ds-table .sub{font-size:12px;color:#5f6b7a}.ds-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.ds-pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 7px;border-radius:999px;font-size:12px;font-weight:550}.ds-pill::before{content:'';width:6px;height:6px;border-radius:50%}.ds-pill[data-tone=danger]{color:#b3093c;background:#fdebef}.ds-pill[data-tone=danger]::before{background:#e5424d}.ds-pill[data-tone=warning]{color:#983705;background:#fdf3e2}.ds-pill[data-tone=warning]::before{background:#e5850b}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El Libro Mayor Preciso",
+    "overview": "Miranova es un tablero de proveedor que se lee como un estado de cuenta bien hecho: tinta azul marino sobre blanco, líneas de 1px que ordenan sin decorar, y un único acento índigo que solo aparece donde hay acción, selección o foco. La referencia es la sobriedad de un dashboard financiero de primer nivel (tipo Stripe Dashboard): densidad alta pero respirable, cifras con dígitos tabulares que se alinean columna a columna, y estados que se leen por punto de color **y** texto.\n\nLa densidad es de herramienta de trabajo, no de página de marketing. La información urgente vive en una franja de métricas dividida por líneas verticales (no en tarjetas sueltas), las listas y tablas son la superficie principal, y el detalle de una orden abre en un panel lateral sobre la lista, que se conserva detrás. La profundidad es casi plana: paneles con una sombra de 1px, y sombras reales solo en lo que flota (menús, tooltip, drawer, tarjeta de login).\n\nNo hay logo: la marca es un wordmark tipográfico (\"Miranova\") junto a un cuadrado de tinta de 26px con la inicial. No se inventan activos de marca.",
+    "keyCharacteristics": [
+      "Tinta azul marino (`ink`) para todo el texto primario; grises azulados escalonados para jerarquía.",
+      "Un solo acento índigo (`accent`) para acción primaria, selección, foco y el dato \"entregado\" en gráficas.",
+      "Barra lateral gris azulado muy claro (`bg-app`) separada del contenido blanco por una línea de 1px.",
+      "Inter variable con `cv11`/`ss01` y cifras tabulares en todo número.",
+      "Estados como píldoras punto + texto, con seis tonos semánticos.",
+      "Franja de métricas con divisores, no tarjetas iguales.",
+      "Detalle en drawer sobre la lista preservada; en celular, filas de tabla apiladas."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "El índigo es el único color de marca. Aparece solo en acción, selección, foco o el dato protagonista de una gráfica; nunca como fondo de sección ni decoración.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dot-and-Word Rule",
+        "body": "Un estado nunca se comunica solo con color: siempre punto de 6–8px más su texto.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Not Black Rule",
+        "body": "No hay negro puro: el texto más oscuro es `ink`, y los overlays usan `rgba(10, 37, 64, 0.28)`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Todo número que se compare (montos, conteos, fechas, números de orden) usa `font-variant-numeric: tabular-nums` y se alinea a la derecha en tablas.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight Ladder Rule",
+        "body": "La jerarquía se construye con pesos intermedios (550, 650) de la fuente variable, no con colores ni mayúsculas.",
+        "section": "typography"
+      },
+      {
+        "name": "The Float-Only Shadow Rule",
+        "body": "Una sombra visible significa \"esto está encima\". Nada en el flujo del documento lleva más que la sombra de asiento.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Navy Shadow Rule",
+        "body": "Todas las sombras y overlays se tiñen con la tinta (`rgba(10, 37, 64, …)`), nunca con negro.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** usar `ink` (#0a2540) para todo texto primario y la escala `ink-2`/`ink-3`/`ink-4` para jerarquía.",
+      "**Do** reservar `accent` (#635bff) para acción primaria, selección, foco y el dato protagonista de una gráfica.",
+      "**Do** mostrar cada estado como píldora punto + texto con uno de los seis tonos.",
+      "**Do** poner cifras en `tabular-nums`, alineadas a la derecha en tablas, y nunca sumar monedas distintas en un mismo valor.",
+      "**Do** agrupar métricas en una franja con divisores de 1px `line`, no en tarjetas separadas.",
+      "**Do** abrir el detalle en el drawer sobre la lista preservada.",
+      "**Do** dibujar bordes de 1px `line` y usar radios 5/7/10px según el nivel (interno/control/contenedor).",
+      "**Do** subir controles a 36px de alto y apilar filas de tabla en celular."
+    ],
+    "donts": [
+      "**Don't** introducir un segundo color de marca ni usar el índigo como fondo de sección.",
+      "**Don't** comunicar un estado solo con color.",
+      "**Don't** poner sombras con cuerpo en elementos en el flujo; solo lo que flota (menú, tooltip, drawer, login) lleva sombra Flotante o Drawer.",
+      "**Don't** usar negro puro para texto, sombras u overlays.",
+      "**Don't** usar mayúsculas forzadas o tracking positivo en etiquetas.",
+      "**Don't** inventar logo ni activos de marca: la marca es el wordmark \"Miranova\" con su cuadrado de inicial.",
+      "**Don't** usar iconos de librería o de fuente: iconos SVG propios de 16px con trazo 1.5."
+    ]
+  }
+}
