@@ -27,12 +27,28 @@ export async function GET(req: NextRequest) {
     /["'`](https?:\/\/[^"'`\s]{4,200}|\/(?:api|v\d|auth|vendor|vendors|orders|order|login|users?|supplier|providers?)[^"'`\s]{0,150})["'`]/gi;
   const keyword = /api|auth|login|order|orden|vendor|supplier|token|graphql|supabase|firebase/i;
 
+  // ?terms=a,b,c → devuelve fragmentos de código alrededor de cada término
+  const terms = (req.nextUrl.searchParams.get("terms") ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+  const radius = Math.min(Number(req.nextUrl.searchParams.get("radius") ?? 400), 1500);
+  const snippets: { src: string; term: string; code: string }[] = [];
+  const extra = (req.nextUrl.searchParams.get("scripts") ?? "").split(",").filter(Boolean)
+    .map((s) => new URL(s, page.url).toString());
+
   const scanned: { url: string; status: number; size: number }[] = [];
-  for (const src of scripts.slice(0, 40)) {
+  for (const src of [...scripts.slice(0, 40), ...extra]) {
     try {
       const r = await fetch(src, { headers: ua });
       const js = await r.text();
       scanned.push({ url: src, status: r.status, size: js.length });
+      for (const term of terms) {
+        let idx = js.indexOf(term);
+        let n = 0;
+        while (idx !== -1 && n < 4 && snippets.length < 60) {
+          snippets.push({ src: src.split("/").pop()!, term, code: js.slice(Math.max(0, idx - radius), idx + radius) });
+          idx = js.indexOf(term, idx + term.length);
+          n++;
+        }
+      }
       for (const m of js.matchAll(pattern)) if (keyword.test(m[1])) found.add(m[1]);
       // también variables de entorno embebidas (NEXT_PUBLIC_*, VITE_*, REACT_APP_*)
       for (const m of js.matchAll(/(NEXT_PUBLIC_|VITE_|REACT_APP_)[A-Z0-9_]+["']?\s*[:=]\s*["']([^"']{1,200})["']/g)) {
@@ -45,7 +61,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     page: { url: page.url, status: page.status, htmlHead: html.slice(0, 1500) },
-    scanned,
+    scanned: terms.length ? scanned.length : scanned,
     endpoints: [...found].sort(),
+    snippets,
   });
 }
