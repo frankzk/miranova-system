@@ -22,6 +22,10 @@ export interface Connector {
   fetchOrders(session: Session, path: string, page: number, range?: DateRange): Promise<OrdersPage>;
   /** Diccionario id → nombre de departamentos/ciudades (si la plataforma usa ids). */
   fetchGeo?(session: Session): Promise<Record<string, string> | null>;
+  /** Busca la ruta del catálogo de productos del proveedor. */
+  discoverProductsPath?(session: Session): Promise<{ path: string | null; attempts: ProbeAttempt[] }>;
+  /** Descarga una página del catálogo de productos. */
+  fetchProducts?(session: Session, path: string, page: number): Promise<OrdersPage>;
 }
 
 export class SessionExpired extends Error {

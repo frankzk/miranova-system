@@ -40,6 +40,7 @@ const ACCOUNTS: Row[] = [
     id: "11111111-1111-4111-8111-111111111111", name: "Drop Honduras", platform: "soydrop", country: "HN", currency: "HNL",
     timezone: "America/Tegucigalpa", login_email: "proveedor@example.com", password_enc: "x", platform_ref: "r1",
     platform_ref_name: "MIRANOVA", session_enc: null, orders_path: "/orders", geo: null, backfill_cursor: null, enabled: true,
+    products_path: "/products/", products_sync_at: new Date(Date.now() - 4 * 60_000).toISOString(), products_sync_msg: "8 productos actualizados",
     last_sync_at: new Date(Date.now() - 4 * 60_000).toISOString(), last_sync_ok: true, last_sync_msg: "212 pedidos actualizados",
     debug: null, created_at: "2026-09-25T00:00:00Z",
   },
@@ -95,6 +96,22 @@ function makeOrders(): Row[] {
 
 const ORDERS = makeOrders();
 
+const CATALOG: Row[] = [
+  ["Klenvas - Urocontrol 60 Capsulas", "38182608", 249.31, 95, "Activo"],
+  ["Set de Pelador de Verduras Abridor", "00940184", 276.6, 3, "Activo"],
+  ["PRODUCTO EXCLUSIVO DLG", "10954739", 263.22, 99, "Activo"],
+  ["CARE:NEL - Crema removedora de manchas", "22955654", 262.15, 3, "Activo"],
+  ["MINI FAN", "MINI.FAN", 292.11, 448, "Activo"],
+  ["Sovexa Cayenne Pepper Suplemento Botánico para Circulación Saludable 60 Cápsulas", "CAYENNE.PEPPER", 255.73, 62, "Activo"],
+  ["Crema Tópica con Biotina 10 en 1", "BIOTINA.10", 239.68, 0, "Activo"],
+  ["Chip ECOOBD2 Ahorrador de Combustible", "AHORRADOR.COMBUSTIBLE", 216.68, 99, "Inactivo"],
+].map(([name, sku, price, stock, status], i) => ({
+  id: `99999999-0000-4000-8000-${String(i).padStart(12, "0")}`, account_id: ACCOUNTS[0].id, external_id: `p${i}`,
+  code: `ID-${["Z1GIC", "96CMB", "76BX6", "JYKG0", "DG241", "43149", "EINVS", "N261K"][i]}`, name, sku, status, price,
+  suggested_price: null, stock, image_url: null, currency: "HNL",
+  created_at_platform: new Date(Date.now() - (i * 5 + 2) * DAY).toISOString(), updated_at: new Date().toISOString(), raw: {},
+}));
+
 const GROUP: Record<string, string> = {
   registered: "dispatch", pending: "dispatch", fulfilled: "dispatch", "1": "transit", "2": "transit", "3": "transit", "4": "delivered",
   pending_correction: "problem", "6": "problem", "7": "failed", "8": "failed", "5": "cancelled", cancelled: "cancelled", rejected: "cancelled",
@@ -106,6 +123,10 @@ function withRelations(table: string, r: Row): Row {
     return { ...r, accounts: a ? { name: a.name, country: a.country, timezone: a.timezone } : null };
   }
   if (table === "accounts") return { ...r, orders: [{ count: ORDERS.filter((o) => o.account_id === r.id).length }] };
+  if (table === "products") {
+    const a = ACCOUNTS.find((x) => x.id === r.account_id);
+    return { ...r, accounts: a ? { name: a.name, timezone: a.timezone } : null };
+  }
   return r;
 }
 
@@ -145,7 +166,7 @@ class Query {
   upsert() { return this; }
   delete() { return this; }
   private run() {
-    const src = this.table === "orders" ? ORDERS : this.table === "accounts" ? ACCOUNTS : [];
+    const src = this.table === "orders" ? ORDERS : this.table === "accounts" ? ACCOUNTS : this.table === "products" ? CATALOG : [];
     let rows = src.filter((r) => this.filters.every((f) => f(r)));
     for (const s of [...this.sorts].reverse()) {
       rows = [...rows].sort((a, b) => (a[s.col] > b[s.col] ? 1 : a[s.col] < b[s.col] ? -1 : 0) * (s.asc ? 1 : -1));
@@ -229,6 +250,14 @@ export function fixtureClient(): any {
     rpc: async (name: string, args: Row) => {
       if (name === "dashboard_summary") return { data: summary(args), error: null };
       if (name === "money_by_month") return { data: months(args), error: null };
+      if (name === "product_sales") {
+        const out: Row = {};
+        for (const o of ORDERS) for (const it of o.order_items) {
+          const k = it.product_name;
+          out[k] = { units: (out[k]?.units ?? 0) + it.quantity, orders: (out[k]?.orders ?? 0) + 1 };
+        }
+        return { data: out, error: null };
+      }
       if (name === "order_facets") {
         const a = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account);
         return { data: { dropshippers: [...new Set(a.map((o) => o.dropshipper))].sort(), carriers: [...new Set(a.map((o) => o.carrier))].sort() }, error: null };

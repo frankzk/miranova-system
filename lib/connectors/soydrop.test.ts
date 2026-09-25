@@ -18,6 +18,7 @@ test("conector soydrop contra API simulada", async () => {
         return j(200, { data: { accessToken: "ACC", refreshToken: "R" } }, { "set-cookie": "sid=abc; Path=/; HttpOnly" });
       }
       if (req.headers.authorization !== "Bearer ACC") return j(401, { message: "no auth" });
+      if (req.url?.startsWith("/products/?")) return j(200, { data: [{ id: "p1", name: "MINI FAN", sku: "MINI.FAN", price: 292.11, totalStock: 448 }], total: 1 });
       if (req.url?.startsWith("/vendor/orders")) return j(404, { message: "not found" });
       if (req.url?.startsWith("/vendors/orders")) return j(200, { data: { items: [{ id: 7, orderNumber: "99", status: "Pendiente", total: 10, customer: { name: "A" } }], total: 1 } });
       j(404, {});
@@ -42,5 +43,9 @@ test("conector soydrop contra API simulada", async () => {
   const r = await soydrop.fetchOrders(s, d.path!, 2, { from: new Date("2026-08-01T00:00:00Z"), to: new Date("2026-09-01T00:00:00Z") });
   assert.match(r.url, /page=2&limit=100&dateFrom=2026-08-01T00%3A00%3A00.000Z&dateTo=2026-09-01/);
   await assert.rejects(soydrop.fetchOrders({ token: "viejo", obtainedAt: 0 }, "/vendors/orders", 1), /caduc/);
+  const pp = await soydrop.discoverProductsPath!(s);
+  assert.equal(pp.path, "/products/");
+  const prods = await soydrop.fetchProducts!(s, pp.path!, 1);
+  assert.match(prods.url, /\/products\/\?page=1&limit=100/);
   srv.close();
 });

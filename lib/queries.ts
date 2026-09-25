@@ -269,3 +269,50 @@ export async function groupCounts(f: Filters): Promise<Record<string, number>> {
   ]);
   return Object.fromEntries(entries);
 }
+
+export type Product = {
+  id: string;
+  account_id: string;
+  external_id: string;
+  code: string | null;
+  name: string;
+  sku: string | null;
+  status: string | null;
+  price: number | null;
+  suggested_price: number | null;
+  stock: number | null;
+  image_url: string | null;
+  currency: string | null;
+  created_at_platform: string | null;
+  updated_at: string;
+  accounts: { name: string; timezone: string } | null;
+};
+
+/** Catálogo completo de la cuenta (paginando de 1000 en 1000). */
+export async function listProducts(account?: string): Promise<Product[]> {
+  const out: Product[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    let q = db()
+      .from("products")
+      .select("id, account_id, external_id, code, name, sku, status, price, suggested_price, stock, image_url, currency, created_at_platform, updated_at, accounts(name, timezone)")
+      .order("created_at_platform", { ascending: false, nullsFirst: false })
+      .order("name")
+      .range(from, from + 999);
+    if (account) q = q.eq("account_id", account);
+    const { data, error } = await q;
+    if (error) throw error;
+    out.push(...(data as unknown as Product[]));
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+/** Unidades y órdenes por SKU (o nombre) desde una fecha. */
+export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number }>> {
+  const { data, error } = await db().rpc("product_sales", {
+    p_account: account ?? null,
+    p_from: new Date(Date.now() - days * 86_400_000).toISOString(),
+  });
+  if (error) throw error;
+  return (data ?? {}) as Record<string, { units: number; orders: number }>;
+}

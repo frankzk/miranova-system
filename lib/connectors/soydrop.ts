@@ -1,4 +1,5 @@
 import { extractOrders } from "../normalize.ts";
+import { extractProducts } from "../products.ts";
 import {
   type Connector, type DateRange, type LoginResult, type OrdersPage, type PlatformAccount, type ProbeAttempt,
   type Session, PlatformError, SessionExpired,
@@ -23,6 +24,9 @@ const ORDER_PATH_CANDIDATES = [
   "/v1/vendor/orders",
   "/api/vendor/orders",
 ];
+
+const PRODUCTS_PAGE_SIZE = 100;
+const PRODUCT_PATH_CANDIDATES = ["/products/", "/products", "/vendor/products", "/vendors/products", "/products/vendor"];
 
 const BASE_HEADERS: Record<string, string> = {
   accept: "application/json, text/plain, */*",
@@ -167,6 +171,35 @@ export const soydrop: Connector = {
     return { url, payload: json };
   },
 
+  // La web del proveedor pide "products/?page=1&limit=10" (visto en la red de app.soydrop.com).
+  async discoverProductsPath(session) {
+    const attempts: ProbeAttempt[] = [];
+    for (const path of PRODUCT_PATH_CANDIDATES) {
+      try {
+        const res = await fetch(`${API}${path}?page=1&limit=${PRODUCTS_PAGE_SIZE}`, { headers: authHeaders(session), cache: "no-store" });
+        if (res.status === 401 || res.status === 403) throw new SessionExpired();
+        const { json, text } = await readJson(res);
+        const products = json ? extractProducts(json).length : 0;
+        attempts.push({ path, status: res.status, orders: products, sample: text.slice(0, 400) });
+        if (res.ok && products > 0) return { path, attempts };
+      } catch (e) {
+        if (e instanceof SessionExpired) throw e;
+        attempts.push({ path, status: -1, orders: 0, sample: String(e) });
+      }
+    }
+    return { path: null, attempts };
+  },
+
+  async fetchProducts(session, path, page) {
+    const sep = path.includes("?") ? "&" : "?";
+    const url = `${API}${path}${sep}page=${page}&limit=${PRODUCTS_PAGE_SIZE}`;
+    const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
+    if (res.status === 401 || res.status === 403) throw new SessionExpired();
+    const { json, text } = await readJson(res);
+    if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
+    return { url, payload: json };
+  },
+
   // La web de Drop carga "states-cities/" para traducir cityId/stateId a nombres.
   async fetchGeo(session) {
     const countryId = jwtClaim(session.token, "countryId");
@@ -219,3 +252,4 @@ function collectNames(node: unknown, out: Record<string, string> = {}, depth = 0
 }
 
 export const SOYDROP_PAGE_SIZE = PAGE_SIZE;
+export const SOYDROP_PRODUCTS_PAGE_SIZE = PRODUCTS_PAGE_SIZE;

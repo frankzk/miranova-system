@@ -112,3 +112,17 @@ export async function reprocessAll(): Promise<number> {
   }
   return total;
 }
+
+/** Guarda (o actualiza) el catálogo de productos de una cuenta. */
+export async function saveProducts(
+  accountId: string,
+  currency: string,
+  products: import("./products").NormalizedProduct[],
+): Promise<number> {
+  if (products.length === 0) return 0;
+  const now = new Date().toISOString();
+  const rows = products.map((p) => ({ ...p, account_id: accountId, currency, updated_at: now }));
+  const { error } = await db().from("products").upsert(rows, { onConflict: "account_id,external_id" });
+  if (error) throw error;
+  return products.length;
+}

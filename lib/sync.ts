@@ -1,17 +1,19 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Session } from "./connectors";
-import { SOYDROP_PAGE_SIZE } from "./connectors/soydrop";
+import { SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE } from "./connectors/soydrop";
+import { extractProducts } from "./products";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
-import { ingestPayload, type AccountCtx } from "./store";
+import { ingestPayload, saveProducts, type AccountCtx } from "./store";
 
 const DAY = 86_400_000;
 const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
 const WINDOW_DAYS = 30; // el historial se baja por ventanas de un mes
 const HISTORY_LIMIT_DAYS = 548; // no ir más atrás de ~18 meses
 const MAX_PAGES_PER_WINDOW = 60;
+const MAX_PRODUCT_PAGES = 50;
 const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
 const GEO_MAX_AGE_MS = 7 * DAY;
 
@@ -134,6 +136,36 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
     const now = new Date();
     await syncRange(new Date(now.getTime() - RECENT_DAYS * DAY), new Date(now.getTime() + DAY));
 
+    // 3b. catálogo de productos (todas las páginas). Un fallo aquí no detiene las órdenes.
+    let productsNote = "";
+    if (c.fetchProducts && c.discoverProductsPath) {
+      try {
+        let ppath = acc.products_path;
+        if (!ppath) {
+          const probe = await withSession((s) => c.discoverProductsPath!(s));
+          const fresh = (await getAccount(acc.id))!;
+          await updateAccount(acc.id, { products_path: probe.path, debug: { ...(fresh.debug ?? {}), products_probe: probe.attempts } });
+          if (!probe.path) throw new PlatformError("no encontré la ruta del catálogo");
+          ppath = probe.path;
+        }
+        let total = 0;
+        for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {
+          const res = await withSession((s) => c.fetchProducts!(s, ppath!, page));
+          const items = extractProducts(res.payload);
+          if (items.length === 0) break;
+          total += await saveProducts(acc.id, acc.currency, items);
+          if (items.length < SOYDROP_PRODUCTS_PAGE_SIZE) break;
+        }
+        productsNote = ` · ${total} productos`;
+        await updateAccount(acc.id, { products_sync_at: new Date().toISOString(), products_sync_msg: `${total} productos actualizados` });
+      } catch (e) {
+        if (e instanceof SessionExpired) throw e;
+        const msg = e instanceof Error ? e.message : String(e);
+        productsNote = " · productos: error";
+        await updateAccount(acc.id, { products_sync_msg: `No se pudo sincronizar el catálogo: ${msg}` });
+      }
+    }
+
     // 4. historial, hacia atrás por meses, retomando donde quedó la vez anterior
     let cursor = acc.backfill_cursor ? new Date(acc.backfill_cursor) : null;
     let emptyWindows = 0;
@@ -147,8 +179,8 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
     }
 
     const message = cursor
-      ? `${saved} pedidos actualizados · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
-      : `${saved} pedidos actualizados`;
+      ? `${saved} pedidos actualizados${productsNote} · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
+      : `${saved} pedidos actualizados${productsNote}`;
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message });
     return { ok: true, message, saved };
   } catch (e) {

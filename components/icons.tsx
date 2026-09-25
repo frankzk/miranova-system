@@ -101,3 +101,6 @@ export const IconPlus = (p: P) => (
 export const IconFilter = (p: P) => (
   <Svg {...p}><path d="M2 3.5h12M4.5 8h7M6.5 12.5h3" /></Svg>
 );
+export const IconBox = (p: P) => (
+  <Svg {...p}><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11V5Z" /><path d="M2.5 5 8 7.5 13.5 5M8 7.5v6" /></Svg>
+);
