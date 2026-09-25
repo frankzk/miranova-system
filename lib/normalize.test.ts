@@ -79,6 +79,18 @@ test("extrae pedidos de una lista paginada con cliente anidado", () => {
   assert.equal(b.ordered_at, "2026-09-25T21:54:00.000Z");
 });
 
+test("usa moneda y zona horaria de la cuenta", () => {
+  const [o] = extractOrders(
+    [{ orderNumber: "G1", status: "Pendiente", total: "Q250.00", fecha: "25/09/2026 15:54" }],
+    { currency: "GTQ", timezone: "America/Guatemala" },
+  );
+  assert.equal(o.currency, "GTQ");
+  assert.equal(o.total, 250);
+  assert.equal(o.ordered_at, "2026-09-25T21:54:00.000Z");
+  const [c] = extractOrders([{ orderNumber: "C1", status: "x", total: 1, fecha: "01/03/2026 10:00" }], { timezone: "America/Bogota" });
+  assert.equal(c.ordered_at, "2026-03-01T15:00:00.000Z");
+});
+
 test("ignora respuestas que no son pedidos", () => {
   assert.deepEqual(extractOrders({ user: { id: 1, name: "Miranova" } }), []);
   assert.deepEqual(extractOrders([1, 2, 3]), []);

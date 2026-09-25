@@ -36,6 +36,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
       <section className="card">
         <div className="detail">
+          {field("Cuenta", o.accounts?.name)}
           {field("Nombre completo", o.customer_name)}
           {field("Paquetera", o.carrier)}
           {field("Correo electrónico", o.customer_email)}

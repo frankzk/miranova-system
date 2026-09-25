@@ -89,3 +89,21 @@ details.raw pre { background: #fafaf8; border: 1px solid var(--line); border-rad
   .detail { grid-template-columns: 1fr; }
   .hide-sm { display: none; }
 }
+
+/* ajustes */
+.error-box { background: #fff0f0; border-color: #f3caca; }
+.account { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.account:last-child { border-bottom: 0; }
+.account-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: start; }
+.account .small, .small { color: var(--muted); font-size: 12px; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.status { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #fafaf8; }
+.status.good { background: #eef8f0; }
+.status.bad { background: #fff0f0; color: #a61e1e; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 8px; }
+.inline-form label, .grid-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.btn.danger { color: #c92a2a; border-color: #f3caca; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.nav { display: flex; gap: 8px; }

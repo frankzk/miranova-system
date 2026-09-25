@@ -31,10 +31,13 @@ export type Order = {
   ordered_at: string | null;
   first_seen_at: string;
   updated_at: string;
+  account_id: string | null;
+  accounts: { name: string; country: string } | null;
   order_items: OrderItem[];
 };
 
 export type Filters = {
+  account?: string;
   q?: string;
   status?: string;
   dropshipper?: string;
@@ -53,6 +56,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     return s ? s : undefined;
   };
   return {
+    account: one("account"),
     q: one("q"),
     status: one("status"),
     dropshipper: one("dropshipper"),
@@ -69,10 +73,11 @@ const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
 export async function listOrders(f: Filters, opts: { all?: boolean } = {}) {
   let query = db()
     .from("orders")
-    .select("*, order_items(product_name, quantity, price, sku, image_url, position)", { count: "exact" })
+    .select("*, accounts(name, country), order_items(product_name, quantity, price, sku, image_url, position)", { count: "exact" })
     .order("ordered_at", { ascending: false, nullsFirst: false })
     .order("first_seen_at", { ascending: false });
 
+  if (f.account) query = query.eq("account_id", f.account);
   if (f.status) query = query.eq("status", f.status);
   if (f.dropshipper) query = query.eq("dropshipper", f.dropshipper);
   if (f.carrier) query = query.eq("carrier", f.carrier);
@@ -108,7 +113,7 @@ export async function listOrders(f: Filters, opts: { all?: boolean } = {}) {
 export async function getOrder(id: string): Promise<(Order & { raw: unknown }) | null> {
   const { data, error } = await db()
     .from("orders")
-    .select("*, order_items(product_name, quantity, price, sku, image_url, position)")
+    .select("*, accounts(name, country), order_items(product_name, quantity, price, sku, image_url, position)")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -130,17 +135,22 @@ export async function filterOptions() {
 }
 
 /** Resumen del día (hora de Honduras) para las tarjetas del panel. */
-export async function todayStats(today: string) {
-  const { data, error } = await db()
+export async function todayStats(today: string, account?: string) {
+  let q = db()
     .from("orders")
-    .select("total, status")
+    .select("total, status, currency")
     .gte("ordered_at", `${today}T00:00:00-06:00`)
     .lte("ordered_at", `${today}T23:59:59-06:00`)
     .limit(10000);
+  if (account) q = q.eq("account_id", account);
+  const { data, error } = await q;
   if (error) throw error;
+  // no se suman monedas distintas: un total por moneda
+  const sums = new Map<string, number>();
+  for (const r of data) sums.set(r.currency ?? "HNL", (sums.get(r.currency ?? "HNL") ?? 0) + Number(r.total ?? 0));
   return {
     count: data.length,
-    sum: data.reduce((s, r) => s + Number(r.total ?? 0), 0),
+    sums: [...sums].map(([currency, sum]) => ({ currency, sum })),
     pending: data.filter((r) => /pendiente|pending/i.test(String(r.status ?? ""))).length,
   };
 }

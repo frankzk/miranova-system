@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types lib/*.test.ts"
+    "test": "NO_PROXY=127.0.0.1,localhost node --test --experimental-strip-types lib/*.test.ts lib/connectors/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

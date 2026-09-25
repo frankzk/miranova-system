@@ -1,16 +1,18 @@
 import "server-only";
 import { db } from "./supabase";
-import { extractOrders, normalizeOrder, type NormalizedOrder } from "./normalize";
+import { extractOrders, normalizeOrder, type NormalizedOrder, type NormalizeOptions } from "./normalize";
 
-/** Guarda (o actualiza) pedidos y reemplaza sus líneas de producto. */
-export async function saveOrders(orders: NormalizedOrder[]): Promise<number> {
+export type AccountCtx = { id: string; currency: string; timezone: string };
+
+/** Guarda (o actualiza) pedidos de una cuenta y reemplaza sus líneas de producto. */
+export async function saveOrders(accountId: string, orders: NormalizedOrder[]): Promise<number> {
   if (orders.length === 0) return 0;
   const now = new Date().toISOString();
 
-  const rows = orders.map(({ items: _items, ...o }) => ({ ...o, updated_at: now }));
+  const rows = orders.map(({ items: _items, ...o }) => ({ ...o, account_id: accountId, updated_at: now }));
   const { data, error } = await db()
     .from("orders")
-    .upsert(rows, { onConflict: "external_id" })
+    .upsert(rows, { onConflict: "account_id,external_id" })
     .select("id, external_id");
   if (error) throw error;
 
@@ -33,15 +35,15 @@ export async function saveOrders(orders: NormalizedOrder[]): Promise<number> {
 }
 
 /**
- * Un listado de Drop puede traer menos campos que el detalle. Para no perder
- * datos, mezclamos lo nuevo sobre lo que ya había: un campo vacío en la
- * respuesta nueva no sobreescribe uno lleno en la base.
+ * Un listado puede traer menos campos que el detalle. Para no perder datos,
+ * un campo vacío en la respuesta nueva no sobreescribe uno lleno en la base.
  */
-async function mergeWithExisting(orders: NormalizedOrder[]): Promise<NormalizedOrder[]> {
+async function mergeWithExisting(accountId: string, orders: NormalizedOrder[]): Promise<NormalizedOrder[]> {
   if (orders.length === 0) return orders;
   const { data, error } = await db()
     .from("orders")
     .select("*")
+    .eq("account_id", accountId)
     .in("external_id", orders.map((o) => o.external_id));
   if (error) throw error;
   const existing = new Map(data.map((r) => [r.external_id as string, r]));
@@ -53,7 +55,6 @@ async function mergeWithExisting(orders: NormalizedOrder[]): Promise<NormalizedO
     for (const [k, v] of Object.entries(o)) {
       if ((v === null || v === undefined) && prev[k] !== null && prev[k] !== undefined) merged[k] = prev[k];
     }
-    // conservar el raw más completo y combinar ambos
     merged.raw = typeof prev.raw === "object" && typeof o.raw === "object"
       ? { ...(prev.raw as object), ...(o.raw as object) }
       : o.raw;
@@ -61,19 +62,24 @@ async function mergeWithExisting(orders: NormalizedOrder[]): Promise<NormalizedO
   });
 }
 
+const opts = (a: AccountCtx): NormalizeOptions => ({ currency: a.currency, timezone: a.timezone });
+
+/** Procesa una respuesta de la plataforma y devuelve cuántos pedidos traía. */
 export async function ingestPayload(
   payload: unknown,
-  source: "extension" | "cron",
+  source: "extension" | "sync",
   sourceUrl: string | null,
+  account: AccountCtx,
 ): Promise<number> {
-  const orders = await mergeWithExisting(extractOrders(payload));
-  const saved = await saveOrders(orders);
+  const orders = await mergeWithExisting(account.id, extractOrders(payload, opts(account)));
+  const saved = await saveOrders(account.id, orders);
 
   const log = await db().from("ingest_log").insert({
     source,
     source_url: sourceUrl,
     orders_found: saved,
     payload,
+    account_id: account.id,
   });
   if (log.error) console.error("ingest_log", log.error);
   return saved;
@@ -81,21 +87,27 @@ export async function ingestPayload(
 
 /** Vuelve a normalizar todos los pedidos desde su `raw` (tras ajustar el mapeo). */
 export async function reprocessAll(): Promise<number> {
+  const { data: accounts, error: accErr } = await db().from("accounts").select("id, currency, timezone");
+  if (accErr) throw accErr;
+
   let total = 0;
   const pageSize = 500;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await db()
-      .from("orders")
-      .select("external_id, raw")
-      .order("external_id")
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    const orders = data.flatMap((r) => {
-      const o = normalizeOrder(r.raw);
-      return o ? [{ ...o, external_id: r.external_id as string }] : [];
-    });
-    total += await saveOrders(orders);
-    if (data.length < pageSize) break;
+  for (const account of accounts as AccountCtx[]) {
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await db()
+        .from("orders")
+        .select("external_id, raw")
+        .eq("account_id", account.id)
+        .order("external_id")
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      const orders = data.flatMap((r) => {
+        const o = normalizeOrder(r.raw, opts(account));
+        return o ? [{ ...o, external_id: r.external_id as string }] : [];
+      });
+      total += await saveOrders(account.id, orders);
+      if (data.length < pageSize) break;
+    }
   }
   return total;
 }

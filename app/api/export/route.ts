@@ -18,22 +18,22 @@ export async function GET(req: NextRequest) {
   const { orders } = await listOrders(filters, { all: true });
 
   const header = [
-    "Orden Drop", "Orden Shopify", "Fecha", "Estado", "Dropshipper", "Cliente", "Teléfono", "Correo",
+    "Cuenta", "Orden", "Orden Shopify", "Fecha", "Estado", "Dropshipper", "Cliente", "Teléfono", "Correo",
     "Departamento", "Ciudad", "Dirección", "Punto de referencia", "Indicaciones", "Paquetera", "Guía",
-    "Producto", "SKU", "Cantidad", "Precio", "Total orden",
+    "Producto", "SKU", "Cantidad", "Precio", "Total orden", "Moneda",
   ];
   const lines = [header.map(esc).join(",")];
 
   for (const o of orders) {
     const base = [
-      o.external_id, o.shopify_order, fmtDate(o.ordered_at), o.status, o.dropshipper, o.customer_name,
+      o.accounts?.name, o.external_id, o.shopify_order, fmtDate(o.ordered_at), o.status, o.dropshipper, o.customer_name,
       o.customer_phone, o.customer_email, o.department, o.city, o.address, o.reference_point, o.notes,
       o.carrier, o.tracking_number,
     ];
     const items = o.order_items.length ? o.order_items : [null];
     for (const it of items) {
       lines.push(
-        [...base, it?.product_name, it?.sku, it?.quantity, it?.price, o.total].map(esc).join(","),
+        [...base, it?.product_name, it?.sku, it?.quantity, it?.price, o.total, o.currency].map(esc).join(","),
       );
     }
   }

@@ -100,7 +100,22 @@ export function num(v: unknown): number | null {
   return null;
 }
 
-function date(v: unknown): string | null {
+export type NormalizeOptions = { currency?: string; timezone?: string };
+
+/** Convierte una fecha/hora "de reloj" en una zona horaria IANA a ISO UTC. */
+export function zonedToIso(y: number, mo: number, d: number, h: number, mi: number, s: number, tz: string): string {
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(new Date(guess)).map((p) => [p.type, p.value]),
+  );
+  const asTz = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return new Date(guess - (asTz - guess)).toISOString();
+}
+
+function date(v: unknown, tz: string): string | null {
   if (v === undefined || v === null || v === "") return null;
   if (typeof v === "number") {
     const ms = v < 1e12 ? v * 1000 : v;
@@ -108,14 +123,11 @@ function date(v: unknown): string | null {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
   if (typeof v === "string") {
-    // "25/09/2026 15:54" (hora de Honduras, UTC-6)
+    // "25/09/2026 15:54" (hora local del país de la cuenta)
     const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (m) {
       const [, dd, mm, yyyy, hh = "0", mi = "0", ss = "0"] = m;
-      const pad = (x: string) => x.padStart(2, "0");
-      return new Date(
-        `${yyyy}-${pad(mm)}-${pad(dd)}T${pad(hh)}:${pad(mi)}:${pad(ss)}-06:00`,
-      ).toISOString();
+      return zonedToIso(+yyyy, +mm, +dd, +hh, +mi, +ss, tz);
     }
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
@@ -185,7 +197,7 @@ function normalizeItem(raw: unknown): NormalizedItem | null {
 }
 
 /** Normaliza un objeto que parece un pedido de Drop. Devuelve null si no lo es. */
-export function normalizeOrder(raw: unknown): NormalizedOrder | null {
+export function normalizeOrder(raw: unknown, opts: NormalizeOptions = {}): NormalizedOrder | null {
   if (!isObj(raw)) return null;
   const idRaw = str(pick(raw, F.id));
   if (!idRaw) return null;
@@ -237,8 +249,8 @@ export function normalizeOrder(raw: unknown): NormalizedOrder | null {
     total:
       num(pick(raw, F.total)) ??
       (items.length ? items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0) : null),
-    currency: str(pick(raw, F.currency)) ?? "HNL",
-    ordered_at: date(pick(raw, F.date)),
+    currency: str(pick(raw, F.currency)) ?? opts.currency ?? "HNL",
+    ordered_at: date(pick(raw, F.date), opts.timezone ?? "America/Tegucigalpa"),
     raw,
     items,
   };
@@ -260,7 +272,7 @@ function looksLikeOrder(o: Obj): boolean {
  * Recorre cualquier respuesta JSON (lista paginada, { data: [...] }, detalle
  * de un pedido, etc.) y devuelve todos los pedidos encontrados.
  */
-export function extractOrders(payload: unknown): NormalizedOrder[] {
+export function extractOrders(payload: unknown, opts: NormalizeOptions = {}): NormalizedOrder[] {
   const found = new Map<string, NormalizedOrder>();
   const walk = (node: unknown, depth: number) => {
     if (depth > 6 || (!isObj(node) && !Array.isArray(node))) return;
@@ -269,7 +281,7 @@ export function extractOrders(payload: unknown): NormalizedOrder[] {
       return;
     }
     if (looksLikeOrder(node)) {
-      const o = normalizeOrder(node);
+      const o = normalizeOrder(node, opts);
       if (o) {
         const prev = found.get(o.external_id);
         // si el mismo pedido aparece dos veces, quedarse con la versión más completa

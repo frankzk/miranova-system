@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireLogin } from "@/lib/auth";
 import { filterOptions, lastIngest, listOrders, PAGE_SIZE, parseFilters, todayStats } from "@/lib/queries";
+import { accountNames } from "@/lib/accounts";
 import { fmtDate, fmtMoney, todayHN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,12 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
   const f = parseFilters(sp);
   const today = todayHN();
 
-  const [{ orders, count }, opts, stats, last] = await Promise.all([
+  const [{ orders, count }, opts, stats, last, accounts] = await Promise.all([
     listOrders(f),
     filterOptions(),
-    todayStats(today),
+    todayStats(today, f.account),
     lastIngest(),
+    accountNames(),
   ]);
 
   const page = f.page ?? 1;
@@ -37,11 +39,12 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
           <h1>Pedidos Drop</h1>
           <div className="sub">
             {last
-              ? `Última captura: ${fmtDate(last.received_at)} (${last.source}, ${last.orders_found} pedidos)`
-              : "Aún no se ha recibido ninguna captura"}
+              ? `Última actualización: ${fmtDate(last.received_at)} (${last.orders_found} pedidos)`
+              : "Aún no se ha sincronizado ninguna cuenta"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link className="btn" href="/settings">Ajustes · Cuentas</Link>
           <a className="btn primary" href={`/api/export?${exportQs}`}>Exportar CSV</a>
           <form method="post" action="/api/reprocess">
             <button className="btn" type="submit" title="Vuelve a leer los datos originales con el mapeo actual">
@@ -59,11 +62,25 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
       <section className="stats">
         <div className="card stat"><div className="label">Pedidos hoy</div><div className="value">{stats.count}</div></div>
         <div className="card stat"><div className="label">Pendientes hoy</div><div className="value">{stats.pending}</div></div>
-        <div className="card stat"><div className="label">Vendido hoy</div><div className="value">{fmtMoney(stats.sum)}</div></div>
+        <div className="card stat">
+          <div className="label">Vendido hoy</div>
+          {stats.sums.length === 0
+            ? <div className="value">—</div>
+            : stats.sums.map((s) => <div key={s.currency} className="value">{fmtMoney(s.sum, s.currency)}</div>)}
+        </div>
         <div className="card stat"><div className="label">Resultados del filtro</div><div className="value">{count}</div></div>
       </section>
 
       <form className="card filters" method="get">
+        {accounts.length > 1 && (
+          <label>
+            Cuenta
+            <select name="account" defaultValue={f.account ?? ""}>
+              <option value="">Todas</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </label>
+        )}
         <label className="grow">
           Buscar
           <input name="q" defaultValue={f.q} placeholder="# orden, cliente, teléfono, ciudad…" />
@@ -102,11 +119,10 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
             {count === 0 && !last ? (
               <>
                 <strong>Todavía no hay pedidos.</strong>
-                <ol>
-                  <li>Instala la extensión de Chrome (carpeta <code>extension/</code>).</li>
-                  <li>En sus opciones pon la URL de este panel y tu <code>INGEST_API_KEY</code>.</li>
-                  <li>Abre <code>app.soydrop.com/vendor/orders</code>: los pedidos aparecerán aquí.</li>
-                </ol>
+                <p>
+                  Ve a <Link href="/settings">Ajustes · Cuentas</Link>, agrega tu cuenta de Drop con su correo y
+                  contraseña, y los pedidos se sincronizarán solos cada 10 minutos.
+                </p>
               </>
             ) : (
               "No hay pedidos con estos filtros."
@@ -117,7 +133,8 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
             <table>
               <thead>
                 <tr>
-                  <th>Orden de drop</th>
+                  <th>Orden</th>
+                  {accounts.length > 1 && <th>Cuenta</th>}
                   <th className="hide-sm">Orden Shopify</th>
                   <th>Dropshipper</th>
                   <th>Cliente</th>
@@ -133,6 +150,7 @@ export default async function Dashboard({ searchParams }: { searchParams: SP }) 
                 {orders.map((o) => (
                   <tr key={o.id}>
                     <td><Link className="mono" href={`/orders/${o.id}`}>#{o.external_id}</Link></td>
+                    {accounts.length > 1 && <td>{o.accounts?.name ?? "—"}</td>}
                     <td className="hide-sm">{o.shopify_order ?? "—"}</td>
                     <td>{o.dropshipper ?? "—"}</td>
                     <td>
