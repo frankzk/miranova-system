@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Miranova · pedidos Drop</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 0; padding: 16px; width: 340px; color: #1c1c1a; }
+    h1 { font-size: 16px; margin: 0 0 12px; }
+    label { display: block; font-size: 12px; color: #6b6b66; margin: 10px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font: inherit; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #1c1c1a; background: #1c1c1a; color: #fff; font: inherit; cursor: pointer; }
+    button.secondary { background: #fff; color: #1c1c1a; border-color: #ddd; }
+    #status { margin-top: 12px; font-size: 12px; padding: 8px; border-radius: 6px; background: #f4f4f2; white-space: pre-wrap; }
+    .ok { color: #2f9e44; } .err { color: #c92a2a; }
+  </style>
+</head>
+<body>
+  <h1>Captura de pedidos Drop</h1>
+  <label for="serverUrl">URL del panel (Vercel)</label>
+  <input id="serverUrl" placeholder="https://miranova-system.vercel.app" />
+  <label for="apiKey">API key (INGEST_API_KEY)</label>
+  <input id="apiKey" type="password" />
+  <div class="row">
+    <button id="save">Guardar</button>
+    <button id="open" class="secondary">Abrir panel</button>
+  </div>
+  <div id="status">Abre app.soydrop.com/vendor/orders y navega por tus órdenes: cada página que veas se envía al panel.</div>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Miranova · Captura de pedidos Drop",
+  "version": "1.0.0",
+  "description": "Envía a tu panel Miranova (Supabase + Vercel) los pedidos que ves en app.soydrop.com.",
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://app.soydrop.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://app.soydrop.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "options_page": "options.html",
+  "action": { "default_title": "Miranova · pedidos Drop", "default_popup": "options.html" }
+}
