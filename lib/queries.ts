@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
+import { groupById } from "./status";
 
 export type OrderItem = {
   product_name: string;
@@ -16,6 +17,7 @@ export type Order = {
   external_id: string;
   shopify_order: string | null;
   status: string | null;
+  status_code: string | null;
   dropshipper: string | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -40,22 +42,23 @@ export type Order = {
   first_seen_at: string;
   updated_at: string;
   account_id: string | null;
-  accounts: { name: string; country: string } | null;
+  accounts: { name: string; country: string; timezone: string } | null;
   order_items: OrderItem[];
 };
 
 export type Filters = {
   account?: string;
+  group?: string; // StatusGroup
   q?: string;
-  status?: string;
   dropshipper?: string;
   carrier?: string;
-  from?: string; // YYYY-MM-DD (hora Honduras)
+  from?: string; // YYYY-MM-DD
   to?: string;
   page?: number;
 };
 
 export const PAGE_SIZE = 50;
+const HN_OFFSET = "-06:00";
 
 export function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
   const one = (k: string) => {
@@ -65,8 +68,8 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
   };
   return {
     account: one("account"),
+    group: one("group"),
     q: one("q"),
-    status: one("status"),
     dropshipper: one("dropshipper"),
     carrier: one("carrier"),
     from: one("from"),
@@ -78,97 +81,191 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
 // Evita que caracteres del buscador rompan el filtro `or` de PostgREST
 const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
 
-export async function listOrders(f: Filters, opts: { all?: boolean } = {}) {
+const ORDER_SELECT =
+  "*, accounts(name, country, timezone), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)";
+
+function filtered(f: Filters, count = false) {
   let query = db()
     .from("orders")
-    .select("*, accounts(name, country), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)", { count: "exact" })
+    .select(ORDER_SELECT, count ? { count: "exact" } : undefined)
     .order("ordered_at", { ascending: false, nullsFirst: false })
-    .order("first_seen_at", { ascending: false });
+    .order("id", { ascending: false });
 
+  const group = groupById(f.group);
   if (f.account) query = query.eq("account_id", f.account);
-  if (f.status) query = query.eq("status", f.status);
+  if (group) query = query.in("status_code", group.codes);
   if (f.dropshipper) query = query.eq("dropshipper", f.dropshipper);
   if (f.carrier) query = query.eq("carrier", f.carrier);
-  if (f.from) query = query.gte("ordered_at", `${f.from}T00:00:00-06:00`);
-  if (f.to) query = query.lte("ordered_at", `${f.to}T23:59:59-06:00`);
+  if (f.from) query = query.gte("ordered_at", `${f.from}T00:00:00${HN_OFFSET}`);
+  if (f.to) query = query.lte("ordered_at", `${f.to}T23:59:59${HN_OFFSET}`);
   if (f.q) {
     const q = clean(f.q.replace(/^#/, ""));
     if (q) {
       query = query.or(
-        ["external_id", "shopify_order", "customer_name", "customer_phone", "customer_email", "city", "tracking_number"]
+        ["external_id", "shopify_order", "customer_name", "customer_phone", "customer_email", "city", "tracking_number", "dropshipper"]
           .map((c) => `${c}.ilike.*${q}*`)
           .join(","),
       );
     }
   }
-
-  if (!opts.all) {
-    const page = f.page ?? 1;
-    query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  } else {
-    query = query.limit(10000);
-  }
-
-  const { data, error, count } = await query;
-  if (error) throw error;
-  const orders = (data as Order[]).map((o) => ({
-    ...o,
-    order_items: [...(o.order_items ?? [])].sort((a, b) => a.position - b.position),
-  }));
-  return { orders, count: count ?? 0 };
+  return query;
 }
 
-export async function getOrder(id: string): Promise<(Order & { raw: unknown }) | null> {
-  const { data, error } = await db()
-    .from("orders")
-    .select("*, accounts(name, country), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)")
-    .eq("id", id)
-    .maybeSingle();
+const sortItems = (o: Order): Order => ({
+  ...o,
+  order_items: [...(o.order_items ?? [])].sort((a, b) => a.position - b.position),
+});
+
+export async function listOrders(f: Filters) {
+  const page = f.page ?? 1;
+  const { data, error, count } = await filtered(f, true).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  if (error) throw error;
+  return { orders: (data as Order[]).map(sortItems), count: count ?? 0 };
+}
+
+/** Todas las órdenes del filtro, paginando (PostgREST devuelve máx. 1000 por consulta). */
+export async function listAllOrders(f: Filters, max = 50000): Promise<Order[]> {
+  const out: Order[] = [];
+  const step = 1000;
+  for (let from = 0; from < max; from += step) {
+    const { data, error } = await filtered(f).range(from, from + step - 1);
+    if (error) throw error;
+    out.push(...(data as Order[]).map(sortItems));
+    if (data.length < step) break;
+  }
+  return out;
+}
+
+export type OrderDetail = Order & { raw: Record<string, unknown> | null };
+
+export async function getOrder(id: string): Promise<OrderDetail | null> {
+  const { data, error } = await db().from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  data.order_items.sort((a: OrderItem, b: OrderItem) => a.position - b.position);
-  return data;
+  return sortItems(data as Order) as OrderDetail;
 }
 
-/** Valores distintos para los selects de filtro. */
-export async function filterOptions() {
-  const { data, error } = await db()
-    .from("orders")
-    .select("status, dropshipper, carrier")
-    .limit(5000);
+export type Facets = { dropshippers: string[]; carriers: string[] };
+
+export async function orderFacets(account?: string): Promise<Facets> {
+  const { data, error } = await db().rpc("order_facets", { p_account: account ?? null });
   if (error) throw error;
-  const uniq = (k: "status" | "dropshipper" | "carrier") =>
-    [...new Set(data.map((r) => r[k]).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b));
-  return { statuses: uniq("status"), dropshippers: uniq("dropshipper"), carriers: uniq("carrier") };
+  return data as Facets;
 }
 
-/** Resumen del día (hora de Honduras) para las tarjetas del panel. */
-export async function todayStats(today: string, account?: string) {
+export type MoneyRow = {
+  currency: string;
+  orders: number;
+  delivered: number;
+  sales: number;
+  vendor_delivered: number;
+  vendor_paid: number;
+  vendor_unpaid: number;
+  vendor_net: number;
+  vendor_in_flight: number;
+};
+
+export type DayRow = { day: string; orders: number; delivered: number; problems: number };
+export type RankRow = { name: string; orders: number; delivered?: number; problems?: number; units?: number };
+
+export type Summary = {
+  snapshot: Partial<Record<"dispatch" | "transit" | "delivered" | "problem" | "failed" | "cancelled" | "other", number>>;
+  money: MoneyRow[];
+  unpaid: { currency: string; orders: number; amount: number }[];
+  daily: DayRow[];
+  sellers: RankRow[];
+  products: RankRow[];
+  carriers: RankRow[];
+};
+
+export async function dashboardSummary(opts: { account?: string; days: number; tz: string }): Promise<Summary> {
+  const to = new Date();
+  const from = new Date(to.getTime() - (opts.days - 1) * 86_400_000);
+  from.setUTCHours(6, 0, 0, 0); // medianoche en UTC-6 aprox.; la serie se agrupa por día local en SQL
+  const { data, error } = await db().rpc("dashboard_summary", {
+    p_account: opts.account ?? null,
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+    p_tz: opts.tz,
+  });
+  if (error) throw error;
+  return data as Summary;
+}
+
+export type MonthRow = {
+  month: string;
+  account_name: string | null;
+  currency: string;
+  orders: number;
+  delivered: number;
+  problems: number;
+  cancelled: number;
+  sales: number;
+  vendor_delivered: number;
+  vendor_paid: number;
+  vendor_unpaid: number;
+  vendor_net: number;
+};
+
+export async function moneyByMonth(opts: { account?: string; months: number; tz: string }): Promise<MonthRow[]> {
+  const { data, error } = await db().rpc("money_by_month", {
+    p_account: opts.account ?? null,
+    p_months: opts.months,
+    p_tz: opts.tz,
+  });
+  if (error) throw error;
+  return data as MonthRow[];
+}
+
+/** Órdenes que requieren acción ahora (con problemas), más recientes primero. */
+export async function attentionOrders(account?: string, limit = 7) {
+  const f: Filters = { account, group: "problem" };
+  const { data, error, count } = await filtered(f, true).range(0, limit - 1);
+  if (error) throw error;
+  return { orders: (data as Order[]).map(sortItems), count: count ?? 0 };
+}
+
+/** Órdenes entregadas aún sin liquidar al proveedor. */
+export async function unpaidDelivered(account?: string, limit = 12) {
   let q = db()
     .from("orders")
-    .select("total, status, currency")
-    .gte("ordered_at", `${today}T00:00:00-06:00`)
-    .lte("ordered_at", `${today}T23:59:59-06:00`)
-    .limit(10000);
+    .select(ORDER_SELECT, { count: "exact" })
+    .in("status_code", groupById("delivered")!.codes)
+    .or("paid.is.null,paid.eq.false")
+    .order("ordered_at", { ascending: true })
+    .range(0, limit - 1);
   if (account) q = q.eq("account_id", account);
-  const { data, error } = await q;
+  const { data, error, count } = await q;
   if (error) throw error;
-  // no se suman monedas distintas: un total por moneda
-  const sums = new Map<string, number>();
-  for (const r of data) sums.set(r.currency ?? "HNL", (sums.get(r.currency ?? "HNL") ?? 0) + Number(r.total ?? 0));
-  return {
-    count: data.length,
-    sums: [...sums].map(([currency, sum]) => ({ currency, sum })),
-    pending: data.filter((r) => /pendiente|pending/i.test(String(r.status ?? ""))).length,
-  };
+  return { orders: (data as Order[]).map(sortItems), count: count ?? 0 };
 }
 
-export async function lastIngest() {
-  const { data } = await db()
-    .from("ingest_log")
-    .select("received_at, source, orders_found")
-    .order("received_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data as { received_at: string; source: string; orders_found: number } | null;
+/** Cuántas órdenes hay en cada grupo de estado con los filtros actuales (para las pestañas). */
+export async function groupCounts(f: Filters): Promise<Record<string, number>> {
+  const { GROUPS } = await import("./status");
+  const base = (codes?: string[]) => {
+    let q = db().from("orders").select("id", { count: "exact", head: true });
+    if (f.account) q = q.eq("account_id", f.account);
+    if (codes) q = q.in("status_code", codes);
+    if (f.dropshipper) q = q.eq("dropshipper", f.dropshipper);
+    if (f.carrier) q = q.eq("carrier", f.carrier);
+    if (f.from) q = q.gte("ordered_at", `${f.from}T00:00:00${HN_OFFSET}`);
+    if (f.to) q = q.lte("ordered_at", `${f.to}T23:59:59${HN_OFFSET}`);
+    if (f.q) {
+      const q2 = clean(f.q.replace(/^#/, ""));
+      if (q2) {
+        q = q.or(
+          ["external_id", "shopify_order", "customer_name", "customer_phone", "customer_email", "city", "tracking_number", "dropshipper"]
+            .map((c) => `${c}.ilike.*${q2}*`)
+            .join(","),
+        );
+      }
+    }
+    return q;
+  };
+  const entries = await Promise.all([
+    base().then((r) => ["all", r.count ?? 0] as const),
+    ...GROUPS.map((g) => base(g.codes).then((r) => [g.id, r.count ?? 0] as const)),
+  ]);
+  return Object.fromEntries(entries);
 }

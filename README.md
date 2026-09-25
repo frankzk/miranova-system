@@ -83,7 +83,8 @@ Las respuestas crudas recibidas también quedan en la tabla `ingest_log`.
 npm install
 cp .env.example .env.local   # completa los valores
 npm run dev                  # http://localhost:3000
-npm test                     # pruebas del normalizador
+npm test                     # pruebas del normalizador y del conector
+npm run dev:fixtures         # panel con datos sintéticos, sin Supabase (contraseña: demo)
 ```
 
 ## Seguridad

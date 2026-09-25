@@ -16,6 +16,12 @@ function env(name: string): string | undefined {
 /** Cliente con service role: solo se usa en el servidor, nunca en el navegador. */
 export function db(): SupabaseClient {
   if (client) return client;
+  // Datos sintéticos para desarrollo local del panel; nunca en Vercel.
+  if (process.env.MIRANOVA_FIXTURES === "1" && !process.env.VERCEL) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    client = (require("./dev-fixtures") as typeof import("./dev-fixtures")).fixtureClient();
+    return client!;
+  }
   const url = env("SUPABASE_URL") ?? env("NEXT_PUBLIC_SUPABASE_URL");
   const key = env("SUPABASE_SERVICE_ROLE_KEY") ?? env("SUPABASE_SECRET_KEY");
   if (!url || !key) throw new Error("Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");

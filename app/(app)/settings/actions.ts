@@ -7,6 +7,7 @@ import { getAccount, updateAccount } from "@/lib/accounts";
 import { countryByCode, PLATFORMS } from "@/lib/countries";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/supabase";
+import { reprocessAll } from "@/lib/store";
 import { syncAccount } from "@/lib/sync";
 
 async function guard() {
@@ -14,7 +15,7 @@ async function guard() {
 }
 
 function back(msg: string, ok: boolean): never {
-  revalidatePath("/settings");
+  revalidatePath("/", "layout");
   redirect(`/settings?${new URLSearchParams({ msg, ok: ok ? "1" : "0" })}`);
 }
 
@@ -125,7 +126,7 @@ export async function deleteAccount(form: FormData) {
   if (field(form, "confirm") !== "ELIMINAR") back("Escribe ELIMINAR para confirmar.", false);
   const { error } = await db().from("accounts").delete().eq("id", id);
   if (error) back(error.message, false);
-  back("Cuenta y sus pedidos eliminados.", true);
+  back("Cuenta y sus órdenes eliminadas.", true);
 }
 
 export async function loadHistory(form: FormData) {
@@ -134,4 +135,10 @@ export async function loadHistory(form: FormData) {
   await updateAccount(id, { backfill_cursor: new Date(Date.now() - 45 * 86_400_000).toISOString() });
   const r = await syncAccount(id);
   back(r.message, r.ok);
+}
+
+export async function reprocess() {
+  await guard();
+  const n = await reprocessAll();
+  back(`Se volvieron a leer ${n.toLocaleString("en-US")} órdenes con el formato actual.`, true);
 }
