@@ -14,6 +14,8 @@ export type Account = {
   platform_ref_name: string | null;
   session_enc: string | null;
   orders_path: string | null;
+  geo: { map: Record<string, string>; at: string } | null;
+  backfill_cursor: string | null;
   enabled: boolean;
   last_sync_at: string | null;
   last_sync_ok: boolean | null;
@@ -27,15 +29,15 @@ export type Account = {
 };
 
 /** Datos seguros para mostrar en el panel (sin contraseña ni sesión). */
-export type AccountView = Omit<Account, "password_enc" | "session_enc"> & { order_count: number };
+export type AccountView = Omit<Account, "password_enc" | "session_enc" | "geo"> & { order_count: number };
 
 export async function listAccounts(): Promise<AccountView[]> {
   const { data, error } = await db()
     .from("accounts")
-    .select("*, orders(count)")
+    .select("id, name, platform, country, currency, timezone, login_email, platform_ref, platform_ref_name, orders_path, backfill_cursor, enabled, last_sync_at, last_sync_ok, last_sync_msg, debug, created_at, orders(count)")
     .order("created_at");
   if (error) throw error;
-  return data.map(({ password_enc: _p, session_enc: _s, orders, ...a }) => ({
+  return data.map(({ orders, ...a }) => ({
     ...a,
     order_count: (orders as { count: number }[])?.[0]?.count ?? 0,
   })) as AccountView[];

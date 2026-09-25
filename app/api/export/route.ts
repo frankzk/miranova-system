@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const header = [
     "Cuenta", "Orden", "Orden Shopify", "Fecha", "Estado", "Dropshipper", "Cliente", "Teléfono", "Correo",
     "Departamento", "Ciudad", "Dirección", "Punto de referencia", "Indicaciones", "Paquetera", "Guía",
-    "Producto", "SKU", "Cantidad", "Precio", "Total orden", "Moneda",
+    "Tracking", "Pago", "Producto", "SKU", "Cantidad", "Precio", "Precio proveedor", "Total orden", "Tú recibes", "Moneda",
   ];
   const lines = [header.map(esc).join(",")];
 
@@ -28,12 +28,12 @@ export async function GET(req: NextRequest) {
     const base = [
       o.accounts?.name, o.external_id, o.shopify_order, fmtDate(o.ordered_at), o.status, o.dropshipper, o.customer_name,
       o.customer_phone, o.customer_email, o.department, o.city, o.address, o.reference_point, o.notes,
-      o.carrier, o.tracking_number,
+      o.carrier, o.tracking_number, o.tracking_url, o.cod === null ? "" : o.cod ? "Contra entrega" : "Prepagado",
     ];
     const items = o.order_items.length ? o.order_items : [null];
     for (const it of items) {
       lines.push(
-        [...base, it?.product_name, it?.sku, it?.quantity, it?.price, o.total, o.currency].map(esc).join(","),
+        [...base, it?.product_name, it?.sku, it?.quantity, it?.price, it?.vendor_price, o.total, o.vendor_amount, o.currency].map(esc).join(","),
       );
     }
   }

@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./supabase";
 import { extractOrders, normalizeOrder, type NormalizedOrder, type NormalizeOptions } from "./normalize";
 
-export type AccountCtx = { id: string; currency: string; timezone: string };
+export type AccountCtx = { id: string; currency: string; timezone: string; geo?: Record<string, string> | null };
 
 /** Guarda (o actualiza) pedidos de una cuenta y reemplaza sus líneas de producto. */
 export async function saveOrders(accountId: string, orders: NormalizedOrder[]): Promise<number> {
@@ -62,7 +62,7 @@ async function mergeWithExisting(accountId: string, orders: NormalizedOrder[]): 
   });
 }
 
-const opts = (a: AccountCtx): NormalizeOptions => ({ currency: a.currency, timezone: a.timezone });
+const opts = (a: AccountCtx): NormalizeOptions => ({ currency: a.currency, timezone: a.timezone, geo: a.geo });
 
 /** Procesa una respuesta de la plataforma y devuelve cuántos pedidos traía. */
 export async function ingestPayload(
@@ -87,12 +87,13 @@ export async function ingestPayload(
 
 /** Vuelve a normalizar todos los pedidos desde su `raw` (tras ajustar el mapeo). */
 export async function reprocessAll(): Promise<number> {
-  const { data: accounts, error: accErr } = await db().from("accounts").select("id, currency, timezone");
+  const { data: rows, error: accErr } = await db().from("accounts").select("id, currency, timezone, geo");
   if (accErr) throw accErr;
+  const accounts: AccountCtx[] = rows.map((r) => ({ ...r, geo: r.geo?.map ?? null }));
 
   let total = 0;
   const pageSize = 500;
-  for (const account of accounts as AccountCtx[]) {
+  for (const account of accounts) {
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await db()
         .from("orders")

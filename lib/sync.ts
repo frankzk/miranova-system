@@ -5,10 +5,15 @@ import { SOYDROP_PAGE_SIZE } from "./connectors/soydrop";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
-import { ingestPayload } from "./store";
+import { ingestPayload, type AccountCtx } from "./store";
 
-const FIRST_SYNC_PAGES = 40; // primera vez: traer historial reciente
-const REGULAR_PAGES = 4; // luego: solo lo más nuevo
+const DAY = 86_400_000;
+const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
+const WINDOW_DAYS = 30; // el historial se baja por ventanas de un mes
+const HISTORY_LIMIT_DAYS = 548; // no ir más atrás de ~18 meses
+const MAX_PAGES_PER_WINDOW = 60;
+const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
+const GEO_MAX_AGE_MS = 7 * DAY;
 
 /**
  * Inicia sesión y elige la cuenta. Si el correo tiene varias cuentas y aún no
@@ -58,12 +63,11 @@ async function loadSession(acc: Account): Promise<Session> {
 
 export type SyncResult = { ok: boolean; message: string; saved: number };
 
-export async function syncAccount(accountId: string): Promise<SyncResult> {
+export async function syncAccount(accountId: string, deadline = Date.now() + TIME_BUDGET_MS): Promise<SyncResult> {
   const acc = await getAccount(accountId);
   if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0 };
 
   const c = connectorFor(acc.platform);
-  const ctx = { id: acc.id, currency: acc.currency, timezone: acc.timezone };
   let saved = 0;
 
   try {
@@ -81,11 +85,11 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       }
     };
 
+    // 1. ruta de órdenes (se descubre una vez)
     let path = acc.orders_path;
     if (!path) {
       const probe = await withSession(async (s) => {
         const r = await c.discoverOrdersPath(s);
-        // si todas las rutas dieron 401/403, la sesión no sirve: forzar re-login una vez
         if (!r.path && r.attempts.every((a) => a.status === 401 || a.status === 403)) throw new SessionExpired();
         return r;
       });
@@ -93,22 +97,58 @@ export async function syncAccount(accountId: string): Promise<SyncResult> {
       await updateAccount(acc.id, { orders_path: probe.path, debug: { ...(fresh.debug ?? {}), probe: probe.attempts } });
       if (!probe.path) {
         throw new PlatformError(
-          "Inicié sesión, pero aún no encuentro dónde entrega Drop las órdenes. Ya quedó el diagnóstico guardado para ajustarlo.",
+          "Inicié sesión, pero aún no encuentro dónde entrega la plataforma las órdenes. Ya quedó el diagnóstico guardado para ajustarlo.",
         );
       }
       path = probe.path;
     }
 
-    const maxPages = acc.last_sync_at ? REGULAR_PAGES : FIRST_SYNC_PAGES;
-    for (let page = 1; page <= maxPages; page++) {
-      const res = await withSession((s) => c.fetchOrders(s, path!, page));
-      const found = extractOrders(res.payload).length;
-      if (found === 0) break;
-      saved += await ingestPayload(res.payload, "sync", res.url, ctx);
-      if (found < SOYDROP_PAGE_SIZE) break;
+    // 2. nombres de departamentos/ciudades (se refrescan cada semana)
+    let geo = acc.geo?.map ?? null;
+    const geoAge = acc.geo?.at ? Date.now() - Date.parse(acc.geo.at) : Infinity;
+    if (c.fetchGeo && (!geo || geoAge > GEO_MAX_AGE_MS)) {
+      const fetched = await withSession((s) => c.fetchGeo!(s)).catch(() => null);
+      if (fetched) {
+        geo = fetched;
+        await updateAccount(acc.id, { geo: { map: fetched, at: new Date().toISOString() } });
+      }
     }
 
-    const message = `${saved} pedidos actualizados`;
+    const ctx: AccountCtx = { id: acc.id, currency: acc.currency, timezone: acc.timezone, geo };
+
+    /** Baja todas las páginas de un rango de fechas. Devuelve cuántas órdenes había. */
+    const syncRange = async (from: Date, to: Date): Promise<number> => {
+      let count = 0;
+      for (let page = 1; page <= MAX_PAGES_PER_WINDOW; page++) {
+        const res = await withSession((s) => c.fetchOrders(s, path!, page, { from, to }));
+        const found = extractOrders(res.payload).length;
+        if (found === 0) break;
+        count += found;
+        saved += await ingestPayload(res.payload, "sync", res.url, ctx);
+        if (found < SOYDROP_PAGE_SIZE) break;
+      }
+      return count;
+    };
+
+    // 3. órdenes recientes: nuevas + cambios de estado
+    const now = new Date();
+    await syncRange(new Date(now.getTime() - RECENT_DAYS * DAY), new Date(now.getTime() + DAY));
+
+    // 4. historial, hacia atrás por meses, retomando donde quedó la vez anterior
+    let cursor = acc.backfill_cursor ? new Date(acc.backfill_cursor) : null;
+    let emptyWindows = 0;
+    const floor = now.getTime() - HISTORY_LIMIT_DAYS * DAY;
+    while (cursor && Date.now() < deadline) {
+      const from = new Date(cursor.getTime() - WINDOW_DAYS * DAY);
+      const n = await syncRange(from, cursor);
+      emptyWindows = n === 0 ? emptyWindows + 1 : 0;
+      cursor = emptyWindows >= 2 || from.getTime() <= floor ? null : from;
+      await updateAccount(acc.id, { backfill_cursor: cursor?.toISOString() ?? null });
+    }
+
+    const message = cursor
+      ? `${saved} pedidos actualizados · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
+      : `${saved} pedidos actualizados`;
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message });
     return { ok: true, message, saved };
   } catch (e) {
@@ -125,9 +165,10 @@ export async function syncAll(): Promise<Record<string, SyncResult>> {
   const { data, error } = await db().from("accounts").select("id, name, platform").eq("enabled", true);
   if (error) throw error;
   const out: Record<string, SyncResult> = {};
+  const deadline = Date.now() + TIME_BUDGET_MS; // un solo presupuesto para todas las cuentas
   for (const a of data) {
     if (a.platform !== "soydrop") continue; // Dropi: próximamente
-    out[a.name] = await syncAccount(a.id);
+    out[a.name] = await syncAccount(a.id, deadline);
   }
   return out;
 }

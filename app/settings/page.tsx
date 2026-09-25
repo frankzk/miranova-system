@@ -4,7 +4,7 @@ import { listAccounts } from "@/lib/accounts";
 import { COUNTRIES, PLATFORMS, countryByCode } from "@/lib/countries";
 import { fmtDate } from "@/lib/format";
 import { SubmitButton } from "./submit-button";
-import { chooseRef, createAccount, deleteAccount, resetDiscovery, syncNow, toggleAccount, updatePassword } from "./actions";
+import { chooseRef, createAccount, deleteAccount, loadHistory, resetDiscovery, syncNow, toggleAccount, updatePassword } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -92,6 +92,15 @@ export default async function SettingsPage({
                     <label>Correo<input name="email" type="email" defaultValue={a.login_email} /></label>
                     <label>Nueva contraseña<input name="password" type="password" autoComplete="new-password" placeholder="(sin cambios)" /></label>
                     <SubmitButton pending="Conectando…">Guardar acceso</SubmitButton>
+                  </form>
+                  <form action={loadHistory} className="inline-form">
+                    <input type="hidden" name="id" value={a.id} />
+                    <span className="small">
+                      {a.backfill_cursor
+                        ? <>Cargando historial: va en {a.backfill_cursor.slice(0, 10)}</>
+                        : "Historial completo cargado"}
+                    </span>
+                    <SubmitButton pending="Cargando…">Volver a cargar historial</SubmitButton>
                   </form>
                   <form action={resetDiscovery} className="inline-form">
                     <input type="hidden" name="id" value={a.id} />

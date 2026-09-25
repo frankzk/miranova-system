@@ -53,6 +53,8 @@ export async function createAccount(form: FormData) {
       login_email: email,
       password_enc: encrypt(password),
       enabled: p.ready,
+      // tras lo reciente, cargar el historial hacia atrás en las siguientes sincronizaciones
+      backfill_cursor: new Date(Date.now() - 45 * 86_400_000).toISOString(),
     })
     .select("id")
     .single();
@@ -124,4 +126,12 @@ export async function deleteAccount(form: FormData) {
   const { error } = await db().from("accounts").delete().eq("id", id);
   if (error) back(error.message, false);
   back("Cuenta y sus pedidos eliminados.", true);
+}
+
+export async function loadHistory(form: FormData) {
+  await guard();
+  const id = field(form, "id");
+  await updateAccount(id, { backfill_cursor: new Date(Date.now() - 45 * 86_400_000).toISOString() });
+  const r = await syncAccount(id);
+  back(r.message, r.ok);
 }

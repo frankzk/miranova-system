@@ -5,11 +5,15 @@
 // anidados). El objeto original siempre se guarda en `raw`, así que si algún
 // campo sale vacío basta con añadir su nombre aquí y re-procesar.
 
+import { isSoydropOrder, normalizeSoydropOrder } from "./connectors/soydrop-map.ts";
+
 export type NormalizedItem = {
   sku: string | null;
   product_name: string;
   quantity: number;
   price: number | null;
+  /** Lo que recibe el proveedor por esta línea (si la plataforma lo informa). */
+  vendor_price?: number | null;
   image_url: string | null;
 };
 
@@ -28,7 +32,15 @@ export type NormalizedOrder = {
   notes: string | null;
   carrier: string | null;
   tracking_number: string | null;
+  tracking_url?: string | null;
+  label_url?: string | null;
+  status_code?: string | null;
   total: number | null;
+  shipping_cost?: number | null;
+  vendor_amount?: number | null; // lo que cobra el proveedor por la orden
+  vendor_net?: number | null; // ganancia neta estimada del proveedor
+  cod?: boolean | null; // pago contra entrega
+  paid?: boolean | null; // liquidado al proveedor
   currency: string | null;
   ordered_at: string | null;
   raw: unknown;
@@ -100,7 +112,7 @@ export function num(v: unknown): number | null {
   return null;
 }
 
-export type NormalizeOptions = { currency?: string; timezone?: string };
+export type NormalizeOptions = { currency?: string; timezone?: string; geo?: Record<string, string> | null };
 
 /** Convierte una fecha/hora "de reloj" en una zona horaria IANA a ISO UTC. */
 export function zonedToIso(y: number, mo: number, d: number, h: number, mi: number, s: number, tz: string): string {
@@ -198,6 +210,7 @@ function normalizeItem(raw: unknown): NormalizedItem | null {
 
 /** Normaliza un objeto que parece un pedido de Drop. Devuelve null si no lo es. */
 export function normalizeOrder(raw: unknown, opts: NormalizeOptions = {}): NormalizedOrder | null {
+  if (isSoydropOrder(raw)) return normalizeSoydropOrder(raw, opts);
   if (!isObj(raw)) return null;
   const idRaw = str(pick(raw, F.id));
   if (!idRaw) return null;
@@ -280,7 +293,7 @@ export function extractOrders(payload: unknown, opts: NormalizeOptions = {}): No
       for (const n of node) walk(n, depth + 1);
       return;
     }
-    if (looksLikeOrder(node)) {
+    if (isSoydropOrder(node) || looksLikeOrder(node)) {
       const o = normalizeOrder(node, opts);
       if (o) {
         const prev = found.get(o.external_id);

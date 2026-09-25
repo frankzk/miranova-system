@@ -38,7 +38,9 @@ test("conector soydrop contra API simulada", async () => {
   assert.equal(d.path, "/vendors/orders");
   assert.equal(d.attempts[0].status, 404);
   const p = await soydrop.fetchOrders(s, d.path!, 1);
-  assert.match(p.url, /page=1&limit=50/);
+  assert.match(p.url, /page=1&limit=100/);
+  const r = await soydrop.fetchOrders(s, d.path!, 2, { from: new Date("2026-08-01T00:00:00Z"), to: new Date("2026-09-01T00:00:00Z") });
+  assert.match(r.url, /page=2&limit=100&dateFrom=2026-08-01T00%3A00%3A00.000Z&dateTo=2026-09-01/);
   await assert.rejects(soydrop.fetchOrders({ token: "viejo", obtainedAt: 0 }, "/vendors/orders", 1), /caduc/);
   srv.close();
 });

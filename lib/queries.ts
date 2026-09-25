@@ -5,6 +5,7 @@ export type OrderItem = {
   product_name: string;
   quantity: number;
   price: number | null;
+  vendor_price: number | null;
   sku: string | null;
   image_url: string | null;
   position: number;
@@ -26,7 +27,14 @@ export type Order = {
   notes: string | null;
   carrier: string | null;
   tracking_number: string | null;
+  tracking_url: string | null;
+  label_url: string | null;
   total: number | null;
+  shipping_cost: number | null;
+  vendor_amount: number | null;
+  vendor_net: number | null;
+  cod: boolean | null;
+  paid: boolean | null;
   currency: string | null;
   ordered_at: string | null;
   first_seen_at: string;
@@ -73,7 +81,7 @@ const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
 export async function listOrders(f: Filters, opts: { all?: boolean } = {}) {
   let query = db()
     .from("orders")
-    .select("*, accounts(name, country), order_items(product_name, quantity, price, sku, image_url, position)", { count: "exact" })
+    .select("*, accounts(name, country), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)", { count: "exact" })
     .order("ordered_at", { ascending: false, nullsFirst: false })
     .order("first_seen_at", { ascending: false });
 
@@ -113,7 +121,7 @@ export async function listOrders(f: Filters, opts: { all?: boolean } = {}) {
 export async function getOrder(id: string): Promise<(Order & { raw: unknown }) | null> {
   const { data, error } = await db()
     .from("orders")
-    .select("*, accounts(name, country), order_items(product_name, quantity, price, sku, image_url, position)")
+    .select("*, accounts(name, country), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;

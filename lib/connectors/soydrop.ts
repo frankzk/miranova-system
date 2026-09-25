@@ -1,6 +1,6 @@
 import { extractOrders } from "../normalize.ts";
 import {
-  type Connector, type LoginResult, type OrdersPage, type PlatformAccount, type ProbeAttempt,
+  type Connector, type DateRange, type LoginResult, type OrdersPage, type PlatformAccount, type ProbeAttempt,
   type Session, PlatformError, SessionExpired,
 } from "./types.ts";
 
@@ -11,7 +11,7 @@ import {
 // no es pública: se descubre probando candidatas con la sesión iniciada.
 
 const API = process.env.SOYDROP_API_URL ?? "https://api.soydrop.com";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 const ORDER_PATH_CANDIDATES = [
   "/vendor/orders",
@@ -152,15 +152,70 @@ export const soydrop: Connector = {
     return { path: null, attempts };
   },
 
-  async fetchOrders(session, path, page): Promise<OrdersPage> {
+  async fetchOrders(session, path, page, range?: DateRange): Promise<OrdersPage> {
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+    if (range) {
+      params.set("dateFrom", range.from.toISOString());
+      params.set("dateTo", range.to.toISOString());
+    }
     const sep = path.includes("?") ? "&" : "?";
-    const url = `${API}${path}${sep}page=${page}&limit=${PAGE_SIZE}`;
+    const url = `${API}${path}${sep}${params}`;
     const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
     if (res.status === 401 || res.status === 403) throw new SessionExpired();
     const { json, text } = await readJson(res);
     if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
     return { url, payload: json };
   },
+
+  // La web de Drop carga "states-cities/" para traducir cityId/stateId a nombres.
+  async fetchGeo(session) {
+    const countryId = jwtClaim(session.token, "countryId");
+    const candidates = [
+      "/states-cities/",
+      "/states-cities",
+      ...(countryId ? [`/states-cities/${countryId}`, `/states-cities/?countryId=${countryId}`, `/countries/${countryId}/states-cities`] : []),
+      "/locations/states-cities/",
+      "/geo/states-cities/",
+    ];
+    for (const path of candidates) {
+      try {
+        const res = await fetch(`${API}${path}`, { headers: authHeaders(session), cache: "no-store" });
+        if (!res.ok) continue;
+        const { json } = await readJson(res);
+        const map = collectNames(json);
+        if (Object.keys(map).length > 5) return map;
+      } catch {
+        /* probar la siguiente */
+      }
+    }
+    return null;
+  },
 };
+
+/** Lee un campo del payload de un JWT (sin verificar la firma). */
+function jwtClaim(token: string | undefined, key: string): string | undefined {
+  try {
+    const payload = JSON.parse(Buffer.from(token!.split(".")[1], "base64url").toString("utf8"));
+    const v = payload?.[key];
+    return typeof v === "string" ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Recorre la respuesta y arma { id: nombre } de todos los objetos con id y nombre. */
+function collectNames(node: unknown, out: Record<string, string> = {}, depth = 0): Record<string, string> {
+  if (depth > 6 || node === null || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const x of node) collectNames(x, out, depth + 1);
+    return out;
+  }
+  const obj = node as Obj;
+  const id = obj.id ?? obj._id ?? obj.cityId ?? obj.stateId;
+  const name = obj.name ?? obj.nombre ?? obj.label;
+  if ((typeof id === "string" || typeof id === "number") && typeof name === "string") out[String(id)] = name;
+  for (const v of Object.values(obj)) collectNames(v, out, depth + 1);
+  return out;
+}
 
 export const SOYDROP_PAGE_SIZE = PAGE_SIZE;
