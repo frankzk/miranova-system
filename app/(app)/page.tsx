@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { BarChart } from "@/components/bar-chart";
+import { OwnerAlertsPanel } from "@/components/owner-alerts";
 import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort } from "@/lib/format";
-import { attentionOrders, dashboardSummary, type RankRow } from "@/lib/queries";
+import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { RANGES, resolveRange } from "@/lib/ranges";
 
@@ -18,9 +19,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
   const sp = await searchParams;
   const range = resolveRange(sp.r ?? sp.days, scope.tz);
-  const [s, attention] = await Promise.all([
+  const [s, attention, alerts] = await Promise.all([
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     attentionOrders(scope.account),
+    ownerAlerts(scope.account),
   ]);
 
   const snap = s.snapshot;
@@ -43,6 +45,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </nav>
         }
       />
+
+      <OwnerAlertsPanel data={alerts} tz={scope.tz} />
 
       <section className="metrics" aria-label="Resumen">
         <Link className="metric" href="/orders?group=dispatch">

@@ -264,6 +264,18 @@ export function fixtureClient(): any {
         }
         return { data: out, error: null };
       }
+      if (name === "owner_alerts") {
+        const hn = ACCOUNTS[0];
+        const gt = ACCOUNTS[1];
+        const alerts = [
+          { kind: "stuck_orders", severity: 1, account_id: hn.id, account: hn.name, country: hn.country, currency: hn.currency, data: { orders: 64, transit: 48, problem: 16, amount: 21480.5 } },
+          { kind: "stock_rejections", severity: 1, account_id: hn.id, account: hn.name, country: hn.country, currency: hn.currency, data: { product: PRODUCTS[0][0], orders: 23 } },
+          { kind: "store_drop", severity: 2, account_id: gt.id, account: gt.name, country: gt.country, currency: gt.currency, data: { store: "MercaGo HN", cur: 12, prev: 31 } },
+          { kind: "carrier_delivery", severity: 2, account_id: hn.id, account: hn.name, country: hn.country, currency: hn.currency, data: { carrier: "Cargo Expreso", rate: 0.63, avg: 0.78, failed: 22, closed: 60 } },
+          { kind: "product_growth", severity: 3, account_id: hn.id, account: hn.name, country: hn.country, currency: hn.currency, data: { product: PRODUCTS[3][0], cur: 84, prev: 31 } },
+        ].filter((a) => !args.p_account || a.account_id === args.p_account);
+        return { data: { total: alerts.length, alerts }, error: null };
+      }
       if (name === "order_facets") {
         const a = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account);
         return { data: { dropshippers: [...new Set(a.map((o) => o.dropshipper))].sort(), carriers: [...new Set(a.map((o) => o.carrier))].sort() }, error: null };
