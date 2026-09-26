@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./supabase";
 import type { OwnerAlerts } from "./alerts";
+import type { BusinessOverview } from "./business";
 import { groupById } from "./status";
 
 export type OrderItem = {
@@ -358,4 +359,15 @@ export async function ownerAlerts(account?: string): Promise<OwnerAlerts> {
   const { data, error } = await db().rpc("owner_alerts", { p_account: account ?? null });
   if (error) throw error;
   return (data ?? { total: 0, alerts: [] }) as OwnerAlerts;
+}
+
+/** Vista "Negocio": países, flujo de tiendas, productos y operación (business_overview). */
+export async function businessOverview(opts: { account?: string; days: number; country?: string }): Promise<BusinessOverview> {
+  const { data, error } = await db().rpc("business_overview", {
+    p_account: opts.account ?? null,
+    p_days: opts.days,
+    p_country: opts.country ?? null,
+  });
+  if (error) throw error;
+  return data as BusinessOverview;
 }
