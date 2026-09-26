@@ -1,4 +1,4 @@
-// Simulación local de business_overview (Resumen Miranova en Inicio).
+// Simulación local de active_stores (Resumen Miranova en Inicio).
 import type { FixtureCtx, FixtureModule, Row } from "./types";
 
 function businessOverview(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId, localDay }: FixtureCtx) {
@@ -66,4 +66,4 @@ function businessOverview(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId, 
   };
 }
 
-export const fixtures: FixtureModule = { rpc: { business_overview: businessOverview } };
+export const fixtures: FixtureModule = { rpc: { active_stores: businessOverview } };

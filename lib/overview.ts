@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./supabase";
 
-// Resumen Miranova: base de tiendas y ritmo del negocio (ver supabase/migrations/0011_business_overview.sql).
+// Resumen Miranova: base de tiendas y ritmo del negocio (ver supabase/migrations/0016_active_stores.sql).
 
 export type OverviewStore = {
   kind: "new" | "reactivated" | "stopped";
@@ -28,8 +28,8 @@ export type Overview = {
   lists: OverviewStore[];
 };
 
-export async function businessOverview(account?: string): Promise<Overview> {
-  const { data, error } = await db().rpc("business_overview", { p_account: account ?? null });
+export async function activeStores(account?: string): Promise<Overview> {
+  const { data, error } = await db().rpc("active_stores", { p_account: account ?? null });
   if (error) throw error;
   return data as Overview;
 }

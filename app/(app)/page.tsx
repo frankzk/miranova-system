@@ -8,7 +8,7 @@ import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort } from "@/lib/format";
 import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
-import { businessOverview } from "@/lib/overview";
+import { activeStores } from "@/lib/overview";
 import { getScope } from "@/lib/scope";
 import { RANGES, resolveRange } from "@/lib/ranges";
 
@@ -26,7 +26,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     attentionOrders(scope.account),
     ownerAlerts(scope.account),
-    businessOverview(scope.account),
+    activeStores(scope.account),
   ]);
 
   const snap = s.snapshot;

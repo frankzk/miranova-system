@@ -1,4 +1,4 @@
--- Resumen Miranova: cuántas tiendas realmente mueven pedidos y cómo evoluciona la base.
+-- Tiendas activas (Inicio): cuántas tiendas realmente mueven pedidos y cómo evoluciona la base.
 -- Tienda = cuenta + ID del vendedor en la plataforma (como order_facts). Sin canceladas/rechazadas,
 -- salvo "registradas", que cuenta toda tienda que alguna vez hizo un pedido.
 --   activas 30d / 7d / hoy-ayer: con al menos un pedido en la ventana (hoy/ayer en la zona de la cuenta)
@@ -6,7 +6,7 @@
 --   reactivadas: volvieron a pedir en los últimos 30 días tras 30+ días sin pedidos
 --   dejaron de vender: 3+ pedidos entre hace 44 y 14 días y ninguno en los últimos 14
 --   weeks: 12 semanas móviles (0 = últimos 7 días) con tiendas activas, nuevas y pedidos
-create or replace function public.business_overview(p_account uuid)
+create or replace function public.active_stores(p_account uuid)
 returns jsonb language sql stable as $$
   with o as (
     select o.id, o.account_id, a.name as account_name, coalesce(o.currency, a.currency) as currency,
@@ -91,5 +91,5 @@ returns jsonb language sql stable as $$
   )
 $$;
 
-revoke all on function public.business_overview(uuid) from public, anon, authenticated;
-grant execute on function public.business_overview(uuid) to service_role;
+revoke all on function public.active_stores(uuid) from public, anon, authenticated;
+grant execute on function public.active_stores(uuid) to service_role;
