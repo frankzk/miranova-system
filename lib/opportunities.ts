@@ -1,15 +1,17 @@
 // Oportunidades: une las alertas comerciales de tiendas y productos en una sola lista de acciones
 // para el equipo ("a quién contactar hoy y qué proponerle"). Puro, para poder probarlo.
 
+import type { CrossSellItem } from "./cross-sell.ts";
+import type { ProductOpportunity } from "./product-insights.ts";
 import { opportunities, type OpportunityKind, type StoreRow } from "./stores.ts";
 
 export type OppGroup = "contact" | "grow" | "ticket" | "product";
 
 export const OPP_GROUPS: Record<OppGroup, { label: string; hint: string }> = {
   contact: { label: "Contactar hoy", hint: "Se frenaron o están cayendo" },
-  grow: { label: "Hacer crecer", hint: "Crecen fuerte, dependen de un producto o venden uno solo" },
+  grow: { label: "Hacer crecer", hint: "Crecen fuerte, dependen de un producto, venden uno solo o pueden probar otro" },
   ticket: { label: "Ticket y unidades", hint: "Pueden vender más por pedido con bundles y ofertas 2x/3x" },
-  product: { label: "Productos", hint: "Productos para impulsar en la comunidad o revisar" },
+  product: { label: "Productos", hint: "Productos en racha o con potencial de expansión para la comunidad, y los que no se mueven" },
 };
 
 export type OppItem = {
@@ -126,6 +128,65 @@ export function allStoreOpportunities(
     });
   }
   return items;
+}
+
+const PRODUCT_KIND: Record<ProductOpportunity["kind"], { priority: 2 | 3; tone: OppItem["tone"] }> = {
+  hot: { priority: 2, tone: "success" },
+  expansion: { priority: 2, tone: "accent" },
+  low_movement: { priority: 3, tone: "warning" },
+  no_orders: { priority: 3, tone: "warning" },
+};
+
+/** Productos: en racha, con potencial de expansión, de bajo movimiento o sin pedidos. */
+export function productItems(ops: ProductOpportunity[], accountName: (id: string) => string): OppItem[] {
+  return ops.map((o) => ({
+    id: `${o.kind}:${o.account_id}:${o.product_key}`,
+    group: "product" as const,
+    kind: o.kind,
+    priority: PRODUCT_KIND[o.kind].priority,
+    weight: o.priority,
+    subject: { type: "product" as const, name: o.product_name, account_id: o.account_id, account_name: accountName(o.account_id), product_key: o.product_key },
+    title: o.title,
+    action: o.action,
+    meta: o.detail,
+    tone: PRODUCT_KIND[o.kind].tone,
+  }));
+}
+
+/**
+ * Venta cruzada (de la matriz tienda × producto). Si la tienda ya tiene la alerta "vende un solo
+ * producto", se le agrega el producto sugerido en vez de repetirla; una sugerencia por tienda.
+ */
+export function withCrossSell(items: OppItem[], cross: CrossSellItem[], accountName: (id: string) => string): OppItem[] {
+  const out = [...items];
+  const seen = new Set<string>();
+  for (const c of cross) {
+    const storeKey = `${c.account_id}:${c.store_id}`;
+    if (c.kind === "single_product") {
+      const i = out.findIndex((x) => x.kind === "single" && `${x.subject.account_id}:${x.subject.store_id}` === storeKey);
+      if (i >= 0) {
+        if (c.product_name) out[i] = { ...out[i], action: `ofrecerle un segundo producto: ${c.product_name}` };
+        continue;
+      }
+    }
+    if (seen.has(storeKey)) continue;
+    seen.add(storeKey);
+    out.push({
+      id: `${c.kind}:${storeKey}:${c.product_key ?? ""}`,
+      group: "grow",
+      kind: c.kind,
+      priority: 2,
+      weight: c.priority,
+      subject: { type: "store", name: c.store_name, account_id: c.account_id, account_name: accountName(c.account_id), store_id: c.store_id },
+      title: c.kind === "cross_sell"
+        ? `Vende mucho ${c.anchor_name} pero nunca probó ${c.product_name}`
+        : c.title.replace(/^📦\s*/, ""),
+      action: c.action.charAt(0).toLowerCase() + c.action.slice(1),
+      meta: c.detail,
+      tone: "info",
+    });
+  }
+  return out;
 }
 
 /** Orden de la lista: prioridad y, dentro de ella, lo que más pedidos mueve. */

@@ -5,11 +5,15 @@ import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { pendingFollowups, type Followup } from "@/lib/followups";
-import { allStoreOpportunities, OPP_GROUPS, sortOpportunities, type OppGroup, type OppItem } from "@/lib/opportunities";
+import { crossSell } from "@/lib/cross-sell";
+import { allStoreOpportunities, OPP_GROUPS, productItems, sortOpportunities, withCrossSell, type OppGroup, type OppItem } from "@/lib/opportunities";
+import { productInsights } from "@/lib/product-insights";
+import { productPerformance } from "@/lib/product-performance";
 import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
 import { daysBetween, fmtDay, FOLLOWUP_STATUS } from "@/lib/store-metrics";
+import { storeProductMatrix } from "@/lib/store-product-matrix";
 import { typicalTickets } from "@/lib/stores";
 import "./opportunities.css";
 
@@ -25,11 +29,21 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [stores, followups] = await Promise.all([storeHealth(scope.account), pendingFollowups(scope.account)]);
+  const [stores, followups, products, matrix] = await Promise.all([
+    storeHealth(scope.account),
+    pendingFollowups(scope.account),
+    productPerformance(scope.account),
+    storeProductMatrix(scope.account, 30),
+  ]);
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
   const today = todayIn(scope.tz);
 
   const typical = typicalTickets(stores);
-  const all = sortOpportunities(allStoreOpportunities(stores, typical, (s) => (n) => fmtMoney(n, s.currency, { compact: true })));
+  const storeItems = allStoreOpportunities(stores, typical, (s) => (n) => fmtMoney(n, s.currency, { compact: true }));
+  const all = sortOpportunities([
+    ...withCrossSell(storeItems, crossSell(matrix), accountName),
+    ...productItems(productInsights(products), accountName),
+  ]);
   // seguimiento abierto por tienda: se muestra junto a su oportunidad para no contactarla dos veces
   const open = new Map<string, Followup>();
   for (const f of followups) if (!open.has(`${f.account_id}:${f.store_id}`)) open.set(`${f.account_id}:${f.store_id}`, f);
@@ -90,7 +104,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
 
       <p className="footnote">
         Se calculan con los pedidos sin cancelar: ritmo de los últimos 7 días contra los 7 anteriores y promedios de 30 días.
-        El ticket bajo se compara con la mediana de las tiendas de la misma cuenta.
+        El ticket bajo se compara con la mediana de las tiendas de la misma cuenta; la venta cruzada, con las tiendas que venden
+        el mismo producto principal (matriz tienda × producto de 30 días).
       </p>
     </div>
   );
@@ -100,13 +115,15 @@ function Opp({ i, showAccount, follow, today }: { i: OppItem; showAccount: boole
   const p = PRIORITY[i.priority];
   const href = i.subject.type === "store" && i.subject.store_id
     ? storeHref(i.subject.account_id, i.subject.store_id)
-    : i.subject.type === "account" ? "/settings" : null;
+    : i.subject.type === "account" ? "/settings"
+    : i.subject.type === "product" ? "/products/performance" : null;
   const body = (
     <>
       <span className="bar" data-tone={i.tone} aria-hidden />
       <span className="main">
         <span className="who">
           <span className="name">{i.subject.name}</span>
+          {i.subject.type !== "store" && <span className="kind">{i.subject.type === "product" ? "Producto" : "Cuenta"}</span>}
           {showAccount && <span className="acct">{i.subject.account_name}</span>}
         </span>
         <span className="what">{i.title}</span>

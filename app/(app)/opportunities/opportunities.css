@@ -16,6 +16,7 @@
 .opp .main { display: grid; gap: 3px; min-width: 0; }
 .opp .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .opp .name { font-weight: 650; color: var(--ink); }
+.opp .kind { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); background: var(--bg-app); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 5px; }
 .opp .acct { font-size: var(--t-xs); color: var(--ink-3); }
 .opp .what { font-size: var(--t-md); color: var(--ink); }
 .opp .do { font-size: var(--t-sm); color: var(--ink-2); }
