@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountChips } from "@/components/account-chips";
 import { BarChart } from "@/components/bar-chart";
 import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
 import { PageHead, place, StatusPill } from "@/components/ui";
@@ -43,6 +44,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </nav>
         }
       />
+
+      <AccountChips accounts={accounts} current={scope.account} next={range.id === "30" ? "/" : `/?r=${range.id}`} />
 
       <section className="metrics" aria-label="Resumen">
         <Link className="metric" href="/orders?group=dispatch">

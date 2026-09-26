@@ -86,3 +86,23 @@ export function CopyButton({ value, label = "Copiar" }: { value: string; label?:
 export function AutoSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={`select ${props.className ?? ""}`} onChange={(e) => e.currentTarget.form?.requestSubmit()} />;
 }
+
+/** Formulario GET que no manda campos vacíos, para que la URL quede limpia (…?status=2 en vez de …?q=&from=&status=2). */
+export function GetForm(props: React.FormHTMLAttributes<HTMLFormElement>) {
+  return (
+    <form
+      {...props}
+      method="get"
+      onSubmit={(e) => {
+        const off: (HTMLInputElement | HTMLSelectElement)[] = [];
+        for (const el of Array.from(e.currentTarget.elements) as (HTMLInputElement | HTMLSelectElement)[]) {
+          if (el.name && !el.disabled && el.value === "") {
+            el.disabled = true;
+            off.push(el);
+          }
+        }
+        setTimeout(() => off.forEach((el) => (el.disabled = false)), 0);
+      }}
+    />
+  );
+}

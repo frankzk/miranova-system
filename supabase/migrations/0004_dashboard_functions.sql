@@ -133,7 +133,17 @@ returns jsonb language sql stable as $$
     'dropshippers', coalesce((select jsonb_agg(x order by x) from (
       select distinct dropshipper x from public.orders where dropshipper is not null and (p_account is null or account_id = p_account)) s), '[]'::jsonb),
     'carriers', coalesce((select jsonb_agg(x order by x) from (
-      select distinct carrier x from public.orders where carrier is not null and (p_account is null or account_id = p_account)) s), '[]'::jsonb)
+      select distinct carrier x from public.orders where carrier is not null and (p_account is null or account_id = p_account)) s), '[]'::jsonb),
+    -- estado exacto (dentro de cada grupo de las pestañas), con su nombre más reciente
+    'statuses', coalesce((select jsonb_agg(jsonb_build_object('code', code, 'label', label, 'group', grp, 'n', n) order by n desc) from (
+      select status_code code, (array_agg(status order by updated_at desc))[1] label, public.status_group(status_code) grp, count(*) n
+      from public.orders where status_code is not null and (p_account is null or account_id = p_account) group by status_code) s), '[]'::jsonb),
+    'departments', coalesce((select jsonb_agg(jsonb_build_object('name', x, 'n', n) order by x) from (
+      select department x, count(*) n from public.orders where department is not null and department <> '' and (p_account is null or account_id = p_account) group by 1) s), '[]'::jsonb),
+    -- productos más pedidos (hasta 300) para filtrar órdenes que los contienen
+    'products', coalesce((select jsonb_agg(jsonb_build_object('name', x, 'n', n) order by n desc, x) from (
+      select i.product_name x, count(distinct o.id) n from public.orders o join public.order_items i on i.order_id = o.id
+      where (p_account is null or o.account_id = p_account) group by 1 order by 2 desc limit 300) s), '[]'::jsonb)
   )
 $$;
 
