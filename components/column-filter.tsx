@@ -20,6 +20,7 @@ export function ColumnFilter({
   query,
   align = "left",
   title,
+  path = "/orders",
 }: {
   label: string;
   param: string;
@@ -30,6 +31,8 @@ export function ColumnFilter({
   query: string;
   align?: "left" | "right";
   title?: string;
+  /** Página a la que apuntan las opciones. */
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -44,7 +47,7 @@ export function ColumnFilter({
     if (value) p.set(param, value);
     else p.delete(param);
     const s = p.toString();
-    return s ? `/orders?${s}` : "/orders";
+    return s ? `${path}?${s}` : path;
   };
 
   const shown = useMemo(() => {
