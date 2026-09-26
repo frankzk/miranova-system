@@ -44,7 +44,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const rows = searched.filter((p) => matches(p, f));
   const counts = Object.fromEntries(FILTERS.map((x) => [x.id, searched.filter((p) => matches(p, x.id)).length]));
 
-  const soldOf = (p: Product) => sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
+  const soldOf = (p: Product) => sales[`${p.account_id}:id:${p.external_id}`] ?? sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
   const showAccount = !scope.account && accounts.length > 1;
   const lastSync = accounts
     .map((a) => a.products_sync_at)

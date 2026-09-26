@@ -98,6 +98,7 @@ export function normalizeDropiOrder(
       price: n(d.price),
       vendor_price: supplier === null ? null : supplier * quantity,
       image_url: image(product),
+      product_external_id: s(product.id) ?? s(d.product_id),
     };
   });
 

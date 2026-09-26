@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const header = ["Cuenta", "Código", "Producto", "SKU", "Estado", "Precio", "Precio sugerido", "Inventario", "Variantes", "Vendido 30 días", "Moneda", "Creado"];
   const lines = [header.map(esc).join(",")];
   for (const p of rows) {
-    const sold = sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
+    const sold = sales[`${p.account_id}:id:${p.external_id}`] ?? sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
     lines.push(
       [p.accounts?.name, p.code, p.name, p.sku, p.status, p.price, p.suggested_price, p.stock, p.variants_count, sold?.units ?? 0, p.currency, p.created_at_platform?.slice(0, 10)]
         .map(esc)

@@ -312,7 +312,7 @@ export async function listProducts(account?: string): Promise<Product[]> {
   return out;
 }
 
-/** Unidades y órdenes por "cuenta:SKU" (o "cuenta:nombre") desde una fecha. */
+/** Unidades y órdenes por "cuenta:id:<id del producto>", "cuenta:SKU" o "cuenta:nombre" desde una fecha. */
 export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number }>> {
   const { data, error } = await db().rpc("product_sales", {
     p_account: account ?? null,
