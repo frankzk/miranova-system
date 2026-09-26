@@ -43,8 +43,10 @@ async function oldestStaleOpenOrder(accountId: string, before: Date, floor: Date
  * se eligió una, guarda la lista para que el usuario la escoja en Ajustes.
  */
 async function freshSession(acc: Account): Promise<Session> {
-  const c = connectorFor(acc.platform);
-  const login = await c.login(acc.login_email, decrypt(acc.password_enc));
+  const c = connectorFor(acc.platform, acc.country, acc.timezone);
+  const login = await c.login(acc.login_email, decrypt(acc.password_enc), {
+    totpSecret: acc.totp_secret_enc ? decrypt(acc.totp_secret_enc) : undefined,
+  });
 
   let ref = acc.platform_ref;
   const debug = { ...(acc.debug ?? {}), available_accounts: login.accounts };
@@ -90,7 +92,8 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
   const acc = await getAccount(accountId);
   if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0 };
 
-  const c = connectorFor(acc.platform);
+  const c = connectorFor(acc.platform, acc.country, acc.timezone);
+  const pageSize = c.pageSize ?? SOYDROP_PAGE_SIZE;
   let saved = 0;
 
   try {
@@ -145,10 +148,11 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
       for (let page = 1; page <= MAX_PAGES_PER_WINDOW; page++) {
         const res = await withSession((s) => c.fetchOrders(s, path!, page, { from, to }));
         const found = extractOrders(res.payload).length;
-        if (found === 0) break;
+        const rows = res.rows ?? found;
+        if (rows === 0) break;
         count += found;
         saved += await ingestPayload(res.payload, "sync", res.url, ctx);
-        if (found < SOYDROP_PAGE_SIZE) break;
+        if (rows < pageSize) break;
       }
       return count;
     };
@@ -225,12 +229,11 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
 }
 
 export async function syncAll(): Promise<Record<string, SyncResult>> {
-  const { data, error } = await db().from("accounts").select("id, name, platform").eq("enabled", true);
+  const { data, error } = await db().from("accounts").select("id, name").eq("enabled", true);
   if (error) throw error;
   const out: Record<string, SyncResult> = {};
   const deadline = Date.now() + TIME_BUDGET_MS; // un solo presupuesto para todas las cuentas
   for (const a of data) {
-    if (a.platform !== "soydrop") continue; // Dropi: próximamente
     out[a.name] = await syncAccount(a.id, deadline);
   }
   return out;

@@ -5,6 +5,7 @@
 // anidados). El objeto original siempre se guarda en `raw`, así que si algún
 // campo sale vacío basta con añadir su nombre aquí y re-procesar.
 
+import { isDropiOrder, normalizeDropiOrder } from "./connectors/dropi-map.ts";
 import { isSoydropOrder, normalizeSoydropOrder } from "./connectors/soydrop-map.ts";
 
 export type NormalizedItem = {
@@ -211,6 +212,7 @@ function normalizeItem(raw: unknown): NormalizedItem | null {
 /** Normaliza un objeto que parece un pedido de Drop. Devuelve null si no lo es. */
 export function normalizeOrder(raw: unknown, opts: NormalizeOptions = {}): NormalizedOrder | null {
   if (isSoydropOrder(raw)) return normalizeSoydropOrder(raw, opts);
+  if (isDropiOrder(raw)) return normalizeDropiOrder(raw, opts);
   if (!isObj(raw)) return null;
   const idRaw = str(pick(raw, F.id));
   if (!idRaw) return null;
@@ -293,7 +295,7 @@ export function extractOrders(payload: unknown, opts: NormalizeOptions = {}): No
       for (const n of node) walk(n, depth + 1);
       return;
     }
-    if (isSoydropOrder(node) || looksLikeOrder(node)) {
+    if (isSoydropOrder(node) || isDropiOrder(node) || looksLikeOrder(node)) {
       const o = normalizeOrder(node, opts);
       if (o) {
         const prev = found.get(o.external_id);

@@ -5,6 +5,7 @@ import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { dashboardSummary, moneyByMonth, unpaidDelivered, type MonthRow } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { resolveRange } from "@/lib/ranges";
 
 export const metadata = { title: "Dinero" };
 
@@ -16,7 +17,7 @@ export default async function MoneyPage() {
   const scope = await getScope(accounts);
   const [months, summary, unpaid] = await Promise.all([
     moneyByMonth({ account: scope.account, months: MONTHS, tz: scope.tz }),
-    dashboardSummary({ account: scope.account, days: 30, tz: scope.tz }),
+    dashboardSummary({ account: scope.account, ...resolveRange("30", scope.tz), tz: scope.tz }),
     unpaidDelivered(scope.account, 15),
   ]);
 

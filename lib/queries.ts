@@ -178,15 +178,19 @@ export type Summary = {
   carriers: RankRow[];
 };
 
-export async function dashboardSummary(opts: { account?: string; days: number; tz: string }): Promise<Summary> {
-  const to = new Date();
-  const from = new Date(to.getTime() - (opts.days - 1) * 86_400_000);
-  from.setUTCHours(6, 0, 0, 0); // medianoche en UTC-6 aprox.; la serie se agrupa por día local en SQL
+export async function dashboardSummary(opts: {
+  account?: string;
+  from: Date;
+  to: Date;
+  tz: string;
+  bucket?: "hour" | "day";
+}): Promise<Summary> {
   const { data, error } = await db().rpc("dashboard_summary", {
     p_account: opts.account ?? null,
-    p_from: from.toISOString(),
-    p_to: to.toISOString(),
+    p_from: opts.from.toISOString(),
+    p_to: opts.to.toISOString(),
     p_tz: opts.tz,
+    p_bucket: opts.bucket ?? "day",
   });
   if (error) throw error;
   return data as Summary;

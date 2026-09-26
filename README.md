@@ -19,8 +19,11 @@ Cron). No hace falta tener el navegador abierto.
 - **Varias cuentas**: una por plataforma + país (Drop Honduras, Drop Guatemala,
   Dropi Colombia…). Si un mismo correo tiene varias cuentas en Drop, el panel te
   deja elegir cuál corresponde a cada una.
-- **Plataformas**: Drop (`soydrop.com`) lista; Dropi próximamente
-  (`lib/connectors/`).
+- **Plataformas**: Drop (`soydrop.com`) y Dropi (`app.dropi.gt` y demás
+  países) en `lib/connectors/`.
+- **Verificación en dos pasos (2FA)**: si la plataforma pide un código de 6
+  dígitos, guarda en la cuenta la *clave secreta* del 2FA (el texto junto al QR);
+  el servidor genera el código solo en cada inicio de sesión.
 - **Contraseñas** cifradas con AES-256-GCM (`ENCRYPTION_KEY`, solo en Vercel).
 - La extensión de Chrome (`extension/`) queda como respaldo opcional.
 

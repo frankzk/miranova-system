@@ -48,12 +48,13 @@ La web de Drop muestra una cuenta y un país a la vez. Este panel junta todas la
 
 ## Brand Commitments
 
-- Nombre: **Miranova**.
+- Nombre: **Miranova** · lema "Proveeduría para eCommerce".
+- Identidad en el panel: "M" en recuadro azul marino + "Miranova". Favicon: "M" blanca sobre verde oscuro medio (#1F5E45). El usuario descartó una recreación vectorial del logo del flyer.
 - El usuario pidió un estilo tipo **Stripe** (dashboard sobrio, preciso y de alta calidad), o una referencia mejor si existe.
 
 ## Evidence on Hand
 
-Datos reales de órdenes sincronizadas de Drop Honduras (cuenta MIRANOVA). No hay logo ni otros activos de marca en el repositorio: no se debe inventar ninguno.
+Datos reales de órdenes y productos sincronizados de las cuentas Drop. No hay archivo de logo original en el repositorio: el panel usa una "M" tipográfica (no inventar otro logo).
 
 ## Product Principles
 

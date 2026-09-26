@@ -17,7 +17,9 @@ $$;
 create index if not exists orders_group_idx on public.orders (public.status_group(status_code));
 
 -- Resumen de Inicio: estado actual, cifras del período por moneda, serie diaria y rankings.
-create or replace function public.dashboard_summary(p_account uuid, p_from timestamptz, p_to timestamptz, p_tz text)
+drop function if exists public.dashboard_summary(uuid, timestamptz, timestamptz, text);
+
+create or replace function public.dashboard_summary(p_account uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_bucket text)
 returns jsonb language sql stable as $$
   with base as (
     select o.*, public.status_group(o.status_code) as grp
@@ -49,12 +51,17 @@ returns jsonb language sql stable as $$
     from base where grp = 'delivered' and not coalesce(paid, false)
     group by 1
   ),
+  -- serie por día, o por hora cuando el período es un solo día (p_bucket = 'hour')
   days as (
-    select d::date as day
-    from generate_series((p_from at time zone p_tz)::date, (p_to at time zone p_tz)::date, interval '1 day') d
+    select d as day
+    from generate_series(
+      date_trunc(p_bucket, p_from at time zone p_tz),
+      date_trunc(p_bucket, p_to at time zone p_tz),
+      case when p_bucket = 'hour' then interval '1 hour' else interval '1 day' end
+    ) d
   ),
   daily as (
-    select (ordered_at at time zone p_tz)::date as day,
+    select date_trunc(p_bucket, ordered_at at time zone p_tz) as day,
       count(*) as orders,
       count(*) filter (where grp = 'delivered') as delivered,
       count(*) filter (where grp = 'problem') as problems
@@ -85,7 +92,7 @@ returns jsonb language sql stable as $$
     'money', coalesce((select jsonb_agg(to_jsonb(m) order by m.orders desc) from money m), '[]'::jsonb),
     'unpaid', coalesce((select jsonb_agg(to_jsonb(u) order by u.amount desc) from unpaid u), '[]'::jsonb),
     'daily', coalesce((select jsonb_agg(jsonb_build_object(
-        'day', d.day, 'orders', coalesce(x.orders, 0), 'delivered', coalesce(x.delivered, 0), 'problems', coalesce(x.problems, 0)
+        'day', to_char(d.day, 'YYYY-MM-DD"T"HH24:MI'), 'orders', coalesce(x.orders, 0), 'delivered', coalesce(x.delivered, 0), 'problems', coalesce(x.problems, 0)
       ) order by d.day) from days d left join daily x on x.day = d.day), '[]'::jsonb),
     'sellers', coalesce((select jsonb_agg(to_jsonb(s)) from sellers s), '[]'::jsonb),
     'products', coalesce((select jsonb_agg(to_jsonb(p)) from products p), '[]'::jsonb),
@@ -132,10 +139,10 @@ $$;
 
 -- Solo el backend (service role) puede llamarlas.
 revoke all on function public.status_group(text) from public, anon, authenticated;
-revoke all on function public.dashboard_summary(uuid, timestamptz, timestamptz, text) from public, anon, authenticated;
+revoke all on function public.dashboard_summary(uuid, timestamptz, timestamptz, text, text) from public, anon, authenticated;
 revoke all on function public.money_by_month(uuid, int, text) from public, anon, authenticated;
 revoke all on function public.order_facets(uuid) from public, anon, authenticated;
 grant execute on function public.status_group(text) to service_role;
-grant execute on function public.dashboard_summary(uuid, timestamptz, timestamptz, text) to service_role;
+grant execute on function public.dashboard_summary(uuid, timestamptz, timestamptz, text, text) to service_role;
 grant execute on function public.money_by_month(uuid, int, text) to service_role;
 grant execute on function public.order_facets(uuid) to service_role;
