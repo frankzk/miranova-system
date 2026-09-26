@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AutoSelect, Drawer, DrawerClose, GetForm, RowLink } from "@/components/client";
+import { Drawer, DrawerClose, GetForm, RowLink } from "@/components/client";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
+import { FilterSelect } from "@/components/filter-select";
 import { IconChevronLeft, IconChevronRight, IconClose, IconDownload, IconExternal, IconFilter, IconSearch } from "@/components/icons";
 import { OrderDetailView } from "@/components/order-detail";
 import { AccountChips } from "@/components/account-chips";
@@ -232,19 +233,5 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </Drawer>
       )}
     </div>
-  );
-}
-
-function FilterSelect({ name, label, value, all, options }: { name: string; label: string; value?: string; all: string; options: FilterOption[] }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <AutoSelect name={name} defaultValue={value ?? ""}>
-        <option value="">{all}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}{o.count !== undefined ? ` (${o.count.toLocaleString("en-US")})` : ""}</option>
-        ))}
-      </AutoSelect>
-    </label>
   );
 }
