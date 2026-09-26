@@ -1,0 +1,59 @@
+/* Productos · Matriz tienda × producto (clases con prefijo mx-) */
+
+.mx-ideas { margin-bottom: 20px; overflow: hidden; }
+.mx-ideas .panel-head h2 { white-space: normal; }
+.mx-empty { margin: 0; padding: 12px 18px 18px; font-size: var(--t-sm); color: var(--ink-3); max-width: 70ch; }
+.mx-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mx-idea { padding: 11px 18px 12px; border-top: 1px solid var(--line); min-width: 0; }
+.mx-list .mx-idea:nth-child(even) { border-left: 1px solid var(--line); }
+.mx-idea > a { display: block; color: var(--ink); font-weight: 550; overflow-wrap: anywhere; }
+.mx-idea > a:hover { color: var(--accent-ink); }
+.mx-idea .detail { margin: 3px 0 0; font-size: var(--t-sm); color: var(--ink-2); overflow-wrap: anywhere; }
+.mx-idea .action { margin: 2px 0 0; font-size: var(--t-xs); color: var(--accent-ink); overflow-wrap: anywhere; }
+.mx-idea[data-kind="single_product"] { box-shadow: inset 3px 0 0 var(--warning-dot); }
+.mx-more { margin: 0; padding: 8px 18px 10px; font-size: var(--t-xs); color: var(--ink-3); border-top: 1px solid var(--line); }
+
+.mx-section { margin-bottom: 20px; }
+.mx-section .band-label { margin-top: 4px; }
+
+/* scroll horizontal solo dentro de la matriz; la primera columna queda fija */
+.mx-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.mx-scroll:focus-visible { outline-offset: -2px; }
+.mx-table { width: auto; min-width: 100%; }
+.mx-table th, .mx-table td { padding: 8px 10px; }
+.mx-table td { vertical-align: middle; }
+.mx-table .mx-store {
+  position: sticky; left: 0; z-index: 1;
+  min-width: 170px; max-width: 220px; text-align: left; font-weight: 400;
+  background: var(--bg-surface); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.mx-table thead .mx-store { z-index: 2; font-weight: 550; }
+.mx-table tbody tr:hover .mx-store { background: var(--bg-subtle); }
+.mx-table tbody tr:last-child .mx-store { border-bottom: 0; }
+.mx-table tbody .mx-store a { display: block; color: var(--ink); font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-table tbody .mx-store a:hover { color: var(--accent-ink); }
+.mx-table .mx-store .sub { display: block; font-size: var(--t-xs); color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.mx-prod { min-width: 84px; max-width: 110px; vertical-align: bottom; text-align: right; }
+.mx-pname {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.3; text-align: left; font-weight: 550; color: var(--ink-2);
+}
+.mx-ptotal { display: block; margin-top: 3px; font-weight: 400; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+
+.mx-cell { text-align: right; background: color-mix(in srgb, var(--accent) calc(var(--mx-a, 0) * 100%), transparent); }
+.mx-cell[data-zero] { color: var(--ink-4); background: none; }
+.mx-cell[data-top] { font-weight: 650; }
+.mx-cell[data-dom] { background: var(--accent-bg); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+
+@media (max-width: 900px) {
+  .mx-list { grid-template-columns: minmax(0, 1fr); }
+  .mx-list .mx-idea:nth-child(even) { border-left: 0; }
+}
+@media (max-width: 640px) {
+  .page-head .segmented { width: auto; }
+  .mx-idea, .mx-empty, .mx-more { padding-left: 16px; padding-right: 16px; }
+  .mx-ideas .panel-head { padding: 14px 16px 0; }
+  .mx-table .mx-store { min-width: 128px; max-width: 140px; }
+  .mx-prod { min-width: 76px; }
+}
