@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountChips } from "@/components/account-chips";
 import { IconBox, IconDownload, IconSearch } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
@@ -75,6 +76,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <span>{syncError.name}: {syncError.products_sync_msg}</span>
         </div>
       )}
+
+      <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 
       <nav className="tabs" aria-label="Filtrar productos">
         {FILTERS.map((x) => (
