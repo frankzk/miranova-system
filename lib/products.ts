@@ -11,6 +11,8 @@ export type NormalizedProduct = {
   suggested_price: number | null;
   stock: number | null;
   image_url: string | null;
+  variants_count: number;
+  currency: string | null;
   created_at_platform: string | null;
   raw: unknown;
 };
@@ -69,8 +71,9 @@ const F = {
   status: ["status", "state", "estado"],
   price: ["vendorPrice", "price", "basePrice", "cost", "costPrice", "precio", "prices.vendor", "pricing.vendorPrice"],
   suggested: ["suggestedPrice", "sellerPrice", "recommendedPrice", "salePrice", "pricing.suggestedPrice", "prices.suggested"],
-  stock: ["totalStock", "stock", "inventory", "totalInventory", "availableStock", "quantity", "inventory.total", "stock.total"],
-  image: ["image", "imageUrl", "mainImage", "thumbnail", "productImage", "images.0", "images.0.url", "media.0.url", "photos.0"],
+  // Drop: totalAvailable = suma de variantes; quantity = stock del producto simple
+  stock: ["totalAvailable", "totalStock", "stock", "inventory", "totalInventory", "availableStock", "quantity", "inventory.total", "stock.total"],
+  image: ["images.0.url", "images.0", "image", "imageUrl", "mainImage", "thumbnail", "productImage", "imgUrl", "media.0.url", "photos.0"],
   created: ["createdAt", "created_at", "creationDate", "fechaCreacion"],
 };
 
@@ -99,22 +102,55 @@ function statusOf(raw: Obj): string | null {
   return map[t.toLowerCase()] ?? t;
 }
 
+/** Variantes activas (tallas, colores...) cuando la plataforma las anida. */
+function variantsOf(raw: Obj): Obj[] {
+  const v = get(raw, "variants");
+  return Array.isArray(v) ? v.filter(isObj).filter((x) => x.deleted !== true) : [];
+}
+
+/** Drop usa una imagen genérica cuando el producto no tiene foto. */
+const realImage = (url: string | null) => (url && !/\/avatar\.png(\?|$)/i.test(url) ? url : null);
+
 export function normalizeProduct(raw: unknown): NormalizedProduct | null {
   if (!isObj(raw)) return null;
   const id = str(pick(raw, F.id));
   const name = str(pick(raw, F.name));
   if (!id || !name) return null;
   const created = str(pick(raw, F.created));
+  const variants = variantsOf(raw);
+  const positive = (xs: (number | null)[]) => xs.filter((x): x is number => x !== null && x > 0);
+
+  // con variantes, el producto padre viene con precio/stock en 0: se toman de las variantes
+  let price = num(pick(raw, F.price));
+  let suggested = num(pick(raw, F.suggested));
+  if (variants.length && !price) {
+    const ps = positive(variants.map((v) => num(pick(v, F.price))));
+    price = ps.length ? Math.min(...ps) : price;
+    const ss = positive(variants.map((v) => num(pick(v, F.suggested))));
+    suggested = ss.length ? Math.min(...ss) : suggested;
+  }
+  let stock = stockOf(raw);
+  if (variants.length && !stock) {
+    stock = variants.reduce((t, v) => t + (num(pick(v, ["quantity", "stock", "available"])) ?? 0), 0);
+  }
+  const image =
+    realImage(str(pick(raw, F.image))) ??
+    realImage(str(pick(raw, ["imgUrl"]))) ??
+    variants.map((v) => realImage(str(pick(v, ["image", "imageUrl", "images.0.url"])))).find(Boolean) ??
+    null;
+
   return {
     external_id: id,
-    code: str(pick(raw, F.code)),
+    code: str(pick(raw, F.code)) ?? str(pick(variants[0], F.code)),
     name,
     sku: str(pick(raw, F.sku)),
     status: statusOf(raw),
-    price: num(pick(raw, F.price)),
-    suggested_price: num(pick(raw, F.suggested)),
-    stock: stockOf(raw),
-    image_url: str(pick(raw, F.image)),
+    price,
+    suggested_price: suggested,
+    stock,
+    image_url: image,
+    variants_count: variants.length,
+    currency: str(pick(raw, ["currencyName", "currency", "currencyCode"])),
     created_at_platform: created && !Number.isNaN(Date.parse(created)) ? new Date(created).toISOString() : null,
     raw,
   };

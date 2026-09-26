@@ -108,7 +108,7 @@ const CATALOG: Row[] = [
 ].map(([name, sku, price, stock, status], i) => ({
   id: `99999999-0000-4000-8000-${String(i).padStart(12, "0")}`, account_id: ACCOUNTS[0].id, external_id: `p${i}`,
   code: `ID-${["Z1GIC", "96CMB", "76BX6", "JYKG0", "DG241", "43149", "EINVS", "N261K"][i]}`, name, sku, status, price,
-  suggested_price: null, stock, image_url: null, currency: "HNL",
+  suggested_price: null, stock, image_url: null, variants_count: 0, currency: "HNL",
   created_at_platform: new Date(Date.now() - (i * 5 + 2) * DAY).toISOString(), updated_at: new Date().toISOString(), raw: {},
 }));
 
@@ -253,7 +253,7 @@ export function fixtureClient(): any {
       if (name === "product_sales") {
         const out: Row = {};
         for (const o of ORDERS) for (const it of o.order_items) {
-          const k = it.product_name;
+          const k = `${o.account_id}:${it.sku ?? it.product_name}`;
           out[k] = { units: (out[k]?.units ?? 0) + it.quantity, orders: (out[k]?.orders ?? 0) + 1 };
         }
         return { data: out, error: null };
