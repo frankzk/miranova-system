@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
+import { ContactQuick, type QuickContact } from "@/components/contact-quick";
 import { IconChevronRight } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { contactIndex, contactKey } from "@/lib/contacts";
 import {
   change, concentration, deliveryRate, otherCountries, parsePeriod, PERIODS, PRODUCT_READ, readProducts, STORE_FLOW,
   type StoreItem,
@@ -10,6 +12,7 @@ import {
 import { fmtInt, fmtMoney } from "@/lib/format";
 import { businessOverview } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { storeHref } from "@/lib/store-links";
 
 export const metadata = { title: "Negocio" };
 
@@ -46,7 +49,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
   const knownCountries = [...new Set(accounts.map((a) => a.country))];
   const country = countryParam && knownCountries.includes(countryParam) ? countryParam : undefined;
 
-  const data = await businessOverview({ account: scope.account, days, country });
+  const [data, contacts] = await Promise.all([businessOverview({ account: scope.account, days, country }), contactIndex()]);
 
   const href = (patch: { d?: number; c?: string | null }) => {
     const p = new URLSearchParams();
@@ -201,7 +204,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
           {data.stores.losing.length === 0 ? (
             <p className="panel-body muted">Ninguna tienda perdida ni en caída fuerte en este período.</p>
           ) : (
-            <StoreList rows={data.stores.losing} total={0} showCountry={multiCountry} showPrev />
+            <StoreList rows={data.stores.losing} total={0} showCountry={multiCountry} showPrev contacts={contacts} />
           )}
         </section>
       </div>
@@ -319,17 +322,25 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
   );
 }
 
-function StoreList({ rows, total, showCountry, showPrev }: { rows: StoreItem[]; total: number; showCountry: boolean; showPrev?: boolean }) {
+function StoreList({
+  rows, total, showCountry, showPrev, contacts,
+}: { rows: StoreItem[]; total: number; showCountry: boolean; showPrev?: boolean; contacts?: Map<string, NonNullable<QuickContact>> }) {
   return (
     <ul className="rank panel-flush">
       {rows.map((s) => {
         const flow = STORE_FLOW[s.flow];
+        // con ID (migración 0020) se abre su ficha; sin él, sus pedidos
+        const href = s.account_id && s.store_id ? storeHref(s.account_id, s.store_id) : `/orders?dropshipper=${encodeURIComponent(s.name)}`;
+        const withContact = !!contacts && !!s.account_id && !!s.store_id;
         return (
           <li key={`${s.account}-${s.name}`}>
-            <Link className="name link" href={`/orders?dropshipper=${encodeURIComponent(s.name)}`} style={{ color: "inherit", fontWeight: 500 }}>
+            <Link className="name link" href={href} style={{ color: "inherit", fontWeight: 500 }}>
               {s.name}{showCountry && <span className="muted"> · {s.country}</span>}
             </Link>
-            <span className="n"><span className="pill" data-tone={flow.tone}>{flow.label}</span></span>
+            <span className={withContact ? "n with-qc" : "n"}>
+              <span className="pill" data-tone={flow.tone}>{flow.label}</span>
+              {withContact && <ContactQuick c={contacts.get(contactKey({ account_id: s.account_id!, store_id: s.store_id! }))} storeHref={href} name={s.name} />}
+            </span>
             {total > 0 && <Share value={s.cur / total} />}
             <span className="meta">
               {showPrev

@@ -18,7 +18,17 @@ export type CountryRow = {
 };
 
 export type StoreFlow = "new" | "lost" | "recovered" | "falling" | "growing" | "steady";
-export type StoreItem = { account: string; country: string; name: string; cur: number; prev: number; flow: StoreFlow };
+export type StoreItem = {
+  /** Cuenta e ID de la tienda (migración 0020); enlazan a su ficha y a su contacto. */
+  account_id?: string;
+  store_id?: string;
+  account: string;
+  country: string;
+  name: string;
+  cur: number;
+  prev: number;
+  flow: StoreFlow;
+};
 
 export type ProductRow = {
   account: string;

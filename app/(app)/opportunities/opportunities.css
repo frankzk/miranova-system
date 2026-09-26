@@ -28,7 +28,12 @@
 .opp .go { color: var(--ink-4); margin-top: 3px; }
 .opp > a:hover .go { color: var(--ink-2); }
 
+.opp.has-qc { position: relative; }
+.opp.has-qc > .qc-slot { position: absolute; right: 14px; bottom: 12px; }
+
 @media (max-width: 640px) {
+  .opp.has-qc > a { padding-bottom: 52px; }
+  .opp.has-qc > .qc-slot { right: 12px; }
   .opp > a, .opp > div { grid-template-columns: 4px minmax(0, 1fr); padding-right: 12px; }
   .opp .side { grid-column: 2; grid-row: 1; justify-self: end; }
   .opp .main { grid-column: 2; grid-row: 1 / span 2; }

@@ -12,7 +12,9 @@ function businessOverview(args: Row, { ACCOUNTS, CATALOG }: FixtureCtx) {
     cancelled: i === 0 ? 18 : 5, delivered: i === 0 ? 240 : 70, failed: i === 0 ? 52 : 9,
     net_usd: i === 0 ? 5120.4 : 980.1, prev_net_usd: i === 0 ? 4210.9 : 1302.5, stores: i === 0 ? 6 : 3,
   }));
-  const store = (name: string, country: string, cur: number, prev: number, flow: string) => ({ account: accountOf(country), country, name, cur, prev, flow });
+  const store = (name: string, country: string, cur: number, prev: number, flow: string) => ({
+    account_id: country === "HN" ? hn.id : gt.id, store_id: `name:${name}`, account: accountOf(country), country, name, cur, prev, flow,
+  });
   const top = [
     store("Tienda Norte", "HN", 160, 120, "growing"), store("Casa Bella", "HN", 120, 110, "steady"), store("Mercado Fácil", "HN", 60, 20, "growing"),
     store("Vital Market", "GT", 58, 96, "falling"), store("Ofertas Ya", "HN", 40, 0, "new"), store("Todo Hogar", "HN", 32, 30, "steady"),
