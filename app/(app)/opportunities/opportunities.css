@@ -1,0 +1,33 @@
+/* Oportunidades: lista de acciones del día */
+.opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.opp > a, .opp > div {
+  display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 0 14px; align-items: stretch;
+  padding: 12px 14px 12px 0; border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--bg-surface); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.opp > a { transition: border-color 120ms, box-shadow 120ms; }
+.opp > a:hover { border-color: var(--line-strong); }
+.opp .bar { border-radius: 0 3px 3px 0; background: var(--neutral-dot); }
+.opp .bar[data-tone="danger"] { background: var(--danger-dot); }
+.opp .bar[data-tone="warning"] { background: var(--warning-dot); }
+.opp .bar[data-tone="success"] { background: var(--success-dot); }
+.opp .bar[data-tone="info"] { background: var(--info-dot); }
+.opp .bar[data-tone="accent"] { background: var(--accent); }
+.opp .main { display: grid; gap: 3px; min-width: 0; }
+.opp .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.opp .name { font-weight: 650; color: var(--ink); }
+.opp .acct { font-size: var(--t-xs); color: var(--ink-3); }
+.opp .what { font-size: var(--t-md); color: var(--ink); }
+.opp .do { font-size: var(--t-sm); color: var(--ink-2); }
+.opp .do b { font-weight: 600; color: var(--ink); }
+.opp .meta { font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.opp .side { display: flex; align-items: flex-start; gap: 8px; }
+.opp .go { color: var(--ink-4); margin-top: 3px; }
+.opp > a:hover .go { color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  .opp > a, .opp > div { grid-template-columns: 4px minmax(0, 1fr); padding-right: 12px; }
+  .opp .side { grid-column: 2; grid-row: 1; justify-self: end; }
+  .opp .main { grid-column: 2; grid-row: 1 / span 2; }
+  .opp .who { padding-right: 96px; }
+}
