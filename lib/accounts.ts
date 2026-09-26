@@ -16,6 +16,7 @@ export type Account = {
   orders_path: string | null;
   geo: { map: Record<string, string>; at: string } | null;
   backfill_cursor: string | null;
+  open_refresh_at: string | null;
   products_path: string | null;
   products_sync_at: string | null;
   products_sync_msg: string | null;
