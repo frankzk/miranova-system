@@ -4,6 +4,7 @@ import { GetForm } from "@/components/client";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { FilterSelect } from "@/components/filter-select";
 import { IconBox, IconClose, IconDownload, IconFilter, IconSearch } from "@/components/icons";
+import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtAgo, fmtInt, fmtMoney } from "@/lib/format";
@@ -86,6 +87,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <span>{syncError.name}: {syncError.products_sync_msg}</span>
         </div>
       )}
+
+      <ProductsSubnav />
 
       <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 

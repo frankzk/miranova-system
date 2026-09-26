@@ -265,7 +265,8 @@ code, .mono { font-family: var(--mono); font-size: 0.92em; }
   transition: background 120ms, color 120ms;
 }
 .segmented a:hover { color: var(--ink); }
-.segmented a[aria-current="true"] { background: var(--bg-surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.segmented a[aria-current="true"], .segmented a[aria-current="page"] { background: var(--bg-surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.subnav { margin-bottom: 16px; max-width: 100%; overflow-x: auto; }
 
 /* ─── Estados ────────────────────────────────────────────────────────── */
 
