@@ -40,11 +40,13 @@ export function AppFrame({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const scopeRef = useRef<HTMLDetailsElement>(null);
+  const topScopeRef = useRef<HTMLDetailsElement>(null);
 
-  // cerrar menú y selector al navegar
+  // cerrar menú y selectores al navegar
   useEffect(() => {
     setOpen(false);
     scopeRef.current?.removeAttribute("open");
+    topScopeRef.current?.removeAttribute("open");
   }, [pathname]);
 
   useEffect(() => {
@@ -57,6 +59,20 @@ export function AppFrame({
   // al cambiar de cuenta se vuelve a la misma sección, sin la orden abierta
   const next = pathname;
   const scopeHref = (id: string) => `/api/scope?${new URLSearchParams({ account: id, next })}`;
+  const menu = (
+    <div className="scope-menu" role="menu">
+      <a href={scopeHref("")} role="menuitem" aria-current={!scopeId}>
+        Todas las cuentas
+      </a>
+      <div className="sep" />
+      {accounts.map((a) => (
+        <a key={a.id} href={scopeHref(a.id)} role="menuitem" aria-current={scopeId === a.id}>
+          <span>{a.name}</span>
+          <span className="dot" data-tone={a.tone} aria-hidden />
+        </a>
+      ))}
+    </div>
+  );
 
   return (
     <div className="app" data-nav={open ? "open" : "closed"}>
@@ -66,7 +82,17 @@ export function AppFrame({
         </button>
         <Brand />
         <span className="grow" />
-        <span className="tag">{scopeLabel}</span>
+        {accounts.length > 1 ? (
+          <details className="scope scope-top" ref={topScopeRef}>
+            <summary aria-label={`Cuenta activa: ${scopeLabel}. Cambiar`}>
+              <span className="grow">{scopeLabel}</span>
+              <IconChevronDown />
+            </summary>
+            {menu}
+          </details>
+        ) : (
+          <span className="tag">{scopeLabel}</span>
+        )}
       </header>
 
       {open && <button className="nav-scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} />}
@@ -80,18 +106,7 @@ export function AppFrame({
               <span className="grow">{scopeLabel}</span>
               <IconChevronDown />
             </summary>
-            <div className="scope-menu" role="menu">
-              <a href={scopeHref("")} role="menuitem" aria-current={!scopeId}>
-                Todas las cuentas
-              </a>
-              <div className="sep" />
-              {accounts.map((a) => (
-                <a key={a.id} href={scopeHref(a.id)} role="menuitem" aria-current={scopeId === a.id}>
-                  <span>{a.name}</span>
-                  <span className="dot" data-tone={a.tone} aria-hidden />
-                </a>
-              ))}
-            </div>
+            {menu}
           </details>
         )}
 

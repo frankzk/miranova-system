@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AutoSelect, Drawer, DrawerClose, RowLink } from "@/components/client";
 import { IconChevronLeft, IconChevronRight, IconDownload, IconExternal, IconSearch } from "@/components/icons";
 import { OrderDetailView } from "@/components/order-detail";
+import { AccountChips } from "@/components/account-chips";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
@@ -59,6 +60,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </a>
         }
       />
+
+      <AccountChips accounts={accounts} current={scope.account} next={url({ page: undefined })} />
 
       <nav className="tabs" aria-label="Filtrar por estado">
         <Link href={url({ group: undefined, page: undefined })} aria-current={!activeGroup}>
