@@ -16,6 +16,8 @@ export type NormalizedItem = {
   /** Lo que recibe el proveedor por esta línea (si la plataforma lo informa). */
   vendor_price?: number | null;
   image_url: string | null;
+  /** ID del producto en la plataforma (estable aunque cambie el nombre o el SKU). */
+  product_external_id?: string | null;
 };
 
 export type NormalizedOrder = {

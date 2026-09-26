@@ -78,6 +78,7 @@ export function normalizeSoydropOrder(
     price: n(p.sellerPrice),
     vendor_price: n(p.vendorPrice),
     image_url: s(p.productImage),
+    product_external_id: s(p.productId),
   }));
 
   return {

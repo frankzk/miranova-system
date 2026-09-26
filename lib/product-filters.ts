@@ -59,7 +59,9 @@ export function inTab(p: Product, tab: string) {
   return true;
 }
 
-export const soldOf = (p: Product, sales: Sales) => sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
+/** Ventas del producto: primero por su ID (no cambia si se renombra), luego por SKU o nombre. */
+export const soldOf = (p: Product, sales: Sales) =>
+  sales[`${p.account_id}:id:${p.external_id}`] ?? sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
 
 /** Búsqueda + estado exacto + variantes (sin la pestaña): base de los conteos de las pestañas. */
 export function refine(all: Product[], f: ProductFilters): Product[] {
