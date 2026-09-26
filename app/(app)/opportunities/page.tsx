@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
+import { ContactQuick, type QuickContact } from "@/components/contact-quick";
 import { IconChevronRight } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { contactIndex, contactKey } from "@/lib/contacts";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { pendingFollowups, type Followup } from "@/lib/followups";
 import { crossSell } from "@/lib/cross-sell";
@@ -31,12 +33,13 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [stores, followups, products, matrix, inventory] = await Promise.all([
+  const [stores, followups, products, matrix, inventory, contacts] = await Promise.all([
     storeHealth(scope.account),
     pendingFollowups(scope.account),
     productPerformance(scope.account),
     storeProductMatrix(scope.account, 30),
     inventoryStatus(scope.account),
+    contactIndex(),
   ]);
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
   const today = todayIn(scope.tz);
@@ -101,7 +104,14 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       ) : (
         <ol className="opp-list">
           {items.map((i) => (
-            <Opp key={i.id} i={i} showAccount={showAccount} follow={open.get(`${i.subject.account_id}:${i.subject.store_id}`)} today={today} />
+            <Opp
+              key={i.id}
+              i={i}
+              showAccount={showAccount}
+              follow={open.get(`${i.subject.account_id}:${i.subject.store_id}`)}
+              contact={i.subject.store_id ? contacts.get(contactKey({ account_id: i.subject.account_id, store_id: i.subject.store_id })) : undefined}
+              today={today}
+            />
           ))}
         </ol>
       )}
@@ -115,7 +125,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   );
 }
 
-function Opp({ i, showAccount, follow, today }: { i: OppItem; showAccount: boolean; follow?: Followup; today: string }) {
+function Opp({ i, showAccount, follow, contact, today }: { i: OppItem; showAccount: boolean; follow?: Followup; contact?: QuickContact; today: string }) {
   const p = PRIORITY[i.priority];
   const href = i.subject.type === "store" && i.subject.store_id
     ? storeHref(i.subject.account_id, i.subject.store_id)
@@ -150,7 +160,14 @@ function Opp({ i, showAccount, follow, today }: { i: OppItem; showAccount: boole
       </span>
     </>
   );
-  return <li className="opp">{href ? <Link href={href}>{body}</Link> : <div>{body}</div>}</li>;
+  // tiendas: acceso directo a su grupo de WhatsApp (fuera del enlace de la tarjeta)
+  const isStore = i.subject.type === "store" && !!i.subject.store_id && !!href;
+  return (
+    <li className={isStore ? "opp has-qc" : "opp"}>
+      {href ? <Link href={href}>{body}</Link> : <div>{body}</div>}
+      {isStore && <ContactQuick c={contact} storeHref={href} name={i.subject.name} />}
+    </li>
+  );
 }
 
 /** Seguimientos abiertos: primero los vencidos o de hoy, luego los próximos. */

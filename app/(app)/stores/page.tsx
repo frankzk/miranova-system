@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
+import { ContactQuick } from "@/components/contact-quick";
 import { IconChat } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
@@ -104,7 +105,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             {contact.map((s) => {
               const ops = opportunities(s, typical[s.account_id], money(s));
               return (
-                <li key={`${s.account_id}:${s.store_id}`}>
+                <li key={`${s.account_id}:${s.store_id}`} className="row-qc">
                   <Link href={ordersHref(s)}>
                     <span className="t">{s.name}</span>
                     <HealthPill h={health.get(s)!} />
@@ -114,6 +115,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="s reason">{ops[0] ? `${ops[0].text} → ${ops[0].action}` : ""}</span>
                   </Link>
+                  <ContactQuick c={contacts.get(contactKey(s))} storeHref={ordersHref(s)} name={s.name} />
                 </li>
               );
             })}
