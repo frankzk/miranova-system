@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconAccounts, IconBox, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders } from "./icons";
+import { IconAccounts, IconBox, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore } from "./icons";
 
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
 
 const NAV = [
   { href: "/", label: "Inicio", icon: IconHome, match: (p: string) => p === "/" },
   { href: "/orders", label: "Órdenes", icon: IconOrders, match: (p: string) => p.startsWith("/orders") },
+  { href: "/stores", label: "Tiendas", icon: IconStore, match: (p: string) => p.startsWith("/stores") },
   { href: "/products", label: "Productos", icon: IconBox, match: (p: string) => p.startsWith("/products") },
   { href: "/money", label: "Dinero", icon: IconMoney, match: (p: string) => p.startsWith("/money") },
   { href: "/settings", label: "Cuentas", icon: IconAccounts, match: (p: string) => p.startsWith("/settings") },

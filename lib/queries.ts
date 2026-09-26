@@ -344,3 +344,10 @@ export async function productSales(account: string | undefined, days: number): P
   if (error) throw error;
   return (data ?? {}) as Record<string, { units: number; orders: number }>;
 }
+
+/** Salud de tiendas: métricas por dropshipper (ver supabase/migrations/0008_store_health.sql). */
+export async function storeHealth(account?: string): Promise<import("./stores").StoreRow[]> {
+  const { data, error } = await db().rpc("store_health", { p_account: account ?? null });
+  if (error) throw error;
+  return (data ?? []) as import("./stores").StoreRow[];
+}
