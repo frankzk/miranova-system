@@ -3,13 +3,16 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { IconArrowRight, IconChevronRight } from "@/components/icons";
 import { StoreChart } from "@/components/store-chart";
+import { QuickLinks, StoreContact } from "@/components/store-contact";
 import { StoreFollowups } from "@/components/store-followups";
 import { PageHead } from "@/components/ui";
+import { storeContactView } from "@/lib/contacts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { storeDetail } from "@/lib/store-detail";
 import { fmtDay, pctChange, vsAverage, type StoreDetail } from "@/lib/store-metrics";
 import { classify, HEALTH, opportunities, type StoreRow } from "@/lib/stores";
 import { addFollowup, updateFollowup } from "./actions";
+import { linkStore, saveContact, unlinkStore } from "./contact-actions";
 import "./store-detail.css";
 
 type Params = Promise<{ account: string; store: string }>;
@@ -31,6 +34,13 @@ const load = cache(async (account: string, store: string) => {
   return storeDetail(accountId, storeId);
 });
 
+const loadContact = cache(async (account: string, store: string) => {
+  const accountId = decode(account);
+  const storeId = decode(store);
+  if (!UUID.test(accountId) || !storeId) return null;
+  return storeContactView(accountId, storeId);
+});
+
 export async function generateMetadata({ params }: { params: Params }) {
   const { account, store } = await params;
   const d = await load(account, store);
@@ -39,8 +49,8 @@ export async function generateMetadata({ params }: { params: Params }) {
 
 export default async function StorePage({ params }: { params: Params }) {
   const { account, store } = await params;
-  const d = await load(account, store);
-  if (!d) notFound();
+  const [d, contact] = await Promise.all([load(account, store), loadContact(account, store)]);
+  if (!d || !contact) notFound();
 
   const { store: s, kpis: k, benchmark: b } = d;
   const money = (n: number | null | undefined) => fmtMoney(n, s.currency);
@@ -65,7 +75,12 @@ export default async function StorePage({ params }: { params: Params }) {
             {k.first_at && <> · primera venta registrada {fmtDay(k.first_at.slice(0, 10), s.today)}</>}
           </>
         }
-        actions={<Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>}
+        actions={
+          <div className="sd-actions">
+            <QuickLinks group={contact.contact?.whatsapp_group_url ?? null} phone={contact.contact?.owner_phone ?? null} compact />
+            <Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>
+          </div>
+        }
       />
 
       {ops.length > 0 && (
@@ -140,6 +155,12 @@ export default async function StorePage({ params }: { params: Params }) {
         </section>
 
         <div className="sd-side">
+          <StoreContact
+            view={contact}
+            store={{ accountId: s.account_id, storeId: s.store_id, storeName: s.name }}
+            actions={{ save: saveContact, link: linkStore, unlink: unlinkStore }}
+          />
+
           <section className="panel" aria-labelledby="sd-activity">
             <div className="panel-head"><h2 id="sd-activity">Actividad</h2></div>
             <dl className="sd-kv panel-body">
