@@ -584,6 +584,50 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
 .only-sm { display: none; }
 .band-label { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); }
 .band-label span { font-weight: 400; color: var(--ink-3); }
+/* Inicio: tiendas activas */
+.active-stores { margin-bottom: 20px; }
+.as-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px 32px; }
+.as-funnel { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.as-funnel li { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; gap: 3px 10px; align-items: baseline; }
+.as-funnel .l { font-size: var(--t-sm); color: var(--ink-2); }
+.as-funnel .n { font-weight: 650; font-size: 18px; font-variant-numeric: tabular-nums; }
+.as-funnel .p { font-size: var(--t-xs); color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; }
+.as-funnel .bar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--bg-app); overflow: hidden; }
+.as-funnel .bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.as-funnel li:first-child .bar i { background: #cdcaff; }
+.as-kpis { display: grid; gap: 10px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.as-kpis div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.as-kpis dt { font-size: var(--t-sm); color: var(--ink-3); }
+.as-kpis dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.as-kpis small { font-weight: 400; color: var(--ink-3); font-size: var(--t-xs); }
+.as-kpis .delta { font-size: var(--t-xs); }
+.as-changes { display: grid; gap: 8px; align-content: start; }
+.as-change { border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-surface); }
+.as-change .sum { display: flex; align-items: center; gap: 8px; padding: 10px 12px; list-style: none; }
+.as-change summary { cursor: pointer; }
+.as-change summary::-webkit-details-marker { display: none; }
+.as-change summary:hover { background: var(--bg-hover); }
+.as-change .t { flex: 1; font-size: var(--t-sm); font-weight: 550; }
+.as-change .n { font-weight: 650; font-size: 16px; font-variant-numeric: tabular-nums; }
+.as-change summary .n::after { content: "›"; margin-left: 8px; color: var(--ink-3); display: inline-block; transition: transform 160ms var(--ease-out); }
+.as-change[open] summary .n::after { transform: rotate(90deg); }
+.as-change ul { list-style: none; margin: 0; padding: 4px 12px 10px; display: grid; gap: 6px; border-top: 1px solid var(--line); }
+.as-change li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; font-size: var(--t-sm); padding-top: 4px; }
+.as-change li a { font-weight: 550; color: var(--ink); }
+.as-change li a:hover { color: var(--accent-ink); }
+.as-change li .muted { font-size: var(--t-xs); }
+.as-weeks { margin: 6px 0 0; }
+.as-weeks figcaption { font-size: var(--t-sm); font-weight: 550; margin-bottom: 8px; }
+.as-weeks .cols { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 64px; align-items: end; }
+.as-weeks .col { height: 100%; display: flex; align-items: end; }
+.as-weeks .all { display: flex; align-items: end; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: #cdcaff; overflow: hidden; }
+.as-weeks .new { display: block; width: 100%; background: var(--accent); }
+.as-weeks .ends { display: flex; justify-content: space-between; font-size: var(--t-xs); margin-top: 4px; }
+@media (max-width: 900px) {
+  .as-grid { grid-template-columns: minmax(0, 1fr); }
+  .as-kpis div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+
 /* Salud de tiendas */
 .contact-today { margin-bottom: 18px; }
 .contact-today .reason { grid-column: 1 / -1; color: var(--danger); white-space: normal; }
@@ -609,6 +653,8 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
 .ops li::before { content: ""; position: absolute; left: 0; top: 0.5em; width: 6px; height: 6px; border-radius: 50%; background: var(--warning-dot); }
 .ops li[data-kind="silent"]::before, .ops li[data-kind="volume"]::before { background: var(--danger-dot); }
 .ops li[data-kind="ticket"]::before, .ops li[data-kind="units"]::before { background: var(--accent); }
+.ops li[data-kind="growth"]::before { background: var(--success-dot); }
+.ops li[data-kind="single"]::before, .ops li[data-kind="winner"]::before { background: var(--info-dot); }
 .ops li span { font-weight: 400; color: var(--ink-3); }
 .store-cards { list-style: none; margin: 0; padding: 0; }
 .store-cards li { padding: 14px 16px; border-top: 1px solid var(--line); }

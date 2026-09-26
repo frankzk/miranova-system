@@ -5,7 +5,8 @@ import { classify, opportunities, sortStores, toContact, typicalTickets, type St
 const row = (p: Partial<StoreRow>): StoreRow => ({
   account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
   active7: 0, active_prev7: 0, last_at: null, days_since: 0, n30: 0, ticket: null, vendor_per_order: null,
-  units_per_order: null, delivered30: 0, failed30: 0, daily: [], ...p,
+  units_per_order: null, delivered30: 0, failed30: 0, sales30: null, skus30: 0, top_product: null, top_share: null,
+  daily: [], ...p,
 });
 
 test("semáforo según el ritmo de 7 días vs. los 7 anteriores", () => {
@@ -48,4 +49,14 @@ test("ordenar por mayor caída pesa los pedidos perdidos, y contactar hoy toma l
   const c = row({ name: "C", d7: 50, prev7: 40, active_prev7: 7, active7: 7 }); // crece
   assert.deepEqual(sortStores([b, c, a], "drop").map((s) => s.name), ["A", "B", "C"]);
   assert.deepEqual(toContact([c, b, a]).map((s) => s.name), ["A", "B"]);
+});
+
+test("crecimiento fuerte, producto ganador y tienda de un solo producto", () => {
+  const kinds = (p: Partial<StoreRow>) => opportunities(row(p), null, String).map((o) => o.kind);
+  assert.deepEqual(kinds({ d7: 76, prev7: 50, active7: 7, active_prev7: 7 }), ["growth"]); // +52%
+  assert.deepEqual(kinds({ d7: 8, prev7: 4, active7: 5, active_prev7: 4 }), []); // +100% pero poco volumen
+  assert.deepEqual(kinds({ d7: 49, prev7: 50, n30: 196, skus30: 1, top_product: "Cinturón", top_share: 1 }), ["single"]);
+  assert.deepEqual(kinds({ d7: 10, prev7: 10, n30: 40, skus30: 1, top_product: "Cinturón", top_share: 1 }), []); // 1.4/día: aún no
+  assert.deepEqual(kinds({ d7: 460, prev7: 450, n30: 2000, skus30: 11, top_product: "DLG", top_share: 0.93 }), ["winner"]);
+  assert.deepEqual(kinds({ d7: 460, prev7: 450, n30: 2000, skus30: 11, top_product: "DLG", top_share: 0.55 }), []);
 });

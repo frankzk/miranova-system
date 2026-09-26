@@ -34,10 +34,20 @@ function storeHealth(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf }: FixtureCtx) 
       units_per_order: avg(r30.map((o) => (o.order_items ?? []).reduce((t: number, i: any) => t + i.quantity, 0))),
       delivered30: r30.filter((o) => groupOf(o.status_code) === "delivered").length,
       failed30: r30.filter((o) => groupOf(o.status_code) === "failed").length,
+    sales30: +r30.reduce((t, o) => t + o.total, 0).toFixed(2),
+    ...topProduct(r30),
       daily,
     };
   });
   return out.sort((a, b) => b.d7 - a.d7);
+}
+
+/** Productos distintos en 30 días y el que más pedidos trae (como store_health). */
+function topProduct(rows: Row[]) {
+  const n = new Map<string, number>();
+  for (const o of rows) for (const p of new Set<string>((o.order_items ?? []).map((i: any) => i.product_name))) n.set(p, (n.get(p) ?? 0) + 1);
+  const [top, c] = [...n].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  return { skus30: n.size, top_product: top, top_share: rows.length ? +(c / rows.length).toFixed(3) : null };
 }
 
 export const fixtures: FixtureModule = { rpc: { store_health: storeHealth } };

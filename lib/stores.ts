@@ -21,6 +21,12 @@ export type StoreRow = {
   units_per_order: number | null;
   delivered30: number;
   failed30: number;
+  sales30: number | null;
+  /** productos distintos con pedidos en 30 días */
+  skus30: number;
+  /** el producto que más pedidos le trae (30 días) y qué fracción de sus pedidos lo incluye */
+  top_product: string | null;
+  top_share: number | null;
   daily: number[];
 };
 
@@ -51,6 +57,13 @@ export const RULES = {
   lowUnits: 1.15,
   lowDelivery: 0.6,
   minSample: 10,
+  /** crecimiento fuerte: ritmo +50% o más con volumen real */
+  strongGrowth: 0.5,
+  strongGrowthMin: 10,
+  /** producto ganador: un producto trae 70%+ de sus pedidos (y vende más de uno) */
+  winnerShare: 0.7,
+  /** vende un solo producto y mueve al menos esto por día: candidata a un segundo producto */
+  singlePerDay: 3,
 };
 
 /** Variación del ritmo vs. los 7 días anteriores (null si no hay base para comparar). */
@@ -88,28 +101,47 @@ export function typicalTickets(rows: StoreRow[]): Record<string, number | null> 
   return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, median(v)]));
 }
 
-export type Opportunity = { kind: "volume" | "ticket" | "units" | "delivery" | "silent"; text: string; action: string };
+export type OpportunityKind = "silent" | "volume" | "growth" | "single" | "winner" | "ticket" | "units" | "delivery";
+/** priority: 1 = contactar hoy (se frenó o cae), 2 = actuar esta semana, 3 = oportunidad de ticket */
+export type Opportunity = { kind: OpportunityKind; text: string; action: string; priority: 1 | 2 | 3 };
 
 export function opportunities(s: StoreRow, typical: number | null | undefined, fmt: (n: number) => string): Opportunity[] {
   const out: Opportunity[] = [];
   const c = change(s);
   const regular = s.active_prev7 >= RULES.regularDays;
   if (regular && (s.days_since ?? 0) >= RULES.silentDays && s.d7 < s.prev7) {
-    out.push({ kind: "silent", text: `Lleva ${s.days_since} días sin pedidos`, action: "vendía casi a diario: contactar hoy" });
+    out.push({ kind: "silent", text: `Se frenó: lleva ${s.days_since} días sin pedidos`, action: "vendía casi a diario: contactar a la tienda", priority: 1 });
   } else if (c !== null && c <= -0.25 && s.d7 + s.prev7 >= RULES.minVolume) {
-    out.push({ kind: "volume", text: `Pedidos ${Math.round(c * 100)}% vs. semana anterior`, action: "revisar pauta, producto o creativo" });
+    out.push({ kind: "volume", text: `Pedidos ${Math.round(c * 100)}% vs. semana anterior`, action: "revisar pauta, producto o creativo", priority: 1 });
+  } else if (c !== null && c >= RULES.strongGrowth && s.d7 >= RULES.strongGrowthMin) {
+    out.push({ kind: "growth", text: `Crecimiento fuerte: pedidos +${Math.round(c * 100)}%`, action: "contactar para asegurar inventario y ayudar a escalar", priority: 2 });
+  }
+  if (s.skus30 === 1 && s.d7 / 7 >= RULES.singlePerDay) {
+    out.push({
+      kind: "single",
+      text: `Solo vende ${s.top_product ?? "1 producto"} y mueve ${(s.d7 / 7).toFixed(1)} pedidos/día`,
+      action: "ofrecerle un segundo producto",
+      priority: 2,
+    });
+  } else if (s.skus30 > 1 && s.n30 >= RULES.minSample && s.top_share !== null && s.top_share >= RULES.winnerShare) {
+    out.push({
+      kind: "winner",
+      text: `Producto ganador: ${Math.round(s.top_share * 100)}% de sus pedidos son ${s.top_product}`,
+      action: "ofrecer productos complementarios",
+      priority: 2,
+    });
   }
   if (s.n30 >= RULES.minSample) {
     if (typical && s.ticket !== null && s.ticket < typical * RULES.lowTicket) {
-      out.push({ kind: "ticket", text: `Ticket ${fmt(s.ticket)} vs. ${fmt(typical)} típico`, action: "oportunidad de bundle o upsell" });
+      out.push({ kind: "ticket", text: `Ticket ${fmt(s.ticket)} vs. ${fmt(typical)} típico`, action: "oportunidad de bundle o upsell", priority: 3 });
     }
     if (s.units_per_order !== null && s.units_per_order < RULES.lowUnits) {
-      out.push({ kind: "units", text: `${s.units_per_order.toFixed(2)} productos por orden`, action: "probar oferta 2x o 3x" });
+      out.push({ kind: "units", text: `${s.units_per_order.toFixed(2)} productos por orden`, action: "probar oferta 1, 2 y 3 unidades", priority: 3 });
     }
   }
   const dr = deliveryRate(s);
   if (dr !== null && dr < RULES.lowDelivery) {
-    out.push({ kind: "delivery", text: `Entrega ${Math.round(dr * 100)}%`, action: "revisar confirmación de pedidos" });
+    out.push({ kind: "delivery", text: `Entrega ${Math.round(dr * 100)}%`, action: "revisar confirmación de pedidos", priority: 2 });
   }
   return out;
 }
@@ -127,6 +159,8 @@ export const STORE_SORTS = {
   units_asc: "Menos unidades por pedido",
   units_desc: "Más unidades por pedido",
   vendor_desc: "Más te toca por pedido",
+  skus_desc: "Más productos",
+  skus_asc: "Menos productos",
   silent: "Más días sin vender",
 } as const;
 export type StoreSort = keyof typeof STORE_SORTS;
@@ -147,6 +181,8 @@ export function sortStores(rows: StoreRow[], sort: StoreSort): StoreRow[] {
     units_asc: (s) => nz(s.units_per_order, Infinity),
     units_desc: (s) => -nz(s.units_per_order, -Infinity),
     vendor_desc: (s) => -nz(s.vendor_per_order, -Infinity),
+    skus_desc: (s) => -s.skus30,
+    skus_asc: (s) => s.skus30,
     silent: (s) => -nz(s.days_since, -Infinity),
   };
   const k = key[sort];

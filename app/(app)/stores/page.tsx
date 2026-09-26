@@ -6,6 +6,7 @@ import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney } from "@/lib/format";
 import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { storeHref } from "@/lib/store-links";
 import {
   change, classify, deliveryRate, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, toContact, typicalTickets,
   type Health, type Opportunity, type StoreRow, type StoreSort,
@@ -61,7 +62,8 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       title={title}
     />
   );
-  const ordersHref = (s: StoreRow) => `/orders?dropshipper=${encodeURIComponent(s.name)}`;
+  // la ficha de la tienda (historial, productos, seguimiento); sus pedidos se abren desde ahí
+  const ordersHref = (s: StoreRow) => storeHref(s.account_id, s.store_id);
 
   return (
     <div className="page">
@@ -136,6 +138,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <div><dt>Días activos</dt><dd>{s.active7}/7</dd></div>
                     <div><dt>Ticket</dt><dd>{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</dd></div>
                     <div><dt>Unid./ped.</dt><dd>{s.units_per_order?.toFixed(2) ?? "—"}</dd></div>
+                    <div><dt>Productos</dt><dd>{fmtInt(s.skus30)}</dd></div>
                     <div><dt>Te toca</dt><dd>{s.vendor_per_order === null ? "—" : fmtMoney(s.vendor_per_order, s.currency)}</dd></div>
                   </dl>
                   <Ops ops={opportunities(s, typical[s.account_id], money(s))} />
@@ -156,6 +159,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <th className="r">{sortCol("Ticket", ["ticket_desc", "ticket_asc"], "right", "Venta promedio por pedido, últimos 30 días")}</th>
                     <th className="r hide-lg">{sortCol("Unid./pedido", ["units_asc", "units_desc"], "right", "Productos promedio por pedido, últimos 30 días")}</th>
                     <th className="r hide-lg">{sortCol("Te toca/pedido", ["vendor_desc"], "right", "Lo que te toca en promedio por pedido, últimos 30 días")}</th>
+                    <th className="r hide-lg">{sortCol("Productos", ["skus_desc", "skus_asc"], "right", "Productos distintos con pedidos en 30 días")}</th>
                     <th className="hide-md">14 días</th>
                     <th>Estado</th>
                   </tr>
@@ -183,6 +187,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                         <td className="num">{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</td>
                         <td className="num hide-lg">{s.units_per_order?.toFixed(2) ?? "—"}</td>
                         <td className="num hide-lg">{s.vendor_per_order === null ? "—" : fmtMoney(s.vendor_per_order, s.currency)}</td>
+                        <td className="num hide-lg" title={s.top_product ? `Principal: ${s.top_product} (${Math.round((s.top_share ?? 0) * 100)}% de sus pedidos)` : undefined}>
+                          {fmtInt(s.skus30)}
+                        </td>
                         <td className="hide-md"><Spark days={s.daily} /></td>
                         <td><HealthPill h={health.get(s)!} /></td>
                       </tr>
