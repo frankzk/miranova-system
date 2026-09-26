@@ -104,3 +104,6 @@ export const IconFilter = (p: P) => (
 export const IconBox = (p: P) => (
   <Svg {...p}><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11V5Z" /><path d="M2.5 5 8 7.5 13.5 5M8 7.5v6" /></Svg>
 );
+export const IconChart = (p: P) => (
+  <Svg {...p}><path d="M2.5 13.5h11M4.5 11V8M8 11V4.5M11.5 11V6.5" /></Svg>
+);
