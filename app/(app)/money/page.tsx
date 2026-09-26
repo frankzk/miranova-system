@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountChips } from "@/components/account-chips";
 import { RowLink } from "@/components/client";
 import { PageHead, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
@@ -28,6 +29,8 @@ export default async function MoneyPage() {
   return (
     <div className="page">
       <PageHead title="Dinero" sub={<>Lo que vendes, lo que te toca y lo que falta por liquidar · {scope.label}</>} />
+
+      <AccountChips accounts={accounts} current={scope.account} next="/money" />
 
       {bands.map((cur) => {
         const u = summary.unpaid.find((x) => x.currency === cur);
