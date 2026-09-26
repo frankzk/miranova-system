@@ -48,12 +48,13 @@ La web de Drop muestra una cuenta y un país a la vez. Este panel junta todas la
 
 ## Brand Commitments
 
-- Nombre: **Miranova**.
+- Nombre: **Miranova** · lema "Proveeduría para eCommerce".
+- Logo: monograma M dorado (postes + V) con globo y órbita con flecha ascendente; texto MIRA en dorado y NOVA en plateado (tinta azul marino sobre fondo claro); A sin barra.
 - El usuario pidió un estilo tipo **Stripe** (dashboard sobrio, preciso y de alta calidad), o una referencia mejor si existe.
 
 ## Evidence on Hand
 
-Datos reales de órdenes sincronizadas de Drop Honduras (cuenta MIRANOVA). No hay logo ni otros activos de marca en el repositorio: no se debe inventar ninguno.
+Datos reales de órdenes y productos sincronizados de las cuentas Drop. Logo: recreación vectorial (components/logo.tsx, app/icon.svg) hecha a partir de un flyer de 150 px del usuario; debe reemplazarse por el archivo original de la marca cuando esté disponible.
 
 ## Product Principles
 

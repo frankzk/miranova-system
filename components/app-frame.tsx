@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { LogoHorizontal } from "./logo";
 import { IconAccounts, IconBox, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders } from "./icons";
 
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
@@ -15,11 +16,10 @@ const NAV = [
   { href: "/settings", label: "Cuentas", icon: IconAccounts, match: (p: string) => p.startsWith("/settings") },
 ];
 
-function Brand() {
+function Brand({ height = 36 }: { height?: number }) {
   return (
     <Link href="/" className="brand" aria-label="Miranova, ir a Inicio">
-      <span className="brand-mark" aria-hidden>M</span>
-      <span className="brand-name">Miranova</span>
+      <LogoHorizontal height={height} tone="light" />
     </Link>
   );
 }
@@ -64,7 +64,7 @@ export function AppFrame({
         <button className="btn btn-ghost btn-icon" onClick={() => setOpen(true)} aria-label="Abrir menú" aria-expanded={open}>
           <IconMenu />
         </button>
-        <Brand />
+        <Brand height={30} />
         <span className="grow" />
         <span className="tag">{scopeLabel}</span>
       </header>
