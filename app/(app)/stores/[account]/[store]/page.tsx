@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { IconArrowRight, IconChevronRight } from "@/components/icons";
 import { StoreChart } from "@/components/store-chart";
-import { QuickLinks, StoreContact } from "@/components/store-contact";
+import { StoreContactBar } from "@/components/store-contact";
 import { StoreFollowups } from "@/components/store-followups";
 import { PageHead } from "@/components/ui";
 import { storeContactView } from "@/lib/contacts";
@@ -75,12 +75,13 @@ export default async function StorePage({ params }: { params: Params }) {
             {k.first_at && <> · primera venta registrada {fmtDay(k.first_at.slice(0, 10), s.today)}</>}
           </>
         }
-        actions={
-          <div className="sd-actions">
-            <QuickLinks group={contact.contact?.whatsapp_group_url ?? null} phone={contact.contact?.owner_phone ?? null} compact />
-            <Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>
-          </div>
-        }
+        actions={<Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>}
+      />
+
+      <StoreContactBar
+        view={contact}
+        store={{ accountId: s.account_id, storeId: s.store_id, storeName: s.name }}
+        actions={{ save: saveContact, link: linkStore, unlink: unlinkStore }}
       />
 
       {ops.length > 0 && (
@@ -155,12 +156,6 @@ export default async function StorePage({ params }: { params: Params }) {
         </section>
 
         <div className="sd-side">
-          <StoreContact
-            view={contact}
-            store={{ accountId: s.account_id, storeId: s.store_id, storeName: s.name }}
-            actions={{ save: saveContact, link: linkStore, unlink: unlinkStore }}
-          />
-
           <section className="panel" aria-labelledby="sd-activity">
             <div className="panel-head"><h2 id="sd-activity">Actividad</h2></div>
             <dl className="sd-kv panel-body">
@@ -193,8 +188,8 @@ export default async function StorePage({ params }: { params: Params }) {
               </div>
               <div className="panel-body">
                 <p className="sd-note">
-                  Promedio de {fmtInt(b.stores)} tiendas con pedidos en 30 días en {s.account_name}.
-                  {k.n30 > 0 && <> Puesto <b>#{b.rank_d7}</b> por pedidos en 7 días.</>}
+                  {k.n30 > 0 && <>Puesto <b>#{b.rank_d7}</b> de {fmtInt(b.stores)} por pedidos en 7 días. </>}
+                  Promedio de las tiendas con pedidos en 30 días en {s.account_name}.
                 </p>
                 <ul className="sd-bench">
                   <Bench label="Pedidos/día" value={perDay} avg={b.orders_per_day} fmt={(n) => n.toFixed(1)} />
@@ -267,13 +262,16 @@ function Bench({ label, value, avg, fmt }: { label: string; value: number | null
     <li>
       <div className="row">
         <span className="t">{label}</span>
-        <span className="v"><b>{value === null ? "—" : fmt(value)}</b> <span className="muted">· promedio tiendas: {avg === null ? "—" : fmt(avg)}</span></span>
+        <b className="v">{value === null ? "—" : fmt(value)}</b>
       </div>
       <div className="bars" aria-hidden>
         <i className="me" style={{ width: `${((value ?? 0) / max) * 100}%` }} />
         <i className="avg" style={{ width: `${((avg ?? 0) / max) * 100}%` }} />
       </div>
-      {v && <span className="delta" data-tone={v.tone}>{v.text}</span>}
+      <div className="row foot">
+        <span className="muted">Promedio {avg === null ? "—" : fmt(avg)}</span>
+        {v && <span className="delta" data-tone={v.tone}>{v.text}</span>}
+      </div>
     </li>
   );
 }

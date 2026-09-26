@@ -1,8 +1,10 @@
-// Contacto del dueño de una tienda: accesos rápidos (grupo de WhatsApp, chat y llamada),
-// otras operaciones del mismo dueño y sugerencias para vincular las que parecen suyas.
+// Contacto del dueño de una tienda: una barra bajo el título con los accesos rápidos (grupo de
+// WhatsApp, chat con el dueño) y un panel lateral para editar, ver las otras operaciones del
+// mismo dueño y vincular las que parecen suyas.
 import Link from "next/link";
 import { ContactForm, StoreActionButton, type ContactState } from "./contact-forms";
-import { IconChat, IconExternal, IconPhone } from "./icons";
+import { IconChat, IconExternal, IconPhone, IconPlus } from "./icons";
+import { SideSheet } from "./side-sheet";
 import type { StoreContactView } from "@/lib/contacts";
 import { formatPhone, whatsappChat, type Suggestion } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
@@ -15,114 +17,144 @@ export type StoreContactProps = {
   actions: { save: Action; link: Action; unlink: Action };
 };
 
-export function StoreContact({ view, store, actions }: StoreContactProps) {
+/** Barra de contacto: quién es, cómo escribirle y el panel para gestionarlo. */
+export function StoreContactBar({ view, store, actions }: StoreContactProps) {
   const { contact: c, siblings, suggestions, self } = view;
-  const ops = siblings.length + 1;
+  const samePerson = suggestions.filter((s) => s.reason === "same_person");
+  const person = c?.owner_name || self?.person;
+
   return (
-    <section id="contacto" className="panel sd-contact" aria-labelledby="sd-contact-title">
-      <div className="panel-head">
-        <h2 id="sd-contact-title">Contacto del dueño</h2>
-        <span className="aside">
-          {!c ? "Sin contacto registrado" : !c.whatsapp_group_url ? "Sin grupo de WhatsApp" : ops > 1 ? `Mismo grupo en ${ops} operaciones` : "Grupo registrado"}
-        </span>
+    <section className="ct-bar" data-state={c ? (c.whatsapp_group_url ? "ok" : "partial") : "missing"} aria-label="Contacto del dueño">
+      <span className="ct-bar-icon" aria-hidden><IconChat /></span>
+      <div className="ct-bar-text">
+        <p className="ct-bar-title">
+          {c ? (
+            <>
+              {person || "Contacto sin nombre"}
+              {c.owner_phone && <span className="ct-bar-phone">{formatPhone(c.owner_phone)}</span>}
+            </>
+          ) : (
+            "Sin grupo de WhatsApp"
+          )}
+        </p>
+        <p className="ct-bar-sub">
+          {c
+            ? !c.whatsapp_group_url
+              ? "Falta el enlace del grupo de soporte"
+              : siblings.length
+                ? `Mismo grupo en ${siblings.length + 1} operaciones: ${siblings.map((l) => opName(l.store?.name ?? l.store_name, l.store?.account_name)).join(", ")}`
+                : "Grupo de soporte registrado"
+            : samePerson.length
+              ? `${person ? `${person} tiene` : "Mismo responsable en"} ${samePerson.length === 1 ? "otra operación" : `${samePerson.length} operaciones más`}: ${samePerson.map((s) => opName(s.store.name, s.store.account_name)).join(", ")}`
+              : person
+                ? `Responsable según la plataforma: ${person}`
+                : "Guarda el grupo de soporte para escribirle en un clic"}
+        </p>
+      </div>
+      <div className="ct-bar-actions">
+        {c?.whatsapp_group_url && (
+          <a className="btn btn-wa" href={c.whatsapp_group_url} target="_blank" rel="noopener noreferrer">
+            <IconChat /> Abrir grupo
+          </a>
+        )}
+        {c?.owner_phone && (
+          <a className="btn" href={whatsappChat(c.owner_phone)} target="_blank" rel="noopener noreferrer" title={`WhatsApp a ${formatPhone(c.owner_phone)}`}>
+            <IconExternal /> WhatsApp al dueño
+          </a>
+        )}
+        <SideSheet
+          hash="contacto"
+          triggerClass={c ? "btn btn-ghost" : "btn btn-primary"}
+          trigger={c ? "Gestionar" : <><IconPlus /> Agregar contacto</>}
+          title="Contacto del dueño"
+          sub={<>{store.storeName}{self?.account_name && <> · {self.account_name}</>}</>}
+        >
+          <ContactSheet view={view} store={store} actions={actions} />
+        </SideSheet>
+      </div>
+    </section>
+  );
+}
+
+const opName = (name: string | null | undefined, account: string | null | undefined) =>
+  `${name ?? "Tienda"}${account ? ` (${account.replace(/^Drop\s+/i, "")})` : ""}`;
+
+/** Contenido del panel: accesos, datos, otras operaciones y sugerencias. */
+function ContactSheet({ view, store, actions }: StoreContactProps) {
+  const { contact: c, siblings, suggestions, self } = view;
+  return (
+    <>
+      {c && (c.whatsapp_group_url || c.owner_phone) && (
+        <div className="order-actions">
+          {c.whatsapp_group_url && (
+            <a className="btn btn-wa" href={c.whatsapp_group_url} target="_blank" rel="noopener noreferrer"><IconChat /> Abrir grupo</a>
+          )}
+          {c.owner_phone && (
+            <a className="btn" href={whatsappChat(c.owner_phone)} target="_blank" rel="noopener noreferrer"><IconExternal /> WhatsApp al dueño</a>
+          )}
+          {c.owner_phone && <a className="btn btn-ghost" href={`tel:+${c.owner_phone}`}><IconPhone /> Llamar</a>}
+        </div>
+      )}
+
+      <div className="section">
+        <h3>{c ? "Datos del contacto" : "Nuevo contacto"}</h3>
+        {!c && (
+          <p className="sheet-note">
+            Si el dueño tiene otras operaciones, usa el mismo grupo en todas: al pegar un enlace que ya existe, la tienda se suma a ese contacto.
+          </p>
+        )}
+        <ContactForm
+          action={actions.save}
+          store={store}
+          defaults={c ? { group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes } : { owner_name: self?.person }}
+          submit={c ? "Guardar cambios" : "Guardar contacto"}
+        />
       </div>
 
-      {c ? (
-        <div className="panel-body ct-body">
-          <QuickLinks group={c.whatsapp_group_url} phone={c.owner_phone} />
-          <dl className="sd-kv">
-            <div><dt>Responsable</dt><dd>{c.owner_name || "—"}</dd></div>
-            <div><dt>Teléfono</dt><dd>{c.owner_phone ? formatPhone(c.owner_phone) : "—"}</dd></div>
-            <div><dt>Grupo</dt><dd>{c.whatsapp_group_url ? "Registrado" : <span className="ct-missing">Falta el enlace</span>}</dd></div>
-            {c.notes && <div><dt>Notas</dt><dd className="ct-notes">{c.notes}</dd></div>}
-          </dl>
-
-          {siblings.length > 0 && (
-            <div className="ct-block">
-              <h3>También atiende</h3>
-              <ul className="ct-list">
-                {siblings.map((l) => {
-                  const ref = { accountId: l.account_id, storeId: l.store_id, storeName: l.store?.name ?? l.store_name ?? "" };
-                  return (
-                    <li key={`${l.account_id}|${l.store_id}`}>
-                      <div className="who">
-                        <Link href={storeHref(l.account_id, l.store_id)}>{ref.storeName || "Tienda"}</Link>
-                        <span className="muted">{l.store?.account_name ?? ""}</span>
-                      </div>
-                      <StoreActionButton action={actions.unlink} contactId={c.id} store={ref} label="Quitar" pending="…" className="btn btn-sm btn-ghost" />
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
-          <details className="fu-edit ct-edit">
-            <summary>Editar contacto</summary>
-            <ContactForm
-              action={actions.save}
-              store={store}
-              defaults={{ group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes }}
-              submit="Guardar cambios"
-            />
-            <div className="ct-unlink">
-              <StoreActionButton action={actions.unlink} contactId={c.id} store={store} label="Desvincular esta tienda" pending="Quitando…" className="btn btn-sm btn-danger" />
-              <span className="muted">
-                {siblings.length ? "Las demás operaciones conservan el contacto." : "Es la única tienda del contacto: se borrará."}
-              </span>
-            </div>
-          </details>
-        </div>
-      ) : (
-        <div className="panel-body ct-body">
-          <p className="sd-note">
-            Guarda el grupo de soporte de la tienda. Si el dueño tiene otras operaciones, pega el mismo enlace en sus fichas
-            (o vincúlalas abajo) y quedarán en un solo contacto.
-          </p>
-          <ContactForm action={actions.save} store={store} defaults={{ owner_name: self?.person }} submit="Guardar contacto" />
+      {c && siblings.length > 0 && (
+        <div className="section">
+          <h3>También atiende <span className="count">{siblings.length}</span></h3>
+          <ul className="ct-list">
+            {siblings.map((l) => {
+              const ref = { accountId: l.account_id, storeId: l.store_id, storeName: l.store?.name ?? l.store_name ?? "" };
+              return (
+                <li key={`${l.account_id}|${l.store_id}`}>
+                  <div className="who">
+                    <Link href={storeHref(l.account_id, l.store_id)}>{ref.storeName || "Tienda"}</Link>
+                    <span className="muted">{l.store?.account_name ?? ""}{l.store?.person && <> · {l.store.person}</>}</span>
+                  </div>
+                  <StoreActionButton action={actions.unlink} contactId={c.id} store={ref} label="Quitar" pending="…" className="btn btn-sm btn-ghost" />
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
       {suggestions.length > 0 && (
-        <div className="ct-suggest">
+        <div className="section">
           <h3>¿Mismo dueño en otra operación?</h3>
           <ul className="ct-list">
             {suggestions.map((s) => (
               <SuggestionRow key={`${s.store.account_id}|${s.store.store_id}`} s={s} mine={c?.id ?? null} store={store} actions={actions} />
             ))}
           </ul>
-          <p className="ct-foot">
+          <p className="sheet-note">
             Responsable según la plataforma{self?.person ? <> (en esta tienda: <b>{self.person}</b>)</> : null}. Un nombre parecido con otro
             responsable suele ser otra tienda: vincula solo si lo confirmaste.
           </p>
         </div>
       )}
-    </section>
-  );
-}
 
-/** Botones de acceso rápido al grupo y al dueño. */
-export function QuickLinks({ group, phone, compact }: { group: string | null; phone: string | null; compact?: boolean }) {
-  if (!group && !phone) return null;
-  const size = compact ? " btn-sm" : "";
-  return (
-    <div className="ct-quick">
-      {group && (
-        <a className={`btn btn-wa${size}`} href={group} target="_blank" rel="noopener noreferrer">
-          <IconChat /> Abrir grupo
-        </a>
+      {c && (
+        <div className="section ct-unlink">
+          <StoreActionButton action={actions.unlink} contactId={c.id} store={store} label="Desvincular esta tienda" pending="Quitando…" className="btn btn-sm btn-danger" />
+          <span className="muted">
+            {siblings.length ? "Las demás operaciones conservan el contacto." : "Es la única tienda del contacto: se borrará."}
+          </span>
+        </div>
       )}
-      {phone && (
-        <a className={`btn${size}`} href={whatsappChat(phone)} target="_blank" rel="noopener noreferrer">
-          <IconExternal /> WhatsApp al dueño
-        </a>
-      )}
-      {phone && !compact && (
-        <a className="btn btn-ghost" href={`tel:+${phone}`}>
-          <IconPhone /> Llamar
-        </a>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -138,10 +170,8 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
     action = <StoreActionButton action={actions.link} contactId={mine} store={other} label="Vincular" pending="…" />;
   } else if (!mine && s.contact_id) {
     action = <StoreActionButton action={actions.link} contactId={s.contact_id} store={store} label="Usar su contacto" pending="…" />;
-  } else if (mine && s.contact_id) {
-    action = <span className="muted ct-note">Tiene otro contacto</span>;
   } else {
-    action = <span className="muted ct-note">Sin contacto aún</span>;
+    action = <span className="muted ct-note">{mine ? "Tiene otro contacto" : "Sin contacto aún"}</span>;
   }
   return (
     <li>

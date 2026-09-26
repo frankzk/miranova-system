@@ -1,6 +1,8 @@
 // Seguimiento comercial de una tienda (CRM interno): historial, alta de registros y
 // efecto medido de cada contacto (7 días antes vs. 7 días desde el contacto).
 import { FollowupForm, FollowupStatusForm, type FollowupState } from "./followup-forms";
+import { IconPlus } from "./icons";
+import { SideSheet } from "./side-sheet";
 import { followupOwners, listFollowups, type Followup } from "@/lib/followups";
 import { fmtMoney } from "@/lib/format";
 import { daysBetween, fmtDay, FOLLOWUP_STATUS, impact, OPEN_STATUSES, type StoreDay } from "@/lib/store-metrics";
@@ -28,12 +30,24 @@ export async function StoreFollowups({ accountId, storeId, storeName, currency, 
       <div className="panel-head">
         <h2 id="fu-title">Seguimiento Miranova</h2>
         <span className="aside">
-          Interno · {items.length ? `${items.length} ${items.length === 1 ? "registro" : "registros"}, ${open.length} abiertos` : "sin registros aún"}
+          {items.length ? `${items.length} ${items.length === 1 ? "registro" : "registros"} · ${open.length} ${open.length === 1 ? "abierto" : "abiertos"}` : "Interno"}
         </span>
+        <SideSheet
+          triggerClass="btn btn-sm"
+          trigger={<><IconPlus /> Nuevo seguimiento</>}
+          title="Nuevo seguimiento"
+          sub={<>{storeName} · registro interno de Miranova</>}
+        >
+          <div className="section">
+            <FollowupForm action={actions.add} accountId={accountId} storeId={storeId} storeName={storeName} today={today} owners={owners} />
+          </div>
+        </SideSheet>
       </div>
-      <div className="panel-body">
-        <FollowupForm action={actions.add} accountId={accountId} storeId={storeId} storeName={storeName} today={today} owners={owners} />
-      </div>
+      {items.length === 0 && (
+        <p className="panel-body muted fu-empty">
+          Registra cada contacto con la tienda (qué se recomendó y qué se hizo) para medir su efecto en las ventas de los 7 días siguientes.
+        </p>
+      )}
       {items.length > 0 && (
         <ol className="fu-list">
           {items.map((f) => (
