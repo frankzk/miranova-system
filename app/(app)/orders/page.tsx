@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AutoSelect, Drawer, DrawerClose, RowLink } from "@/components/client";
-import { IconChevronLeft, IconChevronRight, IconDownload, IconExternal, IconSearch } from "@/components/icons";
+import { AutoSelect, Drawer, DrawerClose, GetForm, RowLink } from "@/components/client";
+import { ColumnFilter, type FilterOption } from "@/components/column-filter";
+import { IconChevronLeft, IconChevronRight, IconClose, IconDownload, IconExternal, IconFilter, IconSearch } from "@/components/icons";
 import { OrderDetailView } from "@/components/order-detail";
 import { AccountChips } from "@/components/account-chips";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
-import { getOrder, groupCounts, listOrders, orderFacets, PAGE_SIZE, parseFilters } from "@/lib/queries";
+import { getOrder, groupCounts, listOrders, orderFacets, PAGE_SIZE, parseFilters, SORTS, type Sort } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { GROUPS, groupById } from "@/lib/status";
 
@@ -34,20 +35,43 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const showAccount = !scope.account && accounts.length > 1;
 
+  const current = { group: f.group, q: f.q, status: f.status, dept: f.dept, product: f.product, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to, sort: f.sort };
+  const params = (patch: Record<string, string | number | undefined | null>) => {
+    const p = new URLSearchParams();
+    const merged: Record<string, unknown> = { ...current, page: f.page === 1 ? undefined : f.page, ...patch };
+    for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    return p.toString();
+  };
   /** URL con los filtros actuales + cambios. */
   const url = (patch: Record<string, string | number | undefined | null>) => {
-    const p = new URLSearchParams();
-    const merged: Record<string, unknown> = { group: f.group, q: f.q, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to, page: f.page === 1 ? undefined : f.page, ...patch };
-    for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
-    const s = p.toString();
+    const s = params(patch);
     return s ? `/orders?${s}` : "/orders";
   };
+  /** Query base de cada filtro de columna: sin ese filtro ni la página. */
+  const without = (key: string) => params({ [key]: undefined, page: undefined });
   const closeHref = url({});
-  const exportHref = `/api/export?${new URLSearchParams(
-    Object.entries({ group: f.group, q: f.q, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to }).filter(([, v]) => v) as [string, string][],
-  )}`;
-  const hasFilters = !!(f.q || f.dropshipper || f.carrier || f.from || f.to);
+  const exportHref = `/api/export?${params({ page: undefined, group: f.group })}`;
   const activeGroup = groupById(f.group);
+
+  const statusOpts: FilterOption[] = facets.statuses
+    .filter((x) => !activeGroup || x.group === activeGroup.id)
+    .map((x) => ({ value: x.code, label: x.label ?? x.code, count: x.n }));
+  const statusLabel = (code: string) => facets.statuses.find((x) => x.code === code)?.label ?? code;
+  const deptOpts: FilterOption[] = facets.departments.map((d) => ({ value: d.name, label: d.name, count: d.n }));
+  const productOpts: FilterOption[] = facets.products.map((d) => ({ value: d.name, label: d.name, count: d.n }));
+  const plain = (xs: string[]): FilterOption[] => xs.map((x) => ({ value: x, label: x }));
+  const sortOpts = (keys: Sort[]): FilterOption[] => keys.map((k) => ({ value: k, label: SORTS[k].label }));
+
+  // filtros aplicados, para mostrarlos como chips que se pueden quitar
+  const applied = [
+    f.status && { key: "status", label: `Estado: ${statusLabel(f.status)}` },
+    f.dept && { key: "dept", label: `Departamento: ${f.dept}` },
+    f.product && { key: "product", label: `Producto: ${f.product}` },
+    f.dropshipper && { key: "dropshipper", label: `Dropshipper: ${f.dropshipper}` },
+    f.carrier && { key: "carrier", label: `Paquetera: ${f.carrier}` },
+    f.sort && { key: "sort", label: `Orden: ${SORTS[f.sort].label}` },
+  ].filter(Boolean) as { key: string; label: string }[];
+  const hasFilters = !!(f.q || f.from || f.to || applied.length);
 
   return (
     <div className="page">
@@ -64,36 +88,51 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <AccountChips accounts={accounts} current={scope.account} next={url({ page: undefined })} />
 
       <nav className="tabs" aria-label="Filtrar por estado">
-        <Link href={url({ group: undefined, page: undefined })} aria-current={!activeGroup}>
+        <Link href={url({ group: undefined, status: undefined, page: undefined })} aria-current={!activeGroup}>
           Todas <span className="c">{fmtInt(counts.all ?? 0)}</span>
         </Link>
         {GROUPS.map((g) => (
-          <Link key={g.id} href={url({ group: g.id, page: undefined })} aria-current={activeGroup?.id === g.id} title={g.hint}>
+          <Link key={g.id} href={url({ group: g.id, status: undefined, page: undefined })} aria-current={activeGroup?.id === g.id} title={g.hint}>
             {g.label} <span className="c">{fmtInt(counts[g.id] ?? 0)}</span>
           </Link>
         ))}
       </nav>
 
-      <form className="toolbar" method="get" role="search">
+      <GetForm className="toolbar" role="search">
         {f.group && <input type="hidden" name="group" value={f.group} />}
         <label className="input-icon search">
           <span className="sr-only">Buscar</span>
           <IconSearch />
           <input className="input" type="search" name="q" defaultValue={f.q} placeholder="Número, cliente, teléfono, guía o ciudad" />
         </label>
-        <AutoSelect name="dropshipper" defaultValue={f.dropshipper ?? ""} aria-label="Dropshipper">
-          <option value="">Todos los dropshippers</option>
-          {facets.dropshippers.map((d) => <option key={d} value={d}>{d}</option>)}
-        </AutoSelect>
-        <AutoSelect name="carrier" defaultValue={f.carrier ?? ""} aria-label="Paquetera">
-          <option value="">Todas las paqueteras</option>
-          {facets.carriers.map((c) => <option key={c} value={c}>{c}</option>)}
-        </AutoSelect>
         <input className="input" type="date" name="from" defaultValue={f.from} aria-label="Desde" />
         <input className="input" type="date" name="to" defaultValue={f.to} aria-label="Hasta" />
         <button className="btn" type="submit">Aplicar</button>
-        {hasFilters && <Link className="btn btn-ghost" href={url({ q: undefined, dropshipper: undefined, carrier: undefined, from: undefined, to: undefined, page: undefined })}>Limpiar</Link>}
-      </form>
+        <details className="more-filters">
+          <summary className="btn">
+            <IconFilter /> Filtros{applied.length > 0 && <span className="c">{applied.length}</span>}
+          </summary>
+          <div className="more-panel">
+            <FilterSelect name="status" label="Estado" value={f.status} all="Todos los estados" options={statusOpts} />
+            <FilterSelect name="dept" label="Departamento" value={f.dept} all="Todos los departamentos" options={deptOpts} />
+            <FilterSelect name="product" label="Producto" value={f.product} all="Todos los productos" options={productOpts} />
+            <FilterSelect name="dropshipper" label="Dropshipper" value={f.dropshipper} all="Todos los dropshippers" options={plain(facets.dropshippers)} />
+            <FilterSelect name="carrier" label="Paquetera" value={f.carrier} all="Todas las paqueteras" options={plain(facets.carriers)} />
+            <FilterSelect name="sort" label="Ordenar por" value={f.sort} all={SORTS.recent.label} options={sortOpts(["old", "total_desc", "total_asc"])} />
+          </div>
+        </details>
+        {hasFilters && <Link className="btn btn-ghost" href={url({ q: undefined, status: undefined, dept: undefined, product: undefined, dropshipper: undefined, carrier: undefined, from: undefined, to: undefined, sort: undefined, page: undefined })}>Limpiar</Link>}
+      </GetForm>
+
+      {applied.length > 0 && (
+        <div className="applied" aria-label="Filtros aplicados">
+          {applied.map((a) => (
+            <Link key={a.key} href={url({ [a.key]: undefined, page: undefined })} aria-label={`Quitar ${a.label}`}>
+              {a.label} <IconClose />
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="table-wrap">
         {orders.length === 0 ? (
@@ -112,13 +151,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <table className="table stack">
                 <thead>
                   <tr>
-                    <th>Orden</th>
-                    <th>Cliente</th>
-                    <th className="hide-lg">Productos</th>
-                    <th className="hide-md hide-l">Dropshipper</th>
-                    <th className="hide-xl">Paquetera</th>
-                    <th>Estado</th>
-                    <th className="r">Total</th>
+                    <th><ColumnFilter label="Orden" param="sort" query={without("sort")} current={f.sort === "old" ? "old" : undefined} allLabel={SORTS.recent.label} options={sortOpts(["old"])} title="Ordenar por fecha" /></th>
+                    <th><ColumnFilter label="Cliente" param="dept" query={without("dept")} current={f.dept} allLabel="Todos los departamentos" options={deptOpts} title="Filtrar por departamento" /></th>
+                    <th className="hide-lg"><ColumnFilter label="Productos" param="product" query={without("product")} current={f.product} allLabel="Todos los productos" options={productOpts} title="Órdenes que contienen un producto" /></th>
+                    <th className="hide-md hide-l"><ColumnFilter label="Dropshipper" param="dropshipper" query={without("dropshipper")} current={f.dropshipper} allLabel="Todos los dropshippers" options={plain(facets.dropshippers)} /></th>
+                    <th className="hide-xl"><ColumnFilter label="Paquetera" param="carrier" query={without("carrier")} current={f.carrier} allLabel="Todas las paqueteras" options={plain(facets.carriers)} /></th>
+                    <th><ColumnFilter label="Estado" param="status" query={without("status")} current={f.status} allLabel={activeGroup ? `Todos: ${activeGroup.label.toLowerCase()}` : "Todos los estados"} options={statusOpts} title="Estado exacto" /></th>
+                    <th className="r"><ColumnFilter label="Total" param="sort" align="right" query={without("sort")} current={f.sort?.startsWith("total") ? f.sort : undefined} allLabel="Por fecha" options={sortOpts(["total_desc", "total_asc"])} title="Ordenar por total" /></th>
                     <th className="r hide-md">Te toca</th>
                   </tr>
                 </thead>
@@ -193,5 +232,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </Drawer>
       )}
     </div>
+  );
+}
+
+function FilterSelect({ name, label, value, all, options }: { name: string; label: string; value?: string; all: string; options: FilterOption[] }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <AutoSelect name={name} defaultValue={value ?? ""}>
+        <option value="">{all}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}{o.count !== undefined ? ` (${o.count.toLocaleString("en-US")})` : ""}</option>
+        ))}
+      </AutoSelect>
+    </label>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountChips } from "@/components/account-chips";
 import { BarChart } from "@/components/bar-chart";
 import { OwnerAlertsPanel } from "@/components/owner-alerts";
 import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
@@ -45,6 +46,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </nav>
         }
       />
+
+      <AccountChips accounts={accounts} current={scope.account} next={range.id === "30" ? "/" : `/?r=${range.id}`} />
 
       <OwnerAlertsPanel data={alerts} tz={scope.tz} />
 

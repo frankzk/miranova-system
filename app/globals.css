@@ -406,6 +406,62 @@ a.metric:hover .foot .go { color: var(--accent); transform: translateX(2px); }
 .toolbar .search { flex: 1 1 260px; max-width: 380px; }
 .toolbar .spacer { flex: 1; }
 
+/* Filtros adicionales (todas las pantallas; en móvil la tabla no tiene encabezados) */
+.more-filters { position: relative; }
+.more-filters > summary { list-style: none; cursor: pointer; }
+.more-filters > summary::-webkit-details-marker { display: none; }
+.more-filters > summary .c { margin-left: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; }
+.more-panel {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
+  width: 340px; display: grid; gap: 12px;
+  background: var(--bg-surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float); padding: 14px;
+  animation: pop 160ms var(--ease-out);
+}
+.more-panel .select { width: 100%; }
+
+.applied { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 12px; }
+.applied a {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px 0 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: var(--t-xs); font-weight: 550; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.applied a svg { width: 12px; height: 12px; flex: none; opacity: 0.7; }
+.applied a:hover svg { opacity: 1; }
+
+/* Encabezado de columna con filtro */
+.colf {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; margin: -3px -6px; padding: 3px 6px; border-radius: var(--r-sm);
+  font: inherit; color: inherit; white-space: nowrap;
+}
+.colf:hover, .colf[aria-expanded="true"] { background: var(--bg-hover); color: var(--ink); }
+.colf:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.colf .chev { width: 12px; height: 12px; opacity: 0.45; transition: transform 160ms var(--ease-out); }
+.colf:hover .chev, .colf[aria-expanded="true"] .chev { opacity: 0.8; }
+.colf[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.colf[data-active] { color: var(--accent-ink); }
+.colf[data-active] .chev { opacity: 0.8; }
+.colf .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.colf-menu {
+  position: fixed; z-index: 60; width: 280px;
+  background: var(--bg-surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float); padding: 6px; text-align: left;
+  font-size: var(--t-sm); font-weight: 400; color: var(--ink); text-transform: none; letter-spacing: normal;
+  animation: pop 140ms var(--ease-out);
+}
+.colf-search { display: flex; align-items: center; gap: 6px; padding: 4px 8px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; color: var(--ink-3); }
+.colf-search input { all: unset; flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--ink); padding: 4px 0; }
+.colf-list { max-height: 320px; overflow-y: auto; }
+.colf-list a { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--r-sm); }
+.colf-list a:hover { background: var(--bg-hover); }
+.colf-list a[aria-checked="true"] { color: var(--accent-ink); font-weight: 550; }
+.colf-list .check { width: 14px; flex: none; display: grid; place-items: center; color: var(--accent); }
+.colf-list .check svg { width: 14px; height: 14px; }
+.colf-list .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.colf-list .n { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: var(--t-xs); }
+.colf-empty { padding: 10px 8px; color: var(--ink-3); }
+
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 14px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs a {
@@ -636,6 +692,9 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
   .grid-3 { grid-template-columns: minmax(0, 1fr); }
   .form-grid { grid-template-columns: minmax(0, 1fr); }
   .toolbar .search { max-width: none; flex-basis: 100%; }
+  .toolbar { position: relative; }
+  .more-filters { position: static; }
+  .more-panel { left: 0; right: 0; width: auto; }
   .kv { grid-template-columns: 110px minmax(0, 1fr); }
   .btn, .input, .select { height: 36px; }
   .btn-sm { height: 32px; }

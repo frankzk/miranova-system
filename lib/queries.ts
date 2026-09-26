@@ -55,8 +55,22 @@ export type Filters = {
   carrier?: string;
   from?: string; // YYYY-MM-DD
   to?: string;
+  /** estado exacto (status_code), dentro del grupo de la pestaña */
+  status?: string;
+  dept?: string;
+  /** órdenes que contienen este producto */
+  product?: string;
+  sort?: Sort;
   page?: number;
 };
+
+export const SORTS = {
+  recent: { label: "Más recientes", col: "ordered_at", asc: false },
+  old: { label: "Más antiguas", col: "ordered_at", asc: true },
+  total_desc: { label: "Total: mayor a menor", col: "total", asc: false },
+  total_asc: { label: "Total: menor a mayor", col: "total", asc: true },
+} as const;
+export type Sort = keyof typeof SORTS;
 
 export const PAGE_SIZE = 50;
 const HN_OFFSET = "-06:00";
@@ -75,6 +89,10 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     carrier: one("carrier"),
     from: one("from"),
     to: one("to"),
+    status: one("status"),
+    dept: one("dept"),
+    product: one("product"),
+    sort: (Object.keys(SORTS) as Sort[]).find((k) => k === one("sort") && k !== "recent"),
     page: Math.max(1, Number(one("page") ?? 1) || 1),
   };
 }
@@ -85,18 +103,17 @@ const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
 const ORDER_SELECT =
   "*, accounts(name, country, timezone), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)";
 
-function filtered(f: Filters, count = false) {
-  let query = db()
-    .from("orders")
-    .select(ORDER_SELECT, count ? { count: "exact" } : undefined)
-    .order("ordered_at", { ascending: false, nullsFirst: false })
-    .order("id", { ascending: false });
+// Filtro por producto: un embed aparte (`pf`, inner) filtra las órdenes sin recortar `order_items`.
+const PRODUCT_EMBED = ", pf:order_items!inner(product_name)";
 
-  const group = groupById(f.group);
+/** Filtros comunes a la lista y a los conteos (sin grupo ni estado exacto). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyFilters<Q extends { eq: any; gte: any; lte: any; or: any }>(query: Q, f: Filters): Q {
   if (f.account) query = query.eq("account_id", f.account);
-  if (group) query = query.in("status_code", group.codes);
   if (f.dropshipper) query = query.eq("dropshipper", f.dropshipper);
   if (f.carrier) query = query.eq("carrier", f.carrier);
+  if (f.dept) query = query.eq("department", f.dept);
+  if (f.product) query = query.eq("pf.product_name", f.product);
   if (f.from) query = query.gte("ordered_at", `${f.from}T00:00:00${HN_OFFSET}`);
   if (f.to) query = query.lte("ordered_at", `${f.to}T23:59:59${HN_OFFSET}`);
   if (f.q) {
@@ -110,6 +127,20 @@ function filtered(f: Filters, count = false) {
     }
   }
   return query;
+}
+
+function filtered(f: Filters, count = false) {
+  const sort = SORTS[f.sort ?? "recent"];
+  let query = db()
+    .from("orders")
+    .select((ORDER_SELECT + (f.product ? PRODUCT_EMBED : "")) as "*", count ? { count: "exact" } : undefined)
+    .order(sort.col, { ascending: sort.asc, nullsFirst: false })
+    .order("id", { ascending: sort.asc });
+
+  const group = groupById(f.group);
+  if (group) query = query.in("status_code", group.codes);
+  if (f.status) query = query.eq("status_code", f.status);
+  return applyFilters(query, f);
 }
 
 const sortItems = (o: Order): Order => ({
@@ -146,12 +177,19 @@ export async function getOrder(id: string): Promise<OrderDetail | null> {
   return sortItems(data as Order) as OrderDetail;
 }
 
-export type Facets = { dropshippers: string[]; carriers: string[] };
+export type Facets = {
+  dropshippers: string[];
+  carriers: string[];
+  statuses: { code: string; label: string | null; group: string | null; n: number }[];
+  departments: { name: string; n: number }[];
+  products: { name: string; n: number }[];
+};
 
 export async function orderFacets(account?: string): Promise<Facets> {
   const { data, error } = await db().rpc("order_facets", { p_account: account ?? null });
   if (error) throw error;
-  return data as Facets;
+  const d = data as Partial<Facets>;
+  return { dropshippers: [], carriers: [], statuses: [], departments: [], products: [], ...d };
 }
 
 export type MoneyRow = {
@@ -249,24 +287,9 @@ export async function unpaidDelivered(account?: string, limit = 12) {
 export async function groupCounts(f: Filters): Promise<Record<string, number>> {
   const { GROUPS } = await import("./status");
   const base = (codes?: string[]) => {
-    let q = db().from("orders").select("id", { count: "exact", head: true });
-    if (f.account) q = q.eq("account_id", f.account);
+    let q = db().from("orders").select(`id${f.product ? PRODUCT_EMBED : ""}` as "id", { count: "exact", head: true });
     if (codes) q = q.in("status_code", codes);
-    if (f.dropshipper) q = q.eq("dropshipper", f.dropshipper);
-    if (f.carrier) q = q.eq("carrier", f.carrier);
-    if (f.from) q = q.gte("ordered_at", `${f.from}T00:00:00${HN_OFFSET}`);
-    if (f.to) q = q.lte("ordered_at", `${f.to}T23:59:59${HN_OFFSET}`);
-    if (f.q) {
-      const q2 = clean(f.q.replace(/^#/, ""));
-      if (q2) {
-        q = q.or(
-          ["external_id", "shopify_order", "customer_name", "customer_phone", "customer_email", "city", "tracking_number", "dropshipper"]
-            .map((c) => `${c}.ilike.*${q2}*`)
-            .join(","),
-        );
-      }
-    }
-    return q;
+    return applyFilters(q, f);
   };
   const entries = await Promise.all([
     base().then((r) => ["all", r.count ?? 0] as const),

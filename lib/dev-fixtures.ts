@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Row = Record<string, any>;
+import { groupOf } from "./status";
 
 const DAY = 86_400_000;
 let seed = 7;
@@ -139,7 +140,12 @@ class Query {
   private opts: { count?: string; head?: boolean } = {};
   constructor(private table: string) {}
   select(_c?: string, opts?: { count?: string; head?: boolean }) { this.opts = opts ?? {}; return this; }
-  eq(c: string, v: any) { this.filters.push((r) => r[c] === v); return this; }
+  eq(c: string, v: any) {
+    // "pf.product_name": embed de order_items usado para filtrar por producto
+    if (c === "pf.product_name") this.filters.push((r) => (r.order_items ?? []).some((i: any) => i.product_name === v));
+    else this.filters.push((r) => r[c] === v);
+    return this;
+  }
   in(c: string, v: any[]) { this.filters.push((r) => v.includes(r[c])); return this; }
   gte(c: string, v: any) { this.filters.push((r) => r[c] >= v || Date.parse(r[c]) >= Date.parse(v)); return this; }
   lte(c: string, v: any) { this.filters.push((r) => Date.parse(r[c]) <= Date.parse(v)); return this; }
@@ -278,7 +284,25 @@ export function fixtureClient(): any {
       }
       if (name === "order_facets") {
         const a = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account);
-        return { data: { dropshippers: [...new Set(a.map((o) => o.dropshipper))].sort(), carriers: [...new Set(a.map((o) => o.carrier))].sort() }, error: null };
+        const tally = (xs: (string | null | undefined)[]) => {
+          const m = new Map<string, number>();
+          for (const x of xs) if (x) m.set(x, (m.get(x) ?? 0) + 1);
+          return [...m].map(([name, n]) => ({ name, n }));
+        };
+        const statuses = [...new Set(a.map((o) => o.status_code))].map((code) => {
+          const rows = a.filter((o) => o.status_code === code);
+          return { code, label: rows[0].status, group: groupOf(code), n: rows.length };
+        }).sort((x, y) => y.n - x.n);
+        return {
+          data: {
+            dropshippers: [...new Set(a.map((o) => o.dropshipper))].sort(),
+            carriers: [...new Set(a.map((o) => o.carrier))].sort(),
+            statuses,
+            departments: tally(a.map((o) => o.department)).sort((x, y) => x.name.localeCompare(y.name)),
+            products: tally(a.flatMap((o): string[] => [...new Set<string>((o.order_items ?? []).map((i: any) => i.product_name))])).sort((x, y) => y.n - x.n),
+          },
+          error: null,
+        };
       }
       return { data: null, error: { message: `rpc ${name} no simulado` } };
     },
