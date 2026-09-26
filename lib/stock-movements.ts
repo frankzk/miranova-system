@@ -10,6 +10,10 @@ export type NormalizedMovement = {
   units: number | null;
   balance: number | null;
   kind: string | null;
+  /** motivo: ORDER_DISPATCH, ORDER_RETURN, STOCK_REQUEST, RESERVE, RELEASE, MANUAL, INITIAL_STOCK… */
+  reason: string | null;
+  /** variante (talla, color), si el movimiento es de una variante */
+  variant: string | null;
   description: string | null;
   order_number: string | null;
   occurred_at: string | null;
@@ -36,8 +40,9 @@ const F = {
   id: ["_id", "id", "movementId", "uuid"],
   number: ["movementNumber", "number", "consecutive", "sequence", "seq", "folio", "index"],
   units: ["quantity", "units", "qty", "amount", "delta", "change", "stockChange", "quantityChange"],
-  balance: ["balance", "stockAfter", "newStock", "resultingStock", "currentStock", "stock", "totalAfter"],
-  kind: ["type", "movementType", "kind", "operation", "direction", "reason"],
+  balance: ["newQty", "balance", "stockAfter", "newStock", "resultingStock", "currentStock", "stock", "totalAfter"],
+  kind: ["type", "movementType", "kind", "operation", "direction"],
+  reason: ["reason", "motive", "cause"],
   description: ["description", "detail", "details", "note", "notes", "comment", "concept", "reasonDescription"],
   date: ["createdAt", "created_at", "date", "occurredAt", "timestamp", "updatedAt"],
   order: ["orderNumber", "orderId", "order", "reference", "referenceId"],
@@ -104,6 +109,8 @@ export function normalizeMovement(raw: Obj): NormalizedMovement | null {
     units,
     balance: num(pick(raw, F.balance)),
     kind,
+    reason: str(pick(raw, F.reason)),
+    variant: isObj(raw.variant) ? str(pick(raw.variant, ["name", "sku"])) : str(raw.variant),
     description,
     order_number: orderNumberFrom(description) ?? orderStr,
     occurred_at: date,

@@ -2,6 +2,7 @@
 // para el equipo ("a quién contactar hoy y qué proponerle"). Puro, para poder probarlo.
 
 import type { CrossSellItem } from "./cross-sell.ts";
+import type { InventoryAlert } from "./inventory.ts";
 import type { ProductOpportunity } from "./product-insights.ts";
 import { opportunities, type OpportunityKind, type StoreRow } from "./stores.ts";
 
@@ -11,7 +12,7 @@ export const OPP_GROUPS: Record<OppGroup, { label: string; hint: string }> = {
   contact: { label: "Contactar hoy", hint: "Se frenaron o están cayendo" },
   grow: { label: "Hacer crecer", hint: "Crecen fuerte, dependen de un producto, venden uno solo o pueden probar otro" },
   ticket: { label: "Ticket y unidades", hint: "Pueden vender más por pedido con bundles y ofertas 2x/3x" },
-  product: { label: "Productos", hint: "Productos en racha o con potencial de expansión para la comunidad, y los que no se mueven" },
+  product: { label: "Productos", hint: "Agotados o por agotarse, en racha, con potencial de expansión, y los que no se mueven" },
 };
 
 export type OppItem = {
@@ -187,6 +188,28 @@ export function withCrossSell(items: OppItem[], cross: CrossSellItem[], accountN
     });
   }
   return out;
+}
+
+const INVENTORY_KIND: Record<InventoryAlert["kind"], { priority: 1 | 2 | 3; tone: OppItem["tone"] }> = {
+  stockout: { priority: 1, tone: "danger" },
+  low_stock: { priority: 2, tone: "warning" },
+  returns: { priority: 3, tone: "warning" },
+};
+
+/** Inventario: agotados con demanda (hoy), por agotarse (esta semana) y devoluciones altas. */
+export function inventoryItems(alerts: InventoryAlert[], accountName: (id: string) => string): OppItem[] {
+  return alerts.map((a) => ({
+    id: `${a.kind}:${a.account_id}:${a.product_key}`,
+    group: "product" as const,
+    kind: a.kind,
+    priority: INVENTORY_KIND[a.kind].priority,
+    weight: a.priority,
+    subject: { type: "product" as const, name: a.product_name, account_id: a.account_id, account_name: accountName(a.account_id), product_key: a.product_key },
+    title: a.title,
+    action: a.action,
+    meta: a.detail,
+    tone: INVENTORY_KIND[a.kind].tone,
+  }));
 }
 
 /** Orden de la lista: prioridad y, dentro de ella, lo que más pedidos mueve. */

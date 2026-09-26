@@ -28,3 +28,11 @@ test("cantidad sin signo en una salida se guarda negativa; sin ID usa el número
   assert.equal(orderNumberFrom("Salida por orden 1789318146819"), "1789318146819");
   assert.deepEqual(extractMovements({ nada: true }), []);
 });
+
+test("forma real de Drop: stockMovements.data con type IN/OUT, reason, newQty y order.number", () => {
+  const [m] = extractMovements({ status: "success", stockMovements: { data: [{
+    id: "6ab7", scope: "GENERAL", type: "OUT", reason: "ORDER_DISPATCH", quantity: 2, previousQty: 270, newQty: 268, description: null,
+    product: { id: "p", name: "Pulsera" }, variant: { id: "v", name: "TALLA XL" }, order: { id: "o", number: "1790387207481" }, createdAt: "2026-09-26T14:57:48.097Z",
+  }], total: 1, page: 1, limit: 100 } });
+  assert.deepEqual([m.units, m.balance, m.kind, m.reason, m.variant, m.order_number], [-2, 268, "OUT", "ORDER_DISPATCH", "TALLA XL", "1790387207481"]);
+});
