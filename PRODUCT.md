@@ -49,12 +49,12 @@ La web de Drop muestra una cuenta y un país a la vez. Este panel junta todas la
 ## Brand Commitments
 
 - Nombre: **Miranova** · lema "Proveeduría para eCommerce".
-- Logo: monograma M dorado (postes + V) con globo y órbita con flecha ascendente; texto MIRA en dorado y NOVA en plateado (tinta azul marino sobre fondo claro); A sin barra.
+- Identidad en el panel: "M" en recuadro azul marino + "Miranova". Favicon: "M" blanca sobre verde oscuro medio (#1F5E45). El usuario descartó una recreación vectorial del logo del flyer.
 - El usuario pidió un estilo tipo **Stripe** (dashboard sobrio, preciso y de alta calidad), o una referencia mejor si existe.
 
 ## Evidence on Hand
 
-Datos reales de órdenes y productos sincronizados de las cuentas Drop. Logo: recreación vectorial (components/logo.tsx, app/icon.svg) hecha a partir de un flyer de 150 px del usuario; debe reemplazarse por el archivo original de la marca cuando esté disponible.
+Datos reales de órdenes y productos sincronizados de las cuentas Drop. No hay archivo de logo original en el repositorio: el panel usa una "M" tipográfica (no inventar otro logo).
 
 ## Product Principles
 

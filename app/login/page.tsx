@@ -1,5 +1,4 @@
 import { IconAlert } from "@/components/icons";
-import { LogoHorizontal } from "@/components/logo";
 
 export const metadata = { title: "Entrar" };
 
@@ -9,7 +8,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="auth">
       <div className="auth-card">
         <div className="brand">
-          <LogoHorizontal height={52} tone="light" tagline />
+          <span className="brand-mark" aria-hidden>M</span>
+          <span className="brand-name">Miranova</span>
         </div>
         <h1>Entrar al panel</h1>
         <p>Órdenes, despachos y dinero de todas tus cuentas.</p>
