@@ -8,7 +8,7 @@ import { PageHead } from "@/components/ui";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { storeDetail } from "@/lib/store-detail";
 import { fmtDay, pctChange, vsAverage, type StoreDetail } from "@/lib/store-metrics";
-import { classify, HEALTH, type StoreRow } from "@/lib/stores";
+import { classify, HEALTH, opportunities, type StoreRow } from "@/lib/stores";
 import { addFollowup, updateFollowup } from "./actions";
 import "./store-detail.css";
 
@@ -44,7 +44,10 @@ export default async function StorePage({ params }: { params: Params }) {
 
   const { store: s, kpis: k, benchmark: b } = d;
   const money = (n: number | null | undefined) => fmtMoney(n, s.currency);
-  const health = classify(asRow(d));
+  const row = asRow(d);
+  const health = classify(row);
+  // mismas alertas que en Oportunidades; el ticket se compara con el promedio de las tiendas de la cuenta
+  const ops = opportunities(row, d.benchmark?.ticket ?? null, (n) => fmtMoney(n, s.currency, { compact: true }));
   const perDay = k.d7 / 7;
   const change = pctChange(k.d7, k.prev7);
   const top = d.products[0];
@@ -64,6 +67,20 @@ export default async function StorePage({ params }: { params: Params }) {
         }
         actions={<Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>}
       />
+
+      {ops.length > 0 && (
+        <section className="panel sd-ops" aria-labelledby="sd-ops-title">
+          <div className="panel-head"><h2 id="sd-ops-title">Qué hacer con esta tienda</h2><span className="aside">{ops.length} {ops.length === 1 ? "oportunidad" : "oportunidades"}</span></div>
+          <ul className="sd-ops-list panel-flush">
+            {ops.map((o) => (
+              <li key={o.kind} data-priority={o.priority}>
+                <span className="t">{o.text}</span>
+                <span className="a"><b>Acción:</b> {o.action}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <h2 className="sd-title">Ventas</h2>
       <section className="metrics" aria-label="Ventas">
@@ -189,12 +206,13 @@ export default async function StorePage({ params }: { params: Params }) {
 }
 
 /** Adapta la ficha a una fila de Salud de tiendas para usar el mismo semáforo. */
-function asRow({ store: s, kpis: k, daily }: StoreDetail): StoreRow {
+function asRow({ store: s, kpis: k, daily, products }: StoreDetail): StoreRow {
   return {
     account_id: s.account_id, store_id: s.store_id, account_name: s.account_name, currency: s.currency, name: s.name,
     today: k.today, d7: k.d7, prev7: k.prev7, active7: k.active7, active_prev7: k.active_prev7, last_at: k.last_at,
     days_since: k.days_since, n30: k.n30, ticket: k.ticket, vendor_per_order: k.vendor_per_order, units_per_order: k.units_per_order,
     delivered30: k.delivered30, failed30: k.failed30, daily: daily.slice(-14).map((x) => x.orders),
+    sales30: k.sales30, skus30: products.length, top_product: products[0]?.name ?? null, top_share: products[0]?.share ?? null,
   };
 }
 
