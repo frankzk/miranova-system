@@ -106,6 +106,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                         <span>Nueva contraseña</span>
                         <input className="input" name="password" type="password" autoComplete="new-password" placeholder="Sin cambios" />
                       </label>
+                      <label className="field">
+                        <span>
+                          Clave 2FA{" "}
+                          <span className="hint">{a.has_totp ? "Guardada. Pega otra para reemplazarla." : "Solo si la plataforma pide código de dos pasos."}</span>
+                        </span>
+                        <input className="input" name="totp" type="password" autoComplete="off" placeholder={a.has_totp ? "Sin cambios" : "Clave secreta (junto al QR)"} />
+                      </label>
+                      {a.has_totp && (
+                        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <input type="checkbox" name="clear_totp" /> <span>Quitar clave 2FA</span>
+                        </label>
+                      )}
                       <SubmitButton pending="Conectando…">Guardar acceso</SubmitButton>
                     </form>
 
@@ -185,9 +197,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <span>Contraseña de la plataforma</span>
               <input className="input" name="password" type="password" required autoComplete="new-password" />
             </label>
+            <label className="field full">
+              <span>
+                Clave 2FA{" "}
+                <span className="hint">
+                  Opcional. Si la plataforma te pide un código de 6 dígitos al entrar, pega aquí la clave secreta que aparece junto
+                  al QR al activar la verificación en dos pasos (no el código de 6 dígitos).
+                </span>
+              </span>
+              <input className="input" name="totp" type="password" autoComplete="off" placeholder="Ej. JBSW Y3DP EHPK 3PXP…" />
+            </label>
           </div>
           <div className="form-actions">
-            <p>La contraseña se guarda cifrada (AES-256) y solo el servidor la usa para iniciar sesión. La primera sincronización puede tardar hasta un minuto.</p>
+            <p>La contraseña y la clave 2FA se guardan cifradas (AES-256) y solo el servidor la usa para iniciar sesión. La primera sincronización puede tardar hasta un minuto.</p>
             <SubmitButton className="btn btn-primary" pending="Conectando con la plataforma…">Guardar y conectar</SubmitButton>
           </div>
         </form>
