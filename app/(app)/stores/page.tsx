@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
+import { IconChat } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { contactIndex, contactKey } from "@/lib/contacts";
 import { fmtInt, fmtMoney } from "@/lib/format";
 import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
@@ -24,16 +26,23 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const all = await storeHealth(scope.account);
+  const [all, contacts] = await Promise.all([storeHealth(scope.account), contactIndex()]);
+  const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
   const hParam = one(sp, "h");
   const h = hParam && hParam in HEALTH ? (hParam as Health) : undefined;
   const sParam = one(sp, "sort");
   const sort: StoreSort = sParam && sParam in STORE_SORTS ? (sParam as StoreSort) : "d7_desc";
+  // filtro por grupo de WhatsApp registrado (con / sin)
+  const gParam = one(sp, "g");
+  const g = gParam === "con" || gParam === "sin" ? gParam : undefined;
+  const byGroup = (s: StoreRow) => !g || (g === "con") === !!groupOf(s);
+  const withGroup = all.filter((s) => groupOf(s)).length;
 
   const health = new Map(all.map((s) => [s, classify(s)]));
-  const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, all.filter((s) => health.get(s) === k).length]));
-  const rows = sortStores(h ? all.filter((s) => health.get(s) === h) : all, sort);
+  const pool = all.filter(byGroup);
+  const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, pool.filter((s) => health.get(s) === k).length]));
+  const rows = sortStores(all.filter((s) => (!h || health.get(s) === h) && byGroup(s)), sort);
   const typical = typicalTickets(all);
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
   const contact = toContact(all);
@@ -41,7 +50,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { h, sort: sort === "d7_desc" ? undefined : sort, ...patch };
+    const merged = { h, g, sort: sort === "d7_desc" ? undefined : sort, ...patch };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return p.toString();
   };
@@ -70,11 +79,22 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <PageHead
         title="Salud de tiendas"
         sub={<>{fmtInt(all.length)} tiendas con pedidos en 60 días · {scope.label} · ritmo de los últimos 7 días vs. los 7 anteriores</>}
+        actions={
+          <nav className="segmented" aria-label="Grupo de WhatsApp">
+            <Link href={href({ g: undefined })} aria-current={!g}>Todas</Link>
+            <Link href={href({ g: "con" })} aria-current={g === "con"} title="Tiendas con grupo de WhatsApp registrado">
+              Con grupo <span className="c">{fmtInt(withGroup)}</span>
+            </Link>
+            <Link href={href({ g: "sin" })} aria-current={g === "sin"} title="Tiendas sin grupo de WhatsApp registrado">
+              Sin grupo <span className="c">{fmtInt(all.length - withGroup)}</span>
+            </Link>
+          </nav>
+        }
       />
 
       <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 
-      {contact.length > 0 && !h && (
+      {contact.length > 0 && !h && !g && (
         <section className="panel contact-today">
           <div className="panel-head">
             <h2>Contactar hoy</h2>
@@ -103,7 +123,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
       <nav className="tabs" aria-label="Filtrar por estado">
         <Link href={href({ h: undefined })} aria-current={!h}>
-          Todas <span className="c">{fmtInt(all.length)}</span>
+          Todas <span className="c">{fmtInt(pool.length)}</span>
         </Link>
         {HEALTH_ORDER.map((k) => (
           <Link key={k} href={href({ h: k })} aria-current={h === k} title={HEALTH[k].hint}>
@@ -126,6 +146,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 <li key={`${s.account_id}:${s.store_id}`}>
                   <div className="top">
                     <Link className="strong" href={ordersHref(s)}>{s.name}</Link>
+                    <GroupLink url={groupOf(s)} />
                     <HealthPill h={health.get(s)!} />
                   </div>
                   <div className="sub">{lastSale(s)}{showAccount && <> · {s.account_name}</>}</div>
@@ -172,6 +193,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                       <tr key={`${s.account_id}:${s.store_id}`}>
                         <td>
                           <Link className="strong store-name" href={ordersHref(s)}>{s.name}</Link>
+                          <GroupLink url={groupOf(s)} />
                           <div className="sub">
                             {lastSale(s)}
                             {dr !== null && <> · entrega {Math.round(dr * 100)}%</>}
@@ -215,6 +237,16 @@ function lastSale(s: StoreRow) {
   if (d === 0) return "Última venta hoy";
   if (d === 1) return "Última venta ayer";
   return `Sin vender hace ${d} días`;
+}
+
+/** Acceso directo al grupo de WhatsApp de la tienda, si está registrado. */
+function GroupLink({ url }: { url: string | null }) {
+  if (!url) return null;
+  return (
+    <a className="wa-link" href={url} target="_blank" rel="noopener noreferrer" title="Abrir grupo de WhatsApp" aria-label="Abrir grupo de WhatsApp">
+      <IconChat />
+    </a>
+  );
 }
 
 function HealthPill({ h }: { h: Health }) {
