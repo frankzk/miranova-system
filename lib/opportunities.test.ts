@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sortOpportunities, storeOpportunities } from "./opportunities.ts";
+import { allStoreOpportunities, sortOpportunities, stalledAccounts, storeOpportunities } from "./opportunities.ts";
 import type { StoreRow } from "./stores.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
@@ -26,4 +26,18 @@ test("las tiendas que se frenaron van primero, y entre ellas la que más pedidos
     ["Crece", "growth", "grow"],
   ]);
   assert.equal(items[0].meta, "40 pedidos en 7 días (antes 100) · 4/7 días activos");
+});
+
+test("si toda la cuenta dejó de vender, se avisa una vez por la cuenta y no por cada tienda", () => {
+  const rows = [
+    row({ account_id: "sv", account_name: "Drop El Salvador", store_id: "1", name: "A", d7: 0, prev7: 51, active_prev7: 6, days_since: 8 }),
+    row({ account_id: "sv", account_name: "Drop El Salvador", store_id: "2", name: "B", d7: 0, prev7: 27, active_prev7: 5, days_since: 8 }),
+    row({ account_id: "hn", account_name: "Drop Honduras", store_id: "3", name: "C", d7: 4, prev7: 181, active7: 3, active_prev7: 7, days_since: 3 }),
+  ];
+  assert.deepEqual(stalledAccounts(rows).map((a) => [a.account_name, a.prev7, a.stores, a.days]), [["Drop El Salvador", 78, 2, 8]]);
+  const items = sortOpportunities(allStoreOpportunities(rows, {}, () => String));
+  assert.deepEqual(items.map((i) => [i.subject.type, i.subject.name, i.kind]), [
+    ["account", "Drop El Salvador", "account_stalled"],
+    ["store", "C", "silent"],
+  ]);
 });

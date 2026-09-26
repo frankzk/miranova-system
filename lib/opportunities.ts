@@ -21,7 +21,7 @@ export type OppItem = {
   priority: 1 | 2 | 3;
   /** peso para ordenar dentro de la misma prioridad (p. ej. pedidos en juego) */
   weight: number;
-  subject: { type: "store" | "product"; name: string; account_id: string; account_name: string; store_id?: string; product_key?: string };
+  subject: { type: "store" | "product" | "account"; name: string; account_id: string; account_name: string; store_id?: string; product_key?: string };
   title: string;
   action: string;
   /** dato de contexto corto: "49 pedidos en 7 días · 5/7 días activos" */
@@ -80,6 +80,52 @@ export function storeOpportunities(
     }
   }
   return out;
+}
+
+/**
+ * Cuentas que se quedaron sin pedidos: si ninguna tienda de la cuenta vendió en 7 días y antes sí
+ * vendían, el problema es de la cuenta (operación pausada, sincronización), no de cada tienda.
+ */
+export function stalledAccounts(rows: StoreRow[], min = 10): { account_id: string; account_name: string; prev7: number; stores: number; days: number | null }[] {
+  const by = new Map<string, StoreRow[]>();
+  for (const s of rows) by.set(s.account_id, [...(by.get(s.account_id) ?? []), s]);
+  return [...by.values()]
+    .map((xs) => ({
+      account_id: xs[0].account_id,
+      account_name: xs[0].account_name,
+      d7: xs.reduce((t, s) => t + s.d7, 0),
+      prev7: xs.reduce((t, s) => t + s.prev7, 0),
+      stores: xs.filter((s) => s.prev7 > 0).length,
+      days: Math.min(...xs.map((s) => s.days_since ?? Infinity)),
+    }))
+    .filter((a) => a.d7 === 0 && a.prev7 >= min)
+    .map(({ d7: _d7, days, ...a }) => ({ ...a, days: Number.isFinite(days) ? days : null }));
+}
+
+/** Tiendas + cuentas detenidas (que reemplazan las alertas de "se frenó" de sus tiendas). */
+export function allStoreOpportunities(
+  rows: StoreRow[],
+  typical: Record<string, number | null>,
+  fmt: (s: StoreRow) => (n: number) => string,
+): OppItem[] {
+  const stalled = stalledAccounts(rows);
+  const quiet = new Set(stalled.map((a) => a.account_id));
+  const items = storeOpportunities(rows, typical, fmt).filter((i) => !(quiet.has(i.subject.account_id) && i.group === "contact"));
+  for (const a of stalled) {
+    items.push({
+      id: `account:${a.account_id}`,
+      group: "contact",
+      kind: "account_stalled",
+      priority: 1,
+      weight: a.prev7 + 1_000_000, // antes que cualquier tienda
+      subject: { type: "account", name: a.account_name, account_id: a.account_id, account_name: a.account_name },
+      title: `Ninguna tienda vendió en 7 días${a.days !== null ? ` (último pedido hace ${a.days} días)` : ""}`,
+      action: "revisar si la operación está pausada o si la cuenta dejó de recibir pedidos",
+      meta: `${a.prev7} pedidos la semana anterior · ${a.stores} tiendas vendían`,
+      tone: "danger",
+    });
+  }
+  return items;
 }
 
 /** Orden de la lista: prioridad y, dentro de ella, lo que más pedidos mueve. */

@@ -21,6 +21,8 @@
 .opp .do { font-size: var(--t-sm); color: var(--ink-2); }
 .opp .do b { font-weight: 600; color: var(--ink); }
 .opp .meta { font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.opp .follow { font-size: var(--t-xs); color: var(--accent-ink); font-weight: 550; }
+.opp-follow { margin-bottom: 18px; }
 .opp .side { display: flex; align-items: flex-start; gap: 8px; }
 .opp .go { color: var(--ink-4); margin-top: 3px; }
 .opp > a:hover .go { color: var(--ink-2); }

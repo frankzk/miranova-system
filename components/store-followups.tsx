@@ -24,7 +24,7 @@ export async function StoreFollowups({ accountId, storeId, storeName, currency, 
   const open = items.filter((f) => OPEN_STATUSES.includes(f.status));
 
   return (
-    <section className="panel store-followups" aria-labelledby="fu-title">
+    <section id="seguimiento" className="panel store-followups" aria-labelledby="fu-title">
       <div className="panel-head">
         <h2 id="fu-title">Seguimiento Miranova</h2>
         <span className="aside">
