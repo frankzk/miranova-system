@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useId } from "react";
+import { useActionState, useEffect, useId } from "react";
+import { useSheet } from "./side-sheet";
 import { SubmitButton } from "./submit-button";
 import { FOLLOWUP_STATUS, type FollowupStatus } from "@/lib/store-metrics";
 
@@ -20,6 +21,11 @@ export function FollowupForm({
 }: { action: Action; accountId: string; storeId: string; storeName: string; today: string; owners: string[] }) {
   const [state, run] = useActionState(action, null);
   const list = useId();
+  // dentro del panel lateral: al guardar se cierra y el registro aparece en el historial
+  const sheet = useSheet();
+  useEffect(() => {
+    if (state?.ok) sheet?.close();
+  }, [state, sheet]);
   return (
     <form action={run} className="fu-form">
       <input type="hidden" name="account_id" value={accountId} />

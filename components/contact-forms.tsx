@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { SubmitButton } from "./submit-button";
+import { formatPhone } from "@/lib/store-contacts";
 
 export type ContactState = { ok: boolean; msg: string } | null;
 type Action = (prev: ContactState, form: FormData) => Promise<ContactState>;
@@ -42,7 +43,7 @@ export function ContactForm({
       <div className="ct-row">
         <label className="field">
           <span>Teléfono del dueño</span>
-          <input className="input" name="phone" type="tel" inputMode="tel" defaultValue={defaults.phone ? `+${defaults.phone}` : ""} placeholder="+504 9999 8888" autoComplete="off" />
+          <input className="input" name="phone" type="tel" inputMode="tel" defaultValue={defaults.phone ? formatPhone(defaults.phone) : ""} placeholder="+504 9999 8888" autoComplete="off" />
         </label>
         <label className="field">
           <span>Responsable</span>
