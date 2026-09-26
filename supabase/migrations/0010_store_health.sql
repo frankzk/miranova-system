@@ -5,6 +5,7 @@
 --   active7: días calendario (zona horaria de cada cuenta) con al menos una orden, de hoy hacia 6 días atrás
 --   30 días: ticket promedio, unidades por orden, lo que te toca por orden y tasa de entrega
 --   daily: órdenes por día de los últimos 14 días (para la mini gráfica)
+--   skus30 / top_product / top_share: productos distintos en 30 días y el que más pedidos le trae (fracción de sus pedidos)
 create or replace function public.store_health(p_account uuid)
 returns jsonb language sql stable as $$
   with base as (
@@ -26,6 +27,18 @@ returns jsonb language sql stable as $$
   ),
   daily as (
     select account_id, store_id, d, count(*) n from base where d > today - 14 group by 1, 2, 3
+  ),
+  prod as (
+    select b.account_id, b.store_id, coalesce(i.product_external_id, 'name:' || i.product_name) as pk,
+      (array_agg(i.product_name order by b.ordered_at desc))[1] as pname, count(distinct b.id) as n
+    from base b join public.order_items i on i.order_id = b.id
+    where b.ordered_at >= now() - interval '30 days'
+    group by 1, 2, 3
+  ),
+  top as (
+    select distinct on (account_id, store_id) account_id, store_id, pname, n,
+      count(*) over (partition by account_id, store_id) as skus
+    from prod order by account_id, store_id, n desc, pname
   )
   select coalesce(jsonb_agg(row_to_json(s) order by s.d7 desc, s.n30 desc), '[]'::jsonb) from (
     select b.account_id, b.store_id, max(b.account_name) account_name, max(b.currency) currency,
@@ -43,10 +56,15 @@ returns jsonb language sql stable as $$
       round(avg(u.u), 2) units_per_order,
       count(*) filter (where b.g = 'delivered' and b.ordered_at >= now() - interval '30 days') delivered30,
       count(*) filter (where b.g = 'failed' and b.ordered_at >= now() - interval '30 days') failed30,
+      round(sum(b.total) filter (where b.ordered_at >= now() - interval '30 days'), 2) sales30,
+      coalesce(max(tp.skus), 0) skus30,
+      max(tp.pname) top_product,
+      round(max(tp.n)::numeric / nullif(count(*) filter (where b.ordered_at >= now() - interval '30 days'), 0), 3) top_share,
       (select jsonb_agg(coalesce(dl.n, 0) order by gs)
          from generate_series(b.today - 13, b.today, interval '1 day') gs
          left join daily dl on dl.account_id = b.account_id and dl.store_id = b.store_id and dl.d = gs::date) daily
     from base b left join units u on u.order_id = b.id
+      left join top tp on tp.account_id = b.account_id and tp.store_id = b.store_id
     group by b.account_id, b.store_id, b.today
   ) s
 $$;

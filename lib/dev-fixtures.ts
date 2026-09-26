@@ -4,6 +4,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Row = Record<string, any>;
+
+import { MODULES } from "./fixtures";
+import type { FixtureCtx } from "./fixtures/types";
 import { groupOf } from "./status";
 
 const DAY = 86_400_000;
@@ -147,6 +150,11 @@ class Query {
     return this;
   }
   in(c: string, v: any[]) { this.filters.push((r) => v.includes(r[c])); return this; }
+  neq(c: string, v: any) { this.filters.push((r) => r[c] !== v); return this; }
+  is(c: string, v: any) { this.filters.push((r) => (r[c] ?? null) === v); return this; }
+  lt(c: string, v: any) { this.filters.push((r) => r[c] < v); return this; }
+  gt(c: string, v: any) { this.filters.push((r) => r[c] > v); return this; }
+  ilike(c: string, v: string) { this.filters.push((r) => String(r[c] ?? "").toLowerCase().includes(v.replace(/[%*]/g, "").toLowerCase())); return this; }
   gte(c: string, v: any) { this.filters.push((r) => r[c] >= v || Date.parse(r[c]) >= Date.parse(v)); return this; }
   lte(c: string, v: any) { this.filters.push((r) => Date.parse(r[c]) <= Date.parse(v)); return this; }
   or(expr: string) {
@@ -167,12 +175,27 @@ class Query {
   limit(n: number) { this.to = this.from + n - 1; return this; }
   maybeSingle() { this.one = "maybe"; return this; }
   single() { this.one = "single"; return this; }
-  update() { return this; }
-  insert() { return this; }
-  upsert() { return this; }
-  delete() { return this; }
+  private write: { op: "insert" | "update" | "delete"; rows?: Row[]; patch?: Row } | null = null;
+  update(patch?: Row) { this.write = { op: "update", patch }; return this; }
+  insert(rows?: Row | Row[]) { this.write = { op: "insert", rows: rows ? (Array.isArray(rows) ? rows : [rows]) : [] }; return this; }
+  upsert(rows?: Row | Row[]) { return this.insert(rows); }
+  delete() { this.write = { op: "delete" }; return this; }
   private run() {
-    const src = this.table === "orders" ? ORDERS : this.table === "accounts" ? ACCOUNTS : this.table === "products" ? CATALOG : [];
+    const extra = EXTRA_TABLES[this.table];
+    if (extra && this.write) {
+      // escrituras solo en tablas en memoria de los módulos; las demás se ignoran como antes
+      const now = new Date().toISOString();
+      if (this.write.op === "insert") {
+        const added = (this.write.rows ?? []).map((r) => ({ id: crypto.randomUUID(), created_at: now, updated_at: now, ...r }));
+        extra.push(...added);
+        return { data: this.one ? added[0] ?? null : added, error: null, count: added.length };
+      }
+      const hit = extra.filter((r) => this.filters.every((f) => f(r)));
+      if (this.write.op === "update") for (const r of hit) Object.assign(r, this.write.patch, { updated_at: now });
+      else for (const r of hit) extra.splice(extra.indexOf(r), 1);
+      return { data: this.one ? hit[0] ?? null : hit, error: null, count: hit.length };
+    }
+    const src = extra ?? (this.table === "orders" ? ORDERS : this.table === "accounts" ? ACCOUNTS : this.table === "products" ? CATALOG : []);
     let rows = src.filter((r) => this.filters.every((f) => f(r)));
     for (const s of [...this.sorts].reverse()) {
       rows = [...rows].sort((a, b) => (a[s.col] > b[s.col] ? 1 : a[s.col] < b[s.col] ? -1 : 0) * (s.asc ? 1 : -1));
@@ -256,6 +279,16 @@ function months(args: Row) {
   }).sort((a, b) => (a.month < b.month ? 1 : -1));
 }
 
+const CTX: FixtureCtx = {
+  ORDERS, ACCOUNTS, CATALOG, DAY, groupOf,
+  storeId: (o) => `name:${o.dropshipper}`,
+  productKey: (i) => `name:${i.product_name}`,
+  localDay: (iso, tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(iso)),
+};
+
+/** Tablas en memoria que aportan los módulos de lib/fixtures (p. ej. store_followups). */
+const EXTRA_TABLES: Record<string, Row[]> = Object.assign({}, ...MODULES.map((m) => m.tables ?? {}));
+
 export function fixtureClient(): any {
   return {
     from: (t: string) => new Query(t),
@@ -269,85 +302,6 @@ export function fixtureClient(): any {
           out[k] = { units: (out[k]?.units ?? 0) + it.quantity, orders: (out[k]?.orders ?? 0) + 1 };
         }
         return { data: out, error: null };
-      }
-      if (name === "store_health") {
-        const now = Date.now();
-        const dayOf = (iso: string, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(iso));
-        const groups = new Map<string, Row[]>();
-        for (const o of ORDERS) {
-          if (args.p_account && o.account_id !== args.p_account) continue;
-          if (!o.dropshipper || groupOf(o.status_code) === "cancelled" || now - Date.parse(o.ordered_at) > 60 * DAY) continue;
-          const k = `${o.account_id}|${o.dropshipper}`;
-          groups.set(k, [...(groups.get(k) ?? []), o]);
-        }
-        const out = [...groups.values()].map((rows) => {
-          const acc = ACCOUNTS.find((a) => a.id === rows[0].account_id)!;
-          const tz = acc.timezone;
-          const today = dayOf(new Date().toISOString(), tz);
-          const dayN = (iso: string) => Math.round((Date.parse(today) - Date.parse(dayOf(iso, tz))) / DAY); // 0 = hoy
-          const age = (o: Row) => now - Date.parse(o.ordered_at);
-          const r30 = rows.filter((o) => age(o) <= 30 * DAY);
-          const avg = (xs: number[]) => (xs.length ? +(xs.reduce((t, x) => t + x, 0) / xs.length).toFixed(2) : null);
-          const daily = Array.from({ length: 14 }, (_, i) => rows.filter((o) => dayN(o.ordered_at) === 13 - i).length);
-          const since = Math.min(...rows.map((o) => dayN(o.ordered_at)));
-          return {
-            account_id: acc.id, store_id: `name:${rows[0].dropshipper}`, account_name: acc.name, currency: acc.currency, name: rows[0].dropshipper,
-            today: rows.filter((o) => dayN(o.ordered_at) === 0).length,
-            d7: rows.filter((o) => age(o) <= 7 * DAY).length,
-            prev7: rows.filter((o) => age(o) > 7 * DAY && age(o) <= 14 * DAY).length,
-            active7: new Set(rows.filter((o) => dayN(o.ordered_at) < 7).map((o) => dayN(o.ordered_at))).size,
-            active_prev7: new Set(rows.filter((o) => dayN(o.ordered_at) >= 7 && dayN(o.ordered_at) < 14).map((o) => dayN(o.ordered_at))).size,
-            last_at: rows.map((o) => o.ordered_at).sort().pop(), days_since: since,
-            n30: r30.length, ticket: avg(r30.map((o) => o.total)), vendor_per_order: avg(r30.map((o) => o.vendor_amount)),
-            units_per_order: avg(r30.map((o) => (o.order_items ?? []).reduce((t: number, i: any) => t + i.quantity, 0))),
-            delivered30: r30.filter((o) => groupOf(o.status_code) === "delivered").length,
-            failed30: r30.filter((o) => groupOf(o.status_code) === "failed").length,
-            daily,
-          };
-        });
-        return { data: out.sort((a, b) => b.d7 - a.d7), error: null };
-      }
-      if (name === "business_overview") {
-        const [hn, gt] = ACCOUNTS;
-        const acc = ACCOUNTS.filter((a) => !args.p_account || a.id === args.p_account);
-        const inCountry = (c: string) => !args.p_country || args.p_country === c;
-        const countries = acc.map((a, i) => ({
-          account_id: a.id, account: a.name, country: a.country, currency: a.currency,
-          orders: i === 0 ? 412 : 96, prev_orders: i === 0 ? 318 : 131, received: i === 0 ? 430 : 101,
-          cancelled: i === 0 ? 18 : 5, delivered: i === 0 ? 240 : 70, failed: i === 0 ? 52 : 9,
-          net_usd: i === 0 ? 5120.4 : 980.1, prev_net_usd: i === 0 ? 4210.9 : 1302.5, stores: i === 0 ? 6 : 3,
-        }));
-        const store = (name: string, country: string, cur: number, prev: number, flow: string) => ({ account: country === "HN" ? hn.name : gt.name, country, name, cur, prev, flow });
-        const top = [
-          store(SELLERS[0], "HN", 160, 120, "growing"), store(SELLERS[1], "HN", 120, 110, "steady"), store(SELLERS[2], "HN", 60, 20, "growing"),
-          store("Vital Market", "GT", 58, 96, "falling"), store(SELLERS[3], "HN", 40, 0, "new"), store(SELLERS[4], "HN", 32, 30, "steady"),
-        ].filter((x) => inCountry(x.country));
-        const losing = [store("Vital Market", "GT", 58, 96, "falling"), store(SELLERS[5], "HN", 0, 22, "lost")].filter((x) => inCountry(x.country));
-        const product = (i: number, country: string, units: number, prev: number, delivered: number, failed: number) => ({
-          account: country === "HN" ? hn.name : gt.name, country, name: PRODUCTS[i][0], units, prev_units: prev, stores: 1 + (i % 4), delivered, failed, vendor_usd: units * 9.5,
-        });
-        const products = [
-          product(0, "HN", 220, 150, 120, 30), product(1, "HN", 90, 110, 50, 9), product(1, "GT", 30, 12, 20, 2),
-          product(3, "HN", 44, 16, 22, 8), product(5, "HN", 12, 30, 8, 3), product(4, "GT", 0, 25, 0, 0),
-        ].filter((x) => inCountry(x.country));
-        const carriers = [
-          { name: "Forza", account: hn.name, country: "HN", orders: 320, delivered: 190, failed: 40, h_to_dispatch: 9.4, d_to_deliver: 1.9, d_to_deliver_p90: 6.5 },
-          { name: "Cargo Expreso", account: hn.name, country: "HN", orders: 92, delivered: 50, failed: 12, h_to_dispatch: 3.1, d_to_deliver: 1.7, d_to_deliver_p90: 5.0 },
-          { name: "Forza", account: gt.name, country: "GT", orders: 96, delivered: 70, failed: 9, h_to_dispatch: 12.0, d_to_deliver: 0.9, d_to_deliver_p90: 3.0 },
-        ].filter((x) => inCountry(x.country));
-        const departments = [
-          { name: "Lempira", account: hn.name, country: "HN", closed: 37, failed: 12, rate: 0.676 },
-          { name: "Santa Bárbara", account: hn.name, country: "HN", closed: 101, failed: 27, rate: 0.733 },
-        ].filter((x) => inCountry(x.country));
-        const total = top.reduce((t, x) => t + x.cur, 0);
-        return {
-          data: {
-            days: args.p_days, country: args.p_country, countries,
-            stores: { active: top.length, new: 1, lost: 1, recovered: 0, growing: 2, falling: 1, total, top, losing },
-            products, carriers, departments,
-          },
-          error: null,
-        };
       }
       if (name === "owner_alerts") {
         const hn = ACCOUNTS[0];
@@ -382,6 +336,10 @@ export function fixtureClient(): any {
           },
           error: null,
         };
+      }
+      for (const m of MODULES) {
+        const h = m.rpc?.[name];
+        if (h) return { data: h(args, CTX), error: null };
       }
       return { data: null, error: { message: `rpc ${name} no simulado` } };
     },
