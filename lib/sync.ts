@@ -1,8 +1,9 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Session } from "./connectors";
-import { SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE } from "./connectors/soydrop";
+import { SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { extractProducts } from "./products";
+import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
@@ -17,6 +18,8 @@ const MAX_PAGES_PER_WINDOW = 60;
 const MAX_PRODUCT_PAGES = 50;
 const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
 const GEO_MAX_AGE_MS = 7 * DAY;
+const MOVEMENT_PRODUCTS_PER_SYNC = 20; // productos por sincronización (los revisados hace más tiempo primero)
+const MAX_MOVEMENT_PAGES = 20;
 const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ventana reciente
 const OPEN_REFRESH_MAX_DAYS = 120;
 
@@ -201,6 +204,21 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
       }
     }
 
+    // 3c. movimientos de inventario: unos cuantos productos por vez para no cargar la plataforma;
+    // de cada uno se bajan solo los movimientos nuevos (vienen del más reciente al más antiguo)
+    let movesNote = "";
+    if (c.fetchStockMovements && Date.now() < deadline - 60_000) {
+      try {
+        const added = await syncStockMovements(acc, (fn) => withSession(fn), c.fetchStockMovements.bind(c), deadline - 45_000);
+        if (added > 0) movesNote = ` · ${added} movimientos de inventario`;
+      } catch (e) {
+        if (e instanceof SessionExpired) throw e;
+        const fresh = (await getAccount(acc.id))!;
+        await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), stock_movements_error: e instanceof Error ? e.message : String(e) } });
+      }
+    }
+    productsNote += movesNote;
+
     // 4. historial, hacia atrás por meses, retomando donde quedó la vez anterior
     let cursor = acc.backfill_cursor ? new Date(acc.backfill_cursor) : null;
     let emptyWindows = 0;
@@ -237,4 +255,55 @@ export async function syncAll(): Promise<Record<string, SyncResult>> {
     out[a.name] = await syncAccount(a.id, deadline);
   }
   return out;
+}
+
+/** Movimientos de inventario de los productos revisados hace más tiempo. Devuelve cuántos movimientos nuevos guardó. */
+async function syncStockMovements(
+  acc: Account,
+  withSession: <T>(fn: (s: Session) => Promise<T>) => Promise<T>,
+  fetchPage: (s: Session, productId: string, page: number) => Promise<{ payload: unknown }>,
+  deadline: number,
+): Promise<number> {
+  const { data: products, error } = await db()
+    .from("products")
+    .select("external_id")
+    .eq("account_id", acc.id)
+    .order("movements_sync_at", { ascending: true, nullsFirst: true })
+    .limit(MOVEMENT_PRODUCTS_PER_SYNC);
+  if (error) throw error;
+
+  let added = 0;
+  let sampled = Boolean(acc.debug?.stock_movements_sample);
+  for (const { external_id: productId } of products ?? []) {
+    if (Date.now() > deadline) break;
+    const { data: known } = await db()
+      .from("stock_movements")
+      .select("external_id")
+      .eq("account_id", acc.id)
+      .eq("product_external_id", productId);
+    const seen = new Set((known ?? []).map((r: { external_id: string }) => r.external_id));
+
+    for (let page = 1; page <= MAX_MOVEMENT_PAGES && Date.now() < deadline; page++) {
+      const { payload } = await withSession((s) => fetchPage(s, productId, page));
+      if (!sampled) {
+        // muestra de la respuesta real, para revisar el mapeo de campos
+        const fresh = (await getAccount(acc.id))!;
+        await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), stock_movements_sample: JSON.stringify(payload).slice(0, 4000) } });
+        sampled = true;
+      }
+      const list = extractMovements(payload);
+      const fresh = list.filter((m) => !seen.has(m.external_id));
+      if (fresh.length) {
+        const rows = fresh.map((m) => ({ ...m, account_id: acc.id, product_external_id: productId }));
+        const { error: e } = await db().from("stock_movements").upsert(rows, { onConflict: "account_id,product_external_id,external_id", ignoreDuplicates: true });
+        if (e) throw e;
+        added += fresh.length;
+        for (const m of fresh) seen.add(m.external_id);
+      }
+      // se detiene al llegar a movimientos ya guardados o a la última página
+      if (fresh.length < list.length || list.length < STOCK_MOVEMENTS_PAGE_SIZE) break;
+    }
+    await db().from("products").update({ movements_sync_at: new Date().toISOString() }).eq("account_id", acc.id).eq("external_id", productId);
+  }
+  return added;
 }

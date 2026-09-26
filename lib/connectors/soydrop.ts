@@ -200,6 +200,16 @@ export const soydrop: Connector = {
     return { url, payload: json };
   },
 
+  // Movimientos de inventario de un producto: los mismos que muestra "Gestionar inventario".
+  async fetchStockMovements(session, productId, page) {
+    const url = `${API}/products/${encodeURIComponent(productId)}/stock-movements?page=${page}&limit=${STOCK_MOVEMENTS_PAGE_SIZE}`;
+    const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
+    if (res.status === 401 || res.status === 403) throw new SessionExpired();
+    const { json, text } = await readJson(res);
+    if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
+    return { url, payload: json };
+  },
+
   // La web de Drop carga "states-cities/" para traducir cityId/stateId a nombres.
   async fetchGeo(session) {
     const countryId = jwtClaim(session.token, "countryId");
@@ -253,3 +263,4 @@ function collectNames(node: unknown, out: Record<string, string> = {}, depth = 0
 
 export const SOYDROP_PAGE_SIZE = PAGE_SIZE;
 export const SOYDROP_PRODUCTS_PAGE_SIZE = PRODUCTS_PAGE_SIZE;
+export const STOCK_MOVEMENTS_PAGE_SIZE = 100;
