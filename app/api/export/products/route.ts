@@ -18,12 +18,12 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
   const rows = q ? products.filter((p) => [p.name, p.sku, p.code].some((v) => v?.toLowerCase().includes(q))) : products;
 
-  const header = ["Cuenta", "Código", "Producto", "SKU", "Estado", "Precio", "Precio sugerido", "Inventario", "Vendido 30 días", "Moneda", "Creado"];
+  const header = ["Cuenta", "Código", "Producto", "SKU", "Estado", "Precio", "Precio sugerido", "Inventario", "Variantes", "Vendido 30 días", "Moneda", "Creado"];
   const lines = [header.map(esc).join(",")];
   for (const p of rows) {
-    const sold = sales[p.sku ?? ""] ?? sales[p.name];
+    const sold = sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
     lines.push(
-      [p.accounts?.name, p.code, p.name, p.sku, p.status, p.price, p.suggested_price, p.stock, sold?.units ?? 0, p.currency, p.created_at_platform?.slice(0, 10)]
+      [p.accounts?.name, p.code, p.name, p.sku, p.status, p.price, p.suggested_price, p.stock, p.variants_count, sold?.units ?? 0, p.currency, p.created_at_platform?.slice(0, 10)]
         .map(esc)
         .join(","),
     );

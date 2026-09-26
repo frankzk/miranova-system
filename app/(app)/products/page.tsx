@@ -43,7 +43,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const rows = searched.filter((p) => matches(p, f));
   const counts = Object.fromEntries(FILTERS.map((x) => [x.id, searched.filter((p) => matches(p, x.id)).length]));
 
-  const soldOf = (p: Product) => sales[p.sku ?? ""] ?? sales[p.name];
+  const soldOf = (p: Product) => sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
   const showAccount = !scope.account && accounts.length > 1;
   const lastSync = accounts
     .map((a) => a.products_sync_at)
@@ -132,6 +132,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                             <div className="strong clip" style={{ maxWidth: 340 }} title={p.name}>{p.name}</div>
                             <div className="sub">
                               {p.code ?? "—"}
+                              {p.variants_count > 0 && <> · {p.variants_count} variantes</>}
                               {showAccount && p.accounts && <> · {p.accounts.name}</>}
                             </div>
                           </div>
@@ -141,7 +142,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                       <td data-slot="status">
                         <span className="pill" data-tone={isActive(p) ? "success" : "neutral"}>{p.status ?? "—"}</span>
                       </td>
-                      <td data-slot="total" className="num strong">{fmtMoney(p.price, p.currency ?? "HNL")}</td>
+                      <td data-slot="total" className="num strong">
+                        {p.variants_count > 0 && <span className="muted" style={{ fontWeight: 400 }}>desde </span>}
+                        {fmtMoney(p.price, p.currency ?? "HNL")}
+                      </td>
                       <td data-slot="customer" className="num">
                         <span style={{ color: (p.stock ?? 0) <= 0 ? "var(--danger)" : low ? "var(--warning)" : undefined, fontWeight: low ? 600 : 400 }}>
                           {p.stock === null ? "—" : `${fmtInt(p.stock)} u.`}

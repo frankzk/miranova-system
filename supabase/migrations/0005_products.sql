@@ -12,6 +12,7 @@ create table if not exists public.products (
   suggested_price numeric(12,2),        -- precio sugerido de venta (si existe)
   stock         integer,                -- inventario total
   image_url     text,
+  variants_count integer not null default 0,
   currency      text,
   created_at_platform timestamptz,
   raw           jsonb not null,
@@ -30,11 +31,12 @@ alter table public.accounts
   add column if not exists products_sync_at timestamptz,
   add column if not exists products_sync_msg text;
 
--- Unidades y órdenes por SKU en un período (para "vendido 30 días" en Productos).
+-- Unidades y órdenes por cuenta + SKU en un período (para "vendido 30 días" en Productos).
 create or replace function public.product_sales(p_account uuid, p_from timestamptz)
 returns jsonb language sql stable as $$
   select coalesce(jsonb_object_agg(k, jsonb_build_object('units', units, 'orders', orders)), '{}'::jsonb) from (
-    select coalesce(nullif(i.sku, ''), i.product_name) as k, sum(i.quantity) as units, count(distinct o.id) as orders
+    select o.account_id::text || ':' || coalesce(nullif(i.sku, ''), i.product_name) as k,
+      sum(i.quantity) as units, count(distinct o.id) as orders
     from public.orders o join public.order_items i on i.order_id = o.id
     where (p_account is null or o.account_id = p_account)
       and o.ordered_at >= p_from

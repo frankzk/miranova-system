@@ -28,3 +28,27 @@ test("extrae productos de una respuesta paginada", () => {
 test("no confunde órdenes con productos", () => {
   assert.deepEqual(extractProducts({ data: [{ id: "o1", name: "x", orderInfo: {}, productSnapshots: [], customer: {} }] }), []);
 });
+
+test("formato real de Drop: variantes, moneda e imagen genérica", () => {
+  const [p] = extractProducts({
+    status: "success",
+    products: { products: [{
+      id: "6a8f", name: "FatBurn Shorts", productCode: null, active: true, price: 0, suggestedPrice: 0, quantity: 0,
+      totalAvailable: 116, currencyName: "HNL", imgUrl: "https://boxful.sfo3.digitaloceanspaces.com/avatar.png", images: [],
+      variantsCount: 3,
+      variants: [
+        { id: "v1", sku: "talla-1", name: "TALLA XL", price: 331.7, quantity: 29, productCode: "ID-HD24Q", suggestedPrice: 1110 },
+        { id: "v2", sku: "talla-2", name: "TALLA L", price: 320, quantity: 87, productCode: "ID-HD25Q", suggestedPrice: 1090 },
+        { id: "v3", sku: "talla-3", name: "TALLA S", price: 330, quantity: 0, deleted: true },
+      ],
+    }] },
+  });
+  assert.equal(p.price, 320);
+  assert.equal(p.suggested_price, 1090);
+  assert.equal(p.stock, 116);
+  assert.equal(p.variants_count, 2);
+  assert.equal(p.code, "ID-HD24Q");
+  assert.equal(p.currency, "HNL");
+  assert.equal(p.image_url, null);
+  assert.equal(p.status, "Activo");
+});

@@ -282,6 +282,7 @@ export type Product = {
   suggested_price: number | null;
   stock: number | null;
   image_url: string | null;
+  variants_count: number;
   currency: string | null;
   created_at_platform: string | null;
   updated_at: string;
@@ -294,7 +295,7 @@ export async function listProducts(account?: string): Promise<Product[]> {
   for (let from = 0; from < 20000; from += 1000) {
     let q = db()
       .from("products")
-      .select("id, account_id, external_id, code, name, sku, status, price, suggested_price, stock, image_url, currency, created_at_platform, updated_at, accounts(name, timezone)")
+      .select("id, account_id, external_id, code, name, sku, status, price, suggested_price, stock, image_url, variants_count, currency, created_at_platform, updated_at, accounts(name, timezone)")
       .order("created_at_platform", { ascending: false, nullsFirst: false })
       .order("name")
       .range(from, from + 999);
@@ -307,7 +308,7 @@ export async function listProducts(account?: string): Promise<Product[]> {
   return out;
 }
 
-/** Unidades y órdenes por SKU (o nombre) desde una fecha. */
+/** Unidades y órdenes por "cuenta:SKU" (o "cuenta:nombre") desde una fecha. */
 export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number }>> {
   const { data, error } = await db().rpc("product_sales", {
     p_account: account ?? null,

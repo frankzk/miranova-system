@@ -121,7 +121,7 @@ export async function saveProducts(
 ): Promise<number> {
   if (products.length === 0) return 0;
   const now = new Date().toISOString();
-  const rows = products.map((p) => ({ ...p, account_id: accountId, currency, updated_at: now }));
+  const rows = products.map((p) => ({ ...p, account_id: accountId, currency: p.currency ?? currency, updated_at: now }));
   const { error } = await db().from("products").upsert(rows, { onConflict: "account_id,external_id" });
   if (error) throw error;
   return products.length;
