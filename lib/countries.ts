@@ -22,7 +22,7 @@ export const countryByCode = (code: string) => COUNTRIES.find((c) => c.code === 
 
 export const PLATFORMS = [
   { id: "soydrop", name: "Drop (soydrop.com)", ready: true },
-  { id: "dropi", name: "Dropi", ready: false },
+  { id: "dropi", name: "Dropi", ready: true },
 ] as const;
 
 export type PlatformId = (typeof PLATFORMS)[number]["id"];
