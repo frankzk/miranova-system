@@ -205,9 +205,15 @@ function summary(args: Row) {
   for (const o of base.filter((o) => o.grp === "delivered" && !o.paid)) unpaidMap.set(o.currency, [...(unpaidMap.get(o.currency) ?? []), o]);
   const unpaid = [...unpaidMap].map(([currency, a]) => ({ currency, orders: a.length, amount: sum(a, "vendor_amount") }));
   const daily: Row[] = [];
-  for (let t = from; t <= to; t += DAY) {
-    const day = new Date(t - 6 * 3600_000).toISOString().slice(0, 10);
-    const a = period.filter((o) => new Date(Date.parse(o.ordered_at) - 6 * 3600_000).toISOString().slice(0, 10) === day);
+  const hourly = args.p_bucket === "hour";
+  const step = hourly ? 3600_000 : DAY;
+  const keyOf = (ms: number) => {
+    const iso = new Date(ms - 6 * 3600_000).toISOString();
+    return hourly ? `${iso.slice(0, 13)}:00` : `${iso.slice(0, 10)}T00:00`;
+  };
+  for (let t = from; t <= to; t += step) {
+    const day = keyOf(t);
+    const a = period.filter((o) => keyOf(Date.parse(o.ordered_at)) === day);
     daily.push({ day, orders: a.length, delivered: a.filter((o) => o.grp === "delivered").length, problems: a.filter((o) => o.grp === "problem").length });
   }
   const rank = (key: string) => {

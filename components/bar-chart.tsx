@@ -11,20 +11,27 @@ function niceMax(n: number) {
   return Math.ceil(n / step) * step;
 }
 
+/** `iso` llega como "YYYY-MM-DD" o "YYYY-MM-DDTHH:MI" (hora local de la cuenta). */
+const asDate = (iso: string) => new Date(iso.includes("T") ? `${iso}:00Z` : `${iso}T00:00:00Z`);
 const fmtDay = (iso: string, opts: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat("es-HN", { timeZone: "UTC", ...opts }).format(new Date(`${iso}T00:00:00Z`)).replace(/\./g, "");
+  new Intl.DateTimeFormat("es-HN", { timeZone: "UTC", ...opts }).format(asDate(iso)).replace(/\./g, "");
+const hourOf = (iso: string) => asDate(iso).getUTCHours();
 
 /**
  * Órdenes por día: barra clara = total, parte sólida = entregadas.
  * Las barras van en SVG estirable; los textos en HTML para no deformarse.
  */
-export function BarChart({ days }: { days: Day[] }) {
+export function BarChart({ days, bucket = "day" }: { days: Day[]; bucket?: "hour" | "day" }) {
   const [hover, setHover] = useState<number | null>(null);
   const n = Math.max(1, days.length);
   const max = niceMax(Math.max(1, ...days.map((d) => d.orders)));
   const pct = (v: number) => (v / max) * 100;
   const gap = n > 60 ? 0.2 : 0.34;
-  const labelEvery = n > 45 ? 14 : n > 20 ? 7 : n > 10 ? 2 : 1;
+  const hourly = bucket === "hour";
+  const labelEvery = hourly ? 3 : n > 45 ? 14 : n > 20 ? 7 : n > 10 ? 2 : 1;
+  const label = (iso: string) => (hourly ? `${hourOf(iso)} h` : fmtDay(iso, { day: "numeric", month: "short" }));
+  const tipTitle = (iso: string) =>
+    hourly ? `${hourOf(iso)}:00 – ${hourOf(iso) + 1}:00` : fmtDay(iso, { weekday: "short", day: "numeric", month: "short" });
   const h = hover !== null ? days[hover] : null;
 
   return (
@@ -34,7 +41,7 @@ export function BarChart({ days }: { days: Day[] }) {
       </div>
       <div className="chart-plot">
         <div className="chart-grid" aria-hidden><i /><i /><i /></div>
-        <svg viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" role="img" aria-label="Órdenes por día en el período">
+        <svg viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" role="img" aria-label={hourly ? "Órdenes por hora" : "Órdenes por día en el período"}>
           {days.map((d, i) => (
             <g
               key={d.day}
@@ -52,7 +59,7 @@ export function BarChart({ days }: { days: Day[] }) {
         </svg>
         {h && hover !== null && (
           <div className="chart-tip" style={{ left: `${((hover + 0.5) / n) * 100}%`, top: `${100 - pct(h.orders)}%` }}>
-            <b>{fmtDay(h.day, { weekday: "short", day: "numeric", month: "short" })}</b>
+            <b>{tipTitle(h.day)}</b>
             <br />
             {h.orders} órdenes · {h.delivered} entregadas
             {h.problems > 0 && <> · {h.problems} con problemas</>}
@@ -61,13 +68,13 @@ export function BarChart({ days }: { days: Day[] }) {
       </div>
       <div className="chart-x" aria-hidden>
         {days.map((d, i) =>
-          (n - 1 - i) % labelEvery === 0 ? (
-            <span key={d.day} style={{ left: `${((i + 0.5) / n) * 100}%` }}>{fmtDay(d.day, { day: "numeric", month: "short" })}</span>
+          (hourly ? hourOf(d.day) % labelEvery === 0 : (n - 1 - i) % labelEvery === 0) ? (
+            <span key={d.day} style={{ left: `${((i + 0.5) / n) * 100}%` }}>{label(d.day)}</span>
           ) : null,
         )}
       </div>
       <table className="sr-only">
-        <caption>Órdenes por día</caption>
+        <caption>{hourly ? "Órdenes por hora" : "Órdenes por día"}</caption>
         <tbody>
           {days.map((d) => (
             <tr key={d.day}><th>{d.day}</th><td>{d.orders} órdenes</td><td>{d.delivered} entregadas</td></tr>

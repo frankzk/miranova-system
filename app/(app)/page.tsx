@@ -6,21 +6,20 @@ import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort } from "@/lib/format";
 import { attentionOrders, dashboardSummary, type RankRow } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { RANGES, resolveRange } from "@/lib/ranges";
 
 export const metadata = { title: "Inicio" };
 
-const RANGES = [7, 30, 90] as const;
-
-export default async function Home({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ r?: string; days?: string }> }) {
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
 
   if (accounts.length === 0) return <Welcome />;
 
   const sp = await searchParams;
-  const days = RANGES.find((d) => String(d) === sp.days) ?? 30;
+  const range = resolveRange(sp.r ?? sp.days, scope.tz);
   const [s, attention] = await Promise.all([
-    dashboardSummary({ account: scope.account, days, tz: scope.tz }),
+    dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     attentionOrders(scope.account),
   ]);
 
@@ -36,9 +35,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         sub={<>{capitalize(fmtLongDay(new Date(), scope.tz))} · {scope.label}</>}
         actions={
           <nav className="segmented" aria-label="Período">
-            {RANGES.map((d) => (
-              <Link key={d} href={d === 30 ? "/" : `/?days=${d}`} aria-current={d === days}>
-                {d} días
+            {RANGES.map((r) => (
+              <Link key={r.id} href={r.id === "30" ? "/" : `/?r=${r.id}`} aria-current={r.id === range.id}>
+                {r.label}
               </Link>
             ))}
           </nav>
@@ -70,7 +69,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           </span>
         </Link>
         <div className="metric">
-          <span className="label">Ventas · {days} días</span>
+          <span className="label">Ventas · {range.short}</span>
           {s.money.length === 0 ? (
             <span className="value">{fmtMoney(0, scope.current?.currency ?? "HNL")}</span>
           ) : (
@@ -97,10 +96,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             <div className="chart-total">
               <strong>{fmtInt(periodOrders)}</strong>
               <span className="muted">
-                recibidas en {days} días · {fmtInt(periodDelivered)} ya entregadas
+                recibidas {range.bucket === "hour" ? range.short : `en ${range.short}`} · {fmtInt(periodDelivered)} ya entregadas
               </span>
             </div>
-            <BarChart days={s.daily} />
+            <BarChart days={s.daily} bucket={range.bucket} />
           </div>
         </section>
 
