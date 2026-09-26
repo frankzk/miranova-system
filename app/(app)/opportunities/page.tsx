@@ -137,7 +137,7 @@ function FollowupsPanel({ items, today, showAccount }: { items: Followup[]; toda
     <section className="panel opp-follow" aria-labelledby="opp-follow-title">
       <div className="panel-head">
         <h2 id="opp-follow-title">Seguimientos abiertos</h2>
-        <span className="aside">{fmtInt(items.length)} pendientes o en curso</span>
+        <span className="aside">{fmtInt(items.length)} {items.length === 1 ? "pendiente o en curso" : "pendientes o en curso"}</span>
       </div>
       <ul className="list-rows panel-flush">
         {shown.map((f) => {
