@@ -1,4 +1,5 @@
--- Salud de tiendas: una fila por dropshipper (y cuenta) con ritmo de ventas, constancia y ticket.
+-- Salud de tiendas: una fila por tienda (ID del vendedor en la plataforma, igual que 0008_facts_views) y cuenta,
+-- con ritmo de ventas, constancia y ticket. El nombre mostrado es el más reciente.
 -- Cuenta órdenes recibidas sin las canceladas/rechazadas. Ventanas:
 --   d7 / prev7: últimas 168 h vs. las 168 h anteriores (ritmo; no lo sesga el día a medias)
 --   active7: días calendario (zona horaria de cada cuenta) con al menos una orden, de hoy hacia 6 días atrás
@@ -8,6 +9,7 @@ create or replace function public.store_health(p_account uuid)
 returns jsonb language sql stable as $$
   with base as (
     select o.id, o.account_id, a.name account_name, coalesce(o.currency, a.currency) currency, o.dropshipper,
+      coalesce(o.raw->'seller'->>'sellerId', o.raw->'user'->>'id', 'name:' || o.dropshipper) store_id,
       o.ordered_at, (o.ordered_at at time zone a.timezone)::date d, (now() at time zone a.timezone)::date today,
       o.total, o.vendor_amount,
       public.status_group(o.status_code) g
@@ -23,10 +25,11 @@ returns jsonb language sql stable as $$
     group by 1
   ),
   daily as (
-    select account_id, dropshipper, d, count(*) n from base where d > today - 14 group by 1, 2, 3
+    select account_id, store_id, d, count(*) n from base where d > today - 14 group by 1, 2, 3
   )
   select coalesce(jsonb_agg(row_to_json(s) order by s.d7 desc, s.n30 desc), '[]'::jsonb) from (
-    select b.account_id, max(b.account_name) account_name, max(b.currency) currency, b.dropshipper name,
+    select b.account_id, b.store_id, max(b.account_name) account_name, max(b.currency) currency,
+      (array_agg(b.dropshipper order by b.ordered_at desc))[1] name,
       count(*) filter (where b.d = b.today) today,
       count(*) filter (where b.ordered_at >= now() - interval '7 days') d7,
       count(*) filter (where b.ordered_at >= now() - interval '14 days' and b.ordered_at < now() - interval '7 days') prev7,
@@ -42,9 +45,9 @@ returns jsonb language sql stable as $$
       count(*) filter (where b.g = 'failed' and b.ordered_at >= now() - interval '30 days') failed30,
       (select jsonb_agg(coalesce(dl.n, 0) order by gs)
          from generate_series(b.today - 13, b.today, interval '1 day') gs
-         left join daily dl on dl.account_id = b.account_id and dl.dropshipper = b.dropshipper and dl.d = gs::date) daily
+         left join daily dl on dl.account_id = b.account_id and dl.store_id = b.store_id and dl.d = gs::date) daily
     from base b left join units u on u.order_id = b.id
-    group by b.account_id, b.dropshipper, b.today
+    group by b.account_id, b.store_id, b.today
   ) s
 $$;
 

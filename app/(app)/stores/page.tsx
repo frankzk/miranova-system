@@ -82,7 +82,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             {contact.map((s) => {
               const ops = opportunities(s, typical[s.account_id], money(s));
               return (
-                <li key={`${s.account_id}:${s.name}`}>
+                <li key={`${s.account_id}:${s.store_id}`}>
                   <Link href={ordersHref(s)}>
                     <span className="t">{s.name}</span>
                     <HealthPill h={health.get(s)!} />
@@ -121,7 +121,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
           <>
             <ul className="store-cards only-sm">
               {rows.map((s) => (
-                <li key={`${s.account_id}:${s.name}`}>
+                <li key={`${s.account_id}:${s.store_id}`}>
                   <div className="top">
                     <Link className="strong" href={ordersHref(s)}>{s.name}</Link>
                     <HealthPill h={health.get(s)!} />
@@ -165,7 +165,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     const ops = opportunities(s, typical[s.account_id], money(s));
                     const dr = deliveryRate(s);
                     return (
-                      <tr key={`${s.account_id}:${s.name}`}>
+                      <tr key={`${s.account_id}:${s.store_id}`}>
                         <td>
                           <Link className="strong store-name" href={ordersHref(s)}>{s.name}</Link>
                           <div className="sub">

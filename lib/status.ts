@@ -8,10 +8,10 @@ export const GROUPS: { id: StatusGroup; label: string; codes: string[]; hint: st
   {
     id: "dispatch",
     label: "Por despachar",
-    codes: ["registered", "pending", "fulfilled"],
+    codes: ["registered", "pending", "fulfilled", "-1"],
     hint: "Pendientes o con guía creada, aún sin recolectar",
   },
-  { id: "transit", label: "En tránsito", codes: ["1", "2", "3"], hint: "Recolectadas o en ruta a destino" },
+  { id: "transit", label: "En tránsito", codes: ["1", "2", "3", "12"], hint: "Recolectadas, en ruta o en agencia" },
   { id: "delivered", label: "Entregadas", codes: ["4"], hint: "Entregadas al cliente" },
   {
     id: "problem",
@@ -34,7 +34,9 @@ const TONE_BY_CODE: Record<string, Tone> = {
   registered: "warning",
   pending: "warning",
   fulfilled: "accent",
+  "-1": "accent",
   pending_correction: "warning",
+  "12": "info",
   "1": "info",
   "2": "info",
   "3": "info",

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
+import type { OwnerAlerts } from "./alerts";
 import { groupById } from "./status";
 
 export type OrderItem = {
@@ -335,7 +336,7 @@ export async function listProducts(account?: string): Promise<Product[]> {
   return out;
 }
 
-/** Unidades y órdenes por "cuenta:SKU" (o "cuenta:nombre") desde una fecha. */
+/** Unidades y órdenes por "cuenta:id:<id del producto>", "cuenta:SKU" o "cuenta:nombre" desde una fecha. */
 export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number }>> {
   const { data, error } = await db().rpc("product_sales", {
     p_account: account ?? null,
@@ -350,4 +351,11 @@ export async function storeHealth(account?: string): Promise<import("./stores").
   const { data, error } = await db().rpc("store_health", { p_account: account ?? null });
   if (error) throw error;
   return (data ?? []) as import("./stores").StoreRow[];
+}
+
+/** "Atención del dueño": hallazgos del día calculados en la base (owner_alerts). */
+export async function ownerAlerts(account?: string): Promise<OwnerAlerts> {
+  const { data, error } = await db().rpc("owner_alerts", { p_account: account ?? null });
+  if (error) throw error;
+  return (data ?? { total: 0, alerts: [] }) as OwnerAlerts;
 }

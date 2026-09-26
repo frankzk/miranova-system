@@ -6,6 +6,7 @@ import { extractProducts } from "./products";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
+import { GROUPS } from "./status";
 import { ingestPayload, saveProducts, type AccountCtx } from "./store";
 
 const DAY = 86_400_000;
@@ -16,6 +17,26 @@ const MAX_PAGES_PER_WINDOW = 60;
 const MAX_PRODUCT_PAGES = 50;
 const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
 const GEO_MAX_AGE_MS = 7 * DAY;
+const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ventana reciente
+const OPEN_REFRESH_MAX_DAYS = 120;
+
+/** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
+const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
+
+/** Pedido abierto más antiguo que ya quedó fuera de la ventana reciente (si lo hay). */
+async function oldestStaleOpenOrder(accountId: string, before: Date, floor: Date): Promise<Date | null> {
+  const { data, error } = await db()
+    .from("orders")
+    .select("ordered_at")
+    .eq("account_id", accountId)
+    .in("status_code", OPEN_CODES)
+    .lt("ordered_at", before.toISOString())
+    .gte("ordered_at", floor.toISOString())
+    .order("ordered_at")
+    .limit(1);
+  if (error) throw error;
+  return data[0]?.ordered_at ? new Date(data[0].ordered_at) : null;
+}
 
 /**
  * Inicia sesión y elige la cuenta. Si el correo tiene varias cuentas y aún no
@@ -138,7 +159,17 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
 
     // 3. órdenes recientes: nuevas + cambios de estado
     const now = new Date();
-    await syncRange(new Date(now.getTime() - RECENT_DAYS * DAY), new Date(now.getTime() + DAY));
+    const recentFrom = new Date(now.getTime() - RECENT_DAYS * DAY);
+    await syncRange(recentFrom, new Date(now.getTime() + DAY));
+
+    // 3a. pedidos abiertos más antiguos que la ventana reciente: sin esto su estado
+    // (y su liquidación) quedaría congelado. Se revisan cada pocas horas.
+    const lastOpenRefresh = acc.open_refresh_at ? Date.parse(acc.open_refresh_at) : 0;
+    if (now.getTime() - lastOpenRefresh > OPEN_REFRESH_EVERY_MS) {
+      const oldest = await oldestStaleOpenOrder(acc.id, recentFrom, new Date(now.getTime() - OPEN_REFRESH_MAX_DAYS * DAY));
+      if (oldest) await syncRange(new Date(oldest.getTime() - 60_000), recentFrom);
+      await updateAccount(acc.id, { open_refresh_at: new Date().toISOString() });
+    }
 
     // 3b. catálogo de productos (todas las páginas). Un fallo aquí no detiene las órdenes.
     let productsNote = "";

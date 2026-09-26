@@ -3,6 +3,8 @@
 
 export type StoreRow = {
   account_id: string;
+  /** ID del vendedor en la plataforma (o "name:<nombre>" si no viene). */
+  store_id: string;
   account_name: string;
   currency: string;
   name: string;

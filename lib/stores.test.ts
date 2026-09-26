@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { classify, opportunities, sortStores, toContact, typicalTickets, type StoreRow } from "./stores.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
-  account_id: "a", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
+  account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
   active7: 0, active_prev7: 0, last_at: null, days_since: 0, n30: 0, ticket: null, vendor_per_order: null,
   units_per_order: null, delivered30: 0, failed30: 0, daily: [], ...p,
 });
