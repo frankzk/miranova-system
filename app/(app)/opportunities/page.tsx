@@ -6,7 +6,9 @@ import { listAccounts } from "@/lib/accounts";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { pendingFollowups, type Followup } from "@/lib/followups";
 import { crossSell } from "@/lib/cross-sell";
-import { allStoreOpportunities, OPP_GROUPS, productItems, sortOpportunities, withCrossSell, type OppGroup, type OppItem } from "@/lib/opportunities";
+import { inventoryAlerts } from "@/lib/inventory";
+import { inventoryStatus } from "@/lib/inventory-data";
+import { allStoreOpportunities, inventoryItems, OPP_GROUPS, productItems, sortOpportunities, withCrossSell, type OppGroup, type OppItem } from "@/lib/opportunities";
 import { productInsights } from "@/lib/product-insights";
 import { productPerformance } from "@/lib/product-performance";
 import { storeHealth } from "@/lib/queries";
@@ -29,11 +31,12 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [stores, followups, products, matrix] = await Promise.all([
+  const [stores, followups, products, matrix, inventory] = await Promise.all([
     storeHealth(scope.account),
     pendingFollowups(scope.account),
     productPerformance(scope.account),
     storeProductMatrix(scope.account, 30),
+    inventoryStatus(scope.account),
   ]);
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
   const today = todayIn(scope.tz);
@@ -43,6 +46,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const all = sortOpportunities([
     ...withCrossSell(storeItems, crossSell(matrix), accountName),
     ...productItems(productInsights(products), accountName),
+    ...inventoryItems(inventoryAlerts(inventory), accountName),
   ]);
   // seguimiento abierto por tienda: se muestra junto a su oportunidad para no contactarla dos veces
   const open = new Map<string, Followup>();
@@ -116,7 +120,9 @@ function Opp({ i, showAccount, follow, today }: { i: OppItem; showAccount: boole
   const href = i.subject.type === "store" && i.subject.store_id
     ? storeHref(i.subject.account_id, i.subject.store_id)
     : i.subject.type === "account" ? "/settings"
-    : i.subject.type === "product" ? "/products/performance" : null;
+    : i.subject.type === "product"
+      ? (["stockout", "low_stock", "returns"].includes(i.kind) ? "/products/inventory" : "/products/performance")
+      : null;
   const body = (
     <>
       <span className="bar" data-tone={i.tone} aria-hidden />
