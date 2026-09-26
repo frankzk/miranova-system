@@ -1,0 +1,90 @@
+/* Ficha de tienda: solo lo propio; el resto usa las clases globales (.metrics, .panel, .chart, .rank…). */
+
+.store-detail .crumbs svg { width: 14px; height: 14px; color: var(--ink-4); }
+.store-detail .page-head .sub .pill { vertical-align: 1px; margin-right: 2px; }
+
+.sd-title { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 8px; font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); }
+.sd-title span { font-weight: 400; color: var(--ink-3); }
+.store-detail .metrics .foot { flex-wrap: wrap; }
+
+.sd-chart { margin-bottom: 20px; }
+.sd-grid { align-items: start; }
+.sd-side { display: grid; gap: 20px; min-width: 0; }
+.sd-lead { padding: 6px 18px 0; font-size: var(--t-sm); color: var(--ink-2); }
+.sd-lead b { font-weight: 600; color: var(--ink); }
+.sd-note { font-size: var(--t-sm); color: var(--ink-3); margin-bottom: 12px; }
+.sd-note b { color: var(--ink); font-weight: 600; }
+
+/* actividad: pares etiqueta / valor */
+.sd-kv { margin: 0; display: grid; gap: 10px; }
+.sd-kv div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sd-kv dt { color: var(--ink-3); font-size: var(--t-sm); }
+.sd-kv dd { margin: 0; font-weight: 550; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* comparación con el promedio de la cuenta */
+.sd-bench { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.sd-bench .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.sd-bench .t { font-weight: 550; }
+.sd-bench .v { font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
+.sd-bench .v b { font-size: var(--t-md); font-weight: 600; }
+.sd-bench .bars { display: grid; gap: 3px; margin: 6px 0 4px; }
+.sd-bench .bars i { display: block; height: 6px; border-radius: 3px; min-width: 2px; }
+.sd-bench .bars i.me { background: var(--accent); }
+.sd-bench .bars i.avg { background: var(--line-strong); }
+.sd-bench .delta { font-size: var(--t-xs); }
+
+/* gráfica con selector de métrica y rango */
+.store-chart-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-bottom: 12px; }
+.store-chart .segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.store-chart .segmented button {
+  all: unset; cursor: pointer; white-space: nowrap;
+  padding: 4px 10px; border-radius: var(--r-sm);
+  font-size: var(--t-sm); font-weight: 500; color: var(--ink-2);
+  transition: background 120ms, color 120ms;
+}
+.store-chart .segmented button:hover { color: var(--ink); }
+.store-chart .segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.store-chart .segmented button[aria-pressed="true"] { background: var(--bg-surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.store-chart .chart { grid-template-columns: 48px minmax(0, 1fr); grid-template-rows: 210px 22px; }
+.store-chart .col rect.del { fill: var(--accent); opacity: 0.78; }
+.store-chart .col rect.del[data-today] { opacity: 0.45; }
+.store-chart .col:hover rect.del, .store-chart .col[data-on] rect.del { opacity: 1; }
+.store-chart .col rect.zero { fill: var(--danger-dot); opacity: 0.55; }
+.store-chart-values { position: absolute; inset: 0; pointer-events: none; }
+.store-chart-values span { position: absolute; transform: translate(-50%, -4px); font-size: 11px; font-weight: 550; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* seguimiento */
+.fu-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 14px; }
+.fu-grid .wide { grid-column: span 2; }
+.fu-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.fu-msg { font-size: var(--t-sm); color: var(--success); }
+.fu-msg[data-ok="false"] { color: var(--danger); }
+.fu-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.fu-item { padding: 14px 18px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.fu-item:first-child { border-top: 0; }
+.fu-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.fu-next { font-size: var(--t-sm); color: var(--ink-3); }
+.fu-next[data-overdue] { color: var(--danger); font-weight: 550; }
+.fu-item p { font-size: var(--t-md); color: var(--ink); overflow-wrap: anywhere; }
+.fu-item .k { display: inline-block; min-width: 110px; margin-right: 8px; font-size: var(--t-xs); font-weight: 550; color: var(--ink-3); }
+.fu-impact { padding: 8px 10px; border-radius: var(--r); background: var(--bg-subtle); font-size: var(--t-sm) !important; font-variant-numeric: tabular-nums; }
+.fu-impact[data-state="measuring"] { color: var(--ink-3) !important; }
+.fu-impact b { font-weight: 600; }
+.fu-edit > summary { width: fit-content; cursor: pointer; font-size: var(--t-sm); color: var(--accent-ink); font-weight: 500; }
+.fu-update { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.fu-update .field { flex: 0 1 180px; }
+
+@media (max-width: 900px) {
+  .fu-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .store-chart .segmented .long { display: none; }
+  .store-chart .chart { grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: 180px 22px; }
+  .fu-grid { grid-template-columns: minmax(0, 1fr); }
+  .fu-grid .wide { grid-column: auto; }
+  .fu-actions .btn { width: 100%; justify-content: center; }
+  .fu-item { padding: 12px 16px; }
+  .fu-item .k { display: block; min-width: 0; margin: 0 0 1px; }
+  .fu-update .field { flex: 1 1 140px; }
+}
