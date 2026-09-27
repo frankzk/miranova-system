@@ -61,6 +61,12 @@ function findArray(node: unknown, test: (k: string) => boolean, depth = 0): unkn
   return undefined;
 }
 
+/** Cantidad de registros de la página (la lista de pedidos de la respuesta), o undefined si no se ve. */
+export function orderRows(json: unknown): number | undefined {
+  const list = findArray(json, (k) => /^(data|orders|items|results|docs|rows|records)$/i.test(k));
+  return list ? list.length : undefined;
+}
+
 function cookiesFrom(res: Response, prev?: string): string | undefined {
   const set = res.headers.getSetCookie?.() ?? [];
   if (!set.length) return prev;
@@ -168,7 +174,9 @@ export const soydrop: Connector = {
     if (res.status === 401 || res.status === 403) throw new SessionExpired();
     const { json, text } = await readJson(res);
     if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
-    return { url, payload: json };
+    // filas crudas de la página: la paginación sigue mientras vengan PAGE_SIZE, aunque alguna no
+    // se reconozca como pedido (antes, un solo registro raro cortaba la descarga en esa página)
+    return { url, payload: json, rows: orderRows(json) };
   },
 
   // La web del proveedor pide "products/?page=1&limit=10" (visto en la red de app.soydrop.com).

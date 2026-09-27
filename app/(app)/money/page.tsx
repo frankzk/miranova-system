@@ -3,7 +3,9 @@ import { AccountChips } from "@/components/account-chips";
 import { RowLink } from "@/components/client";
 import { PageHead, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
+import { can } from "@/lib/permissions";
 import { dashboardSummary, moneyByMonth, unpaidDelivered, type MonthRow } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { resolveRange } from "@/lib/ranges";
@@ -14,6 +16,9 @@ const MONTHS = 6;
 const CURRENCY_NAME: Record<string, string> = { HNL: "Lempiras", GTQ: "Quetzales", USD: "Dólares", NIO: "Córdobas", CRC: "Colones", DOP: "Pesos dominicanos", MXN: "Pesos mexicanos", COP: "Pesos colombianos", PEN: "Soles", CLP: "Pesos chilenos", EUR: "Euros" };
 
 export default async function MoneyPage() {
+  const user = await requirePermission("money");
+  // sin Órdenes: ni el nombre del cliente ni enlaces al detalle de la orden
+  const canOrders = can(user, "orders");
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const [months, summary, unpaid] = await Promise.all([
@@ -132,7 +137,7 @@ export default async function MoneyPage() {
               <thead>
                 <tr>
                   <th>Orden</th>
-                  <th>Cliente</th>
+                  {canOrders && <th>Cliente</th>}
                   <th className="hide-md">Dropshipper</th>
                   <th>Estado</th>
                   <th className="r">Te toca</th>
@@ -140,16 +145,20 @@ export default async function MoneyPage() {
                 </tr>
               </thead>
               <tbody>
-                {unpaid.orders.map((o) => (
-                  <RowLink key={o.id} href={`/orders?group=delivered&order=${o.id}`}>
-                    <td data-slot="id"><Link className="order-no" href={`/orders?group=delivered&order=${o.id}`}>#{o.external_id}</Link></td>
-                    <td data-slot="customer"><div className="clip">{o.customer_name ?? "—"}</div></td>
-                    <td className="hide-md hide-sm">{o.dropshipper ?? "—"}</td>
-                    <td data-slot="status"><StatusPill code={o.status_code} label={o.status} /></td>
-                    <td data-slot="total" className="num strong">{fmtMoney(o.vendor_amount, o.currency ?? "HNL")}</td>
-                    <td data-slot="date" className="hide-lg muted nowrap">{fmtShort(o.ordered_at, o.accounts?.timezone)}</td>
-                  </RowLink>
-                ))}
+                {unpaid.orders.map((o) => {
+                  const href = `/orders?group=delivered&order=${o.id}`;
+                  const cells = (
+                    <>
+                      <td data-slot="id">{canOrders ? <Link className="order-no" href={href}>#{o.external_id}</Link> : <span className="order-no">#{o.external_id}</span>}</td>
+                      {canOrders && <td data-slot="customer"><div className="clip">{o.customer_name ?? "—"}</div></td>}
+                      <td className="hide-md hide-sm">{o.dropshipper ?? "—"}</td>
+                      <td data-slot="status"><StatusPill code={o.status_code} label={o.status} /></td>
+                      <td data-slot="total" className="num strong">{fmtMoney(o.vendor_amount, o.currency ?? "HNL")}</td>
+                      <td data-slot="date" className="hide-lg muted nowrap">{fmtShort(o.ordered_at, o.accounts?.timezone)}</td>
+                    </>
+                  );
+                  return canOrders ? <RowLink key={o.id} href={href}>{cells}</RowLink> : <tr key={o.id}>{cells}</tr>;
+                })}
               </tbody>
             </table>
           </div>

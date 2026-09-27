@@ -58,9 +58,6 @@
 /* seguimiento */
 .fu-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 14px; }
 .fu-grid .wide { grid-column: span 2; }
-.fu-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-.fu-msg { font-size: var(--t-sm); color: var(--success); }
-.fu-msg[data-ok="false"] { color: var(--danger); }
 .fu-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .fu-item { padding: 14px 18px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
 .fu-item:first-child { border-top: 0; }
@@ -122,20 +119,10 @@
 .ct-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* panel lateral (contacto y seguimiento) */
-.sheet { width: min(520px, 100vw); }
-.sheet-head { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-.sheet-title { font-size: var(--t-xl); font-weight: 650; letter-spacing: -0.02em; }
-.sheet-sub { margin-top: 3px; color: var(--ink-3); font-size: var(--t-sm); overflow-wrap: anywhere; }
-.sheet-body .section:first-child { padding-top: 16px; }
-.sheet-body .section h3 { display: flex; align-items: center; gap: 8px; }
-.sheet-body .section h3 .count { font-size: var(--t-xs); font-weight: 550; color: var(--ink-3); background: var(--bg-app); border-radius: 999px; padding: 1px 7px; }
-.sheet-note { margin: -4px 0 12px; font-size: var(--t-sm); color: var(--ink-3); }
-.sheet-note b { color: var(--ink-2); font-weight: 600; }
 .sheet .fu-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .sheet .fu-grid .wide { grid-column: 1 / -1; }
 
 .ct-form { display: grid; gap: 12px; }
-.ct-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .ct-form .fu-actions { margin-top: 2px; }
 .ct-unlink { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: var(--t-sm); }
 .ct-inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -155,7 +142,6 @@
 .store-followups .fu-list { border-top: 1px solid var(--line); }
 
 @media (max-width: 560px) {
-  .ct-row { grid-template-columns: minmax(0, 1fr); }
   .ct-bar { margin-top: -10px; }
   .ct-bar-actions { width: 100%; }
   .ct-bar-actions > * { flex: 1 1 auto; justify-content: center; }

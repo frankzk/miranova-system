@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { safeEqual } from "@/lib/auth";
+import { safeEqual } from "@/lib/passwords";
 import { syncAll } from "@/lib/sync";
 
 // Vercel Cron llama aquí cada 10 minutos (ver vercel.json) con

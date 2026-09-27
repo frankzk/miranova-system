@@ -5,8 +5,10 @@ import { ContactQuick } from "@/components/contact-quick";
 import { IconChat } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey } from "@/lib/contacts";
 import { fmtInt, fmtMoney } from "@/lib/format";
+import { can } from "@/lib/permissions";
 import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
@@ -24,6 +26,8 @@ const one = (sp: SP, k: string) => {
 };
 
 export default async function StoresPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const user = await requirePermission("stores");
+  const canEdit = can(user, "stores_edit");
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
@@ -115,7 +119,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="s reason">{ops[0] ? `${ops[0].text} → ${ops[0].action}` : ""}</span>
                   </Link>
-                  <ContactQuick c={contacts.get(contactKey(s))} storeHref={ordersHref(s)} name={s.name} />
+                  <ContactQuick c={contacts.get(contactKey(s))} storeHref={ordersHref(s)} name={s.name} canEdit={canEdit} />
                 </li>
               );
             })}

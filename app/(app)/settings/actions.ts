@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { isLoggedIn } from "@/lib/auth";
+import { authorizeAction } from "@/lib/auth";
 import { getAccount, updateAccount } from "@/lib/accounts";
 import { countryByCode, PLATFORMS } from "@/lib/countries";
 import { encrypt } from "@/lib/crypto";
@@ -11,8 +11,10 @@ import { db } from "@/lib/supabase";
 import { reprocessAll } from "@/lib/store";
 import { syncAccount } from "@/lib/sync";
 
+/** Todas las acciones de Cuentas exigen el permiso "accounts" (se pueden llamar por POST desde cualquier página). */
 async function guard() {
-  if (!(await isLoggedIn())) redirect("/login");
+  const auth = await authorizeAction("accounts");
+  if (!auth.ok) back(auth.msg, false);
 }
 
 function back(msg: string, ok: boolean): never {

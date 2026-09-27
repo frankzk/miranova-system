@@ -1,5 +1,6 @@
 // Acceso rápido al contacto de una tienda en los listados: abre su grupo de WhatsApp (o el chat
-// con el dueño si solo hay teléfono); sin contacto, lleva a su ficha con el panel para agregarlo.
+// con el dueño si solo hay teléfono); sin contacto y con permiso de editar tiendas, lleva a su
+// ficha con el panel para agregarlo. Quien lo usa debe mostrarlo solo con permiso de Tiendas.
 import Link from "next/link";
 import { IconChat, IconPlus } from "./icons";
 import { formatPhone, whatsappChat } from "@/lib/store-contacts";
@@ -7,11 +8,12 @@ import { formatPhone, whatsappChat } from "@/lib/store-contacts";
 export type QuickContact = { group: string | null; phone: string | null } | undefined;
 
 /** Envuelto en un span para no heredar los estilos de los enlaces de la fila. */
-export function ContactQuick(props: { c: QuickContact; storeHref: string; name: string }) {
+export function ContactQuick(props: { c: QuickContact; storeHref: string; name: string; canEdit: boolean }) {
+  if (!props.c?.group && !props.c?.phone && !props.canEdit) return null;
   return <span className="qc-slot"><QuickLink {...props} /></span>;
 }
 
-function QuickLink({ c, storeHref, name }: { c: QuickContact; storeHref: string; name: string }) {
+function QuickLink({ c, storeHref, name }: { c: QuickContact; storeHref: string; name: string; canEdit: boolean }) {
   if (c?.group) {
     return (
       <a className="qc qc-wa" href={c.group} target="_blank" rel="noopener noreferrer" title={`Abrir el grupo de WhatsApp de ${name}`}>

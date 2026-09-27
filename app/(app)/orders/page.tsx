@@ -8,9 +8,11 @@ import { OrderDetailView } from "@/components/order-detail";
 import { AccountChips } from "@/components/account-chips";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { getOrder, groupCounts, listOrders, orderFacets, PAGE_SIZE, parseFilters, SORTS, type Sort } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { can } from "@/lib/permissions";
 import { GROUPS, groupById } from "@/lib/status";
 
 export const metadata = { title: "Órdenes" };
@@ -18,6 +20,7 @@ export const metadata = { title: "Órdenes" };
 type SP = Record<string, string | string[] | undefined>;
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const user = await requirePermission("orders");
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
@@ -80,9 +83,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         title="Órdenes"
         sub={<>{fmtInt(counts.all ?? 0)} órdenes · {scope.label}</>}
         actions={
-          <a className="btn" href={exportHref}>
-            <IconDownload /> Exportar CSV
-          </a>
+          can(user, "export") && (
+            <a className="btn" href={exportHref}>
+              <IconDownload /> Exportar CSV
+            </a>
+          )
         }
       />
 
@@ -221,6 +226,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <Drawer closeHref={closeHref} label={`Orden ${open.external_id}`}>
           <OrderDetailView
             o={open}
+            showPaid={can(user, "money")}
+            showRaw={can(user, "accounts")}
             headControls={
               <div style={{ display: "flex", gap: 4 }}>
                 <Link className="btn btn-ghost btn-icon" href={`/orders/${open.id}`} aria-label="Abrir en página completa" title="Abrir en página completa">

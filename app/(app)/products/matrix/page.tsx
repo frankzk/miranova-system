@@ -3,8 +3,10 @@ import { AccountChips } from "@/components/account-chips";
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { crossSell, MATRIX_RULES, matrixGrid, type CrossSellItem, type Grid } from "@/lib/cross-sell";
 import { fmtInt } from "@/lib/format";
+import { can } from "@/lib/permissions";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
 import { MATRIX_DAYS, storeProductMatrix } from "@/lib/store-product-matrix";
@@ -17,6 +19,9 @@ const PATH = "/products/matrix";
 const SHOWN = 8;
 
 export default async function StoreProductMatrixPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const user = await requirePermission("products");
+  // sin permiso de Tiendas, los nombres de tienda van sin enlace a su ficha
+  const canStores = can(user, "stores");
   const sp = await searchParams;
   const raw = Number(Array.isArray(sp.days) ? sp.days[0] : sp.days);
   const days = (MATRIX_DAYS as readonly number[]).includes(raw) ? raw : 30;
@@ -63,7 +68,7 @@ export default async function StoreProductMatrixPage({ searchParams }: { searchP
         ) : (
           <ul className="mx-list">
             {ideas.slice(0, SHOWN).map((i) => (
-              <Idea key={`${i.kind}:${i.account_id}:${i.store_id}:${i.product_key}`} i={i} account={showAccount ? accountName.get(i.account_id) : undefined} />
+              <Idea key={`${i.kind}:${i.account_id}:${i.store_id}:${i.product_key}`} i={i} account={showAccount ? accountName.get(i.account_id) : undefined} canStores={canStores} />
             ))}
           </ul>
         )}
@@ -82,7 +87,7 @@ export default async function StoreProductMatrixPage({ searchParams }: { searchP
         grids.map(({ account, grid }) => (
           <section key={account.account_id} className="mx-section">
             {showAccount && <h2 className="band-label">{account.account_name}<span>{fmtInt(grid.rows.length + grid.moreStores)} tiendas</span></h2>}
-            <Matrix grid={grid} days={days} />
+            <Matrix grid={grid} days={days} canStores={canStores} />
           </section>
         ))
       )}
@@ -95,7 +100,7 @@ export default async function StoreProductMatrixPage({ searchParams }: { searchP
   );
 }
 
-function Matrix({ grid, days }: { grid: Grid; days: number }) {
+function Matrix({ grid, days, canStores }: { grid: Grid; days: number; canStores: boolean }) {
   const max = Math.max(1, ...grid.rows.flatMap((r) => r.cells));
   return (
     <div className="table-wrap">
@@ -121,7 +126,9 @@ function Matrix({ grid, days }: { grid: Grid; days: number }) {
               return (
                 <tr key={r.store.store_id}>
                   <th scope="row" className="mx-store">
-                    <Link className="strong" href={storeHref(r.store.account_id, r.store.store_id)} title={r.store.name}>{r.store.name}</Link>
+                    {canStores
+                      ? <Link className="strong" href={storeHref(r.store.account_id, r.store.store_id)} title={r.store.name}>{r.store.name}</Link>
+                      : <span className="strong" title={r.store.name}>{r.store.name}</span>}
                     <span className="sub">
                       {pace >= 10 ? Math.round(pace) : pace.toFixed(1)}/día
                       {single && <span title="Vende un solo producto: ofrecer un segundo"> · 📦 1 producto</span>}
@@ -161,10 +168,10 @@ function Matrix({ grid, days }: { grid: Grid; days: number }) {
   );
 }
 
-function Idea({ i, account }: { i: CrossSellItem; account?: string }) {
+function Idea({ i, account, canStores }: { i: CrossSellItem; account?: string; canStores: boolean }) {
   return (
     <li className="mx-idea" data-kind={i.kind}>
-      <Link className="strong" href={storeHref(i.account_id, i.store_id)}>{i.title}</Link>
+      {canStores ? <Link className="strong" href={storeHref(i.account_id, i.store_id)}>{i.title}</Link> : <span className="strong">{i.title}</span>}
       <p className="detail">{i.detail}{account && <> · {account}</>}</p>
       <p className="action">→ {i.action}</p>
     </li>

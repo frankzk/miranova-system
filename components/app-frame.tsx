@@ -3,20 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget } from "./icons";
+import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget, IconUsers } from "./icons";
+import type { Permission, PermissionFlags } from "@/lib/permissions";
 
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
 
-const NAV = [
+// cada sección solo aparece con su permiso (la página igual lo vuelve a revisar)
+const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permission; match: (p: string) => boolean }[] = [
   { href: "/", label: "Inicio", icon: IconHome, match: (p: string) => p === "/" },
-  { href: "/business", label: "Negocio", icon: IconChart, match: (p: string) => p.startsWith("/business") },
-  { href: "/opportunities", label: "Oportunidades", icon: IconTarget, match: (p: string) => p.startsWith("/opportunities") },
-  { href: "/orders", label: "Órdenes", icon: IconOrders, match: (p: string) => p.startsWith("/orders") },
-  { href: "/stores", label: "Tiendas", icon: IconStore, match: (p: string) => p.startsWith("/stores") },
-  { href: "/products", label: "Productos", icon: IconBox, match: (p: string) => p.startsWith("/products") },
-  { href: "/money", label: "Dinero", icon: IconMoney, match: (p: string) => p.startsWith("/money") },
-  { href: "/settings", label: "Cuentas", icon: IconAccounts, match: (p: string) => p.startsWith("/settings") },
+  { href: "/business", label: "Negocio", icon: IconChart, perm: "business", match: (p: string) => p.startsWith("/business") },
+  { href: "/opportunities", label: "Oportunidades", icon: IconTarget, perm: "opportunities", match: (p: string) => p.startsWith("/opportunities") },
+  { href: "/orders", label: "Órdenes", icon: IconOrders, perm: "orders", match: (p: string) => p.startsWith("/orders") },
+  { href: "/stores", label: "Tiendas", icon: IconStore, perm: "stores", match: (p: string) => p.startsWith("/stores") },
+  { href: "/products", label: "Productos", icon: IconBox, perm: "products", match: (p: string) => p.startsWith("/products") },
+  { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
+  { href: "/settings", label: "Cuentas", icon: IconAccounts, perm: "accounts", match: (p: string) => p.startsWith("/settings") },
+  { href: "/users", label: "Usuarios", icon: IconUsers, perm: "users", match: (p: string) => p.startsWith("/users") },
 ];
+
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
 
 function Brand() {
   return (
@@ -32,12 +38,19 @@ export function AppFrame({
   scopeId,
   scopeLabel,
   attention,
+  perms,
+  user,
+  locked,
   children,
 }: {
   accounts: SideAccount[];
   scopeId: string | null;
   scopeLabel: string;
   attention: number;
+  perms: PermissionFlags;
+  user: { name: string; username: string };
+  /** Debe cambiar la contraseña temporal: sin menú hasta hacerlo. */
+  locked: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -114,7 +127,7 @@ export function AppFrame({
         )}
 
         <nav className="nav">
-          {NAV.map(({ href, label, icon: Icon, match }) => (
+          {NAV.filter((n) => !locked && (!n.perm || perms[n.perm])).map(({ href, label, icon: Icon, match }) => (
             <Link key={href} href={href} aria-current={match(pathname) ? "page" : undefined}>
               <Icon />
               {label}
@@ -125,7 +138,7 @@ export function AppFrame({
           ))}
         </nav>
 
-        {accounts.length > 0 && (
+        {accounts.length > 0 && perms.accounts && !locked && (
           <div className="side-section">
             <div className="side-label">Sincronización</div>
             <div className="side-accounts">
@@ -141,6 +154,13 @@ export function AppFrame({
         )}
 
         <div className="sidebar-foot">
+          <Link href="/account" className="side-user" aria-current={pathname.startsWith("/account") ? "page" : undefined} title="Mi cuenta: cambiar contraseña">
+            <span className="avatar" aria-hidden>{initials(user.name)}</span>
+            <span className="who">
+              <span className="name">{user.name}</span>
+              <span className="meta">{user.username} · Mi cuenta</span>
+            </span>
+          </Link>
           <form method="post" action="/api/logout">
             <button type="submit">
               <IconLogout />

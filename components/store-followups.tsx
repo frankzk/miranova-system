@@ -1,5 +1,6 @@
 // Seguimiento comercial de una tienda (CRM interno): historial, alta de registros y
-// efecto medido de cada contacto (7 días antes vs. 7 días desde el contacto).
+// efecto medido de cada contacto (7 días antes vs. 7 días desde el contacto). Sin permiso de
+// editar (actions = null) el historial es de solo lectura.
 import { FollowupForm, FollowupStatusForm, type FollowupState } from "./followup-forms";
 import { IconPlus } from "./icons";
 import { SideSheet } from "./side-sheet";
@@ -18,11 +19,13 @@ export type StoreFollowupsProps = {
   daily: StoreDay[];
   /** Hoy en la zona de la cuenta (YYYY-MM-DD). */
   today: string;
-  actions: { add: Action; update: Action };
+  actions: { add: Action; update: Action } | null;
+  /** Nombre del usuario de la sesión: responsable por defecto de un seguimiento nuevo. */
+  me?: string;
 };
 
-export async function StoreFollowups({ accountId, storeId, storeName, currency, daily, today, actions }: StoreFollowupsProps) {
-  const [items, owners] = await Promise.all([listFollowups(accountId, storeId), followupOwners()]);
+export async function StoreFollowups({ accountId, storeId, storeName, currency, daily, today, actions, me }: StoreFollowupsProps) {
+  const [items, owners] = await Promise.all([listFollowups(accountId, storeId), actions ? followupOwners() : Promise.resolve([])]);
   const open = items.filter((f) => OPEN_STATUSES.includes(f.status));
 
   return (
@@ -32,16 +35,18 @@ export async function StoreFollowups({ accountId, storeId, storeName, currency, 
         <span className="aside">
           {items.length ? `${items.length} ${items.length === 1 ? "registro" : "registros"} · ${open.length} ${open.length === 1 ? "abierto" : "abiertos"}` : "Interno"}
         </span>
-        <SideSheet
-          triggerClass="btn btn-sm"
-          trigger={<><IconPlus /> Nuevo seguimiento</>}
-          title="Nuevo seguimiento"
-          sub={<>{storeName} · registro interno de Miranova</>}
-        >
-          <div className="section">
-            <FollowupForm action={actions.add} accountId={accountId} storeId={storeId} storeName={storeName} today={today} owners={owners} />
-          </div>
-        </SideSheet>
+        {actions && (
+          <SideSheet
+            triggerClass="btn btn-sm"
+            trigger={<><IconPlus /> Nuevo seguimiento</>}
+            title="Nuevo seguimiento"
+            sub={<>{storeName} · registro interno de Miranova</>}
+          >
+            <div className="section">
+              <FollowupForm action={actions.add} accountId={accountId} storeId={storeId} storeName={storeName} today={today} owners={owners} owner={me} />
+            </div>
+          </SideSheet>
+        )}
       </div>
       {items.length === 0 && (
         <p className="panel-body muted fu-empty">
@@ -51,7 +56,7 @@ export async function StoreFollowups({ accountId, storeId, storeName, currency, 
       {items.length > 0 && (
         <ol className="fu-list">
           {items.map((f) => (
-            <Entry key={f.id} f={f} daily={daily} today={today} currency={currency} update={actions.update} />
+            <Entry key={f.id} f={f} daily={daily} today={today} currency={currency} update={actions?.update ?? null} />
           ))}
         </ol>
       )}
@@ -59,7 +64,7 @@ export async function StoreFollowups({ accountId, storeId, storeName, currency, 
   );
 }
 
-function Entry({ f, daily, today, currency, update }: { f: Followup; daily: StoreDay[]; today: string; currency: string; update: Action }) {
+function Entry({ f, daily, today, currency, update }: { f: Followup; daily: StoreDay[]; today: string; currency: string; update: Action | null }) {
   const st = FOLLOWUP_STATUS[f.status] ?? FOLLOWUP_STATUS.pendiente;
   const overdue = f.next_followup !== null && f.next_followup < today && OPEN_STATUSES.includes(f.status);
   return (
@@ -78,10 +83,12 @@ function Entry({ f, daily, today, currency, update }: { f: Followup; daily: Stor
       {f.recommendation && <p><span className="k">Recomendación</span>{f.recommendation}</p>}
       {f.action_taken && <p><span className="k">Acción</span>{f.action_taken}</p>}
       <Impact daily={daily} contactedAt={f.contacted_at} today={today} currency={currency} />
-      <details className="fu-edit">
-        <summary>Cambiar estado</summary>
-        <FollowupStatusForm action={update} id={f.id} accountId={f.account_id} status={f.status} next={f.next_followup} />
-      </details>
+      {update && (
+        <details className="fu-edit">
+          <summary>Cambiar estado</summary>
+          <FollowupStatusForm action={update} id={f.id} accountId={f.account_id} status={f.status} next={f.next_followup} />
+        </details>
+      )}
     </li>
   );
 }

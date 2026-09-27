@@ -4,6 +4,7 @@ import { IconBox } from "@/components/icons";
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtShort } from "@/lib/format";
 import {
   daysLeft, INVENTORY_RULES, LEVEL_ORDER, perDay, reorderList, returnRate, STOCK_LEVEL, stockLevel, toCover,
@@ -16,6 +17,7 @@ import "./inventory.css";
 export const metadata = { title: "Inventario" };
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ l?: string }> }) {
+  await requirePermission("products");
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);

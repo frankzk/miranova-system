@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { FollowupState } from "@/components/followup-forms";
-import { isLoggedIn } from "@/lib/auth";
+import { authorizeAction } from "@/lib/auth";
 import { isDay, isFollowupStatus } from "@/lib/store-metrics";
 import { db } from "@/lib/supabase";
 
@@ -27,7 +27,8 @@ function day(f: FormData, k: string): string | null | undefined {
 }
 
 export async function addFollowup(_prev: FollowupState, form: FormData): Promise<FollowupState> {
-  if (!(await isLoggedIn())) return fail("Tu sesión expiró. Vuelve a entrar.");
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
   const accountId = field(form, "account_id");
   const storeId = field(form, "store_id");
   if (!UUID.test(accountId) || !storeId || storeId.length > 200) return fail("Tienda no válida.");
@@ -62,7 +63,8 @@ export async function addFollowup(_prev: FollowupState, form: FormData): Promise
 }
 
 export async function updateFollowup(_prev: FollowupState, form: FormData): Promise<FollowupState> {
-  if (!(await isLoggedIn())) return fail("Tu sesión expiró. Vuelve a entrar.");
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
   const id = field(form, "id");
   const accountId = field(form, "account_id");
   const status = field(form, "status");

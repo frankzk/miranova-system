@@ -1,0 +1,46 @@
+/* Usuarios: lista de personas con sus permisos, y formularios en el panel lateral */
+.users-list { list-style: none; margin: 0; padding: 0; }
+.user-row {
+  display: grid; grid-template-columns: 32px minmax(160px, 1fr) minmax(0, 2fr) auto auto; align-items: center; gap: 8px 14px;
+  padding: 12px 18px; border-top: 1px solid var(--line);
+}
+.user-row:first-child { border-top: 0; }
+.user-row[data-inactive] { opacity: 0.62; }
+.user-row .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 650; }
+.user-row .who { display: grid; min-width: 0; }
+.user-row .name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.user-row .you { font-size: var(--t-xs); font-weight: 550; color: var(--accent-ink); background: var(--accent-bg); border-radius: 999px; padding: 0 7px; }
+.user-row .meta { font-size: var(--t-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-row .perms { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.user-row .perms .muted { font-size: var(--t-sm); }
+.user-row .act { justify-self: end; }
+
+.uf-form { display: grid; gap: 14px; }
+.uf-form .fu-actions { margin-top: 0; }
+.uf-pass { display: flex; gap: 8px; }
+.uf-pass .input { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.uf-pass .btn { height: 36px; }
+.uf-perms { margin: 0; padding: 0; border: 0; display: grid; gap: 2px; }
+.uf-perms legend { padding: 0; margin-bottom: 8px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.uf-perm {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 0 10px;
+  padding: 8px 10px; border-radius: var(--r); cursor: pointer;
+}
+.uf-perm:hover { background: var(--bg-app); }
+.uf-perm input { margin: 2px 0 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.uf-perm .t { font-weight: 550; color: var(--ink); font-size: var(--t-md); }
+.uf-perm .h { grid-column: 2; font-size: var(--t-xs); color: var(--ink-3); }
+.uf-perm[data-locked] { cursor: not-allowed; opacity: 0.7; }
+.uf-owner, .uf-active { border: 1px solid var(--line); }
+.uf-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+@media (max-width: 900px) {
+  .user-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+  .user-row .perms { grid-column: 2 / -1; grid-row: 2; }
+  .user-row .state { grid-column: 2; grid-row: 3; }
+  .user-row .act { grid-column: 3; grid-row: 1; }
+}
+
+/* Mi cuenta */
+.page-narrow > .panel + .panel { margin-top: 20px; }
+.acc-perms { display: flex; flex-wrap: wrap; gap: 6px; }

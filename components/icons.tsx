@@ -113,3 +113,9 @@ export const IconTarget = (p: P) => (
 export const IconChat = (p: P) => (
   <Svg {...p}><path d="M8 2.5c3.04 0 5.5 2.24 5.5 5s-2.46 5-5.5 5c-.8 0-1.56-.15-2.24-.43L2.5 13.5l.93-2.7A4.7 4.7 0 0 1 2.5 7.5c0-2.76 2.46-5 5.5-5Z" /><path d="M5.5 7.5h.01M8 7.5h.01M10.5 7.5h.01" /></Svg>
 );
+export const IconUsers = (p: P) => (
+  <Svg {...p}><circle cx="6" cy="5.5" r="2.5" /><path d="M1.5 13.5c.4-2.4 2.2-4 4.5-4s4.1 1.6 4.5 4" /><path d="M10.5 3.2a2.5 2.5 0 0 1 0 4.6M12 9.8c1.3.5 2.2 1.9 2.5 3.7" /></Svg>
+);
+export const IconLock = (p: P) => (
+  <Svg {...p}><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></Svg>
+);

@@ -6,8 +6,10 @@ import { StoreChart } from "@/components/store-chart";
 import { StoreContactBar } from "@/components/store-contact";
 import { StoreFollowups } from "@/components/store-followups";
 import { PageHead } from "@/components/ui";
+import { currentUser, requirePermission } from "@/lib/auth";
 import { storeContactView } from "@/lib/contacts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
+import { can } from "@/lib/permissions";
 import { storeDetail } from "@/lib/store-detail";
 import { fmtDay, pctChange, vsAverage, type StoreDetail } from "@/lib/store-metrics";
 import { classify, HEALTH, opportunities, type StoreRow } from "@/lib/stores";
@@ -42,12 +44,17 @@ const loadContact = cache(async (account: string, store: string) => {
 });
 
 export async function generateMetadata({ params }: { params: Params }) {
+  // sin permiso de Tiendas no se consulta la tienda (ni su nombre para el título)
+  const u = await currentUser();
+  if (!u || u.must_change_password || !can(u, "stores")) return { title: "Tienda" };
   const { account, store } = await params;
   const d = await load(account, store);
   return { title: d?.store.name ?? "Tienda" };
 }
 
 export default async function StorePage({ params }: { params: Params }) {
+  const user = await requirePermission("stores");
+  const canEdit = can(user, "stores_edit");
   const { account, store } = await params;
   const [d, contact] = await Promise.all([load(account, store), loadContact(account, store)]);
   if (!d || !contact) notFound();
@@ -75,13 +82,13 @@ export default async function StorePage({ params }: { params: Params }) {
             {k.first_at && <> · primera venta registrada {fmtDay(k.first_at.slice(0, 10), s.today)}</>}
           </>
         }
-        actions={<Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link>}
+        actions={can(user, "orders") ? <Link className="btn" href={ordersHref}>Ver pedidos <IconArrowRight /></Link> : undefined}
       />
 
       <StoreContactBar
         view={contact}
         store={{ accountId: s.account_id, storeId: s.store_id, storeName: s.name }}
-        actions={{ save: saveContact, link: linkStore, unlink: unlinkStore }}
+        actions={canEdit ? { save: saveContact, link: linkStore, unlink: unlinkStore } : null}
       />
 
       {ops.length > 0 && (
@@ -209,7 +216,8 @@ export default async function StorePage({ params }: { params: Params }) {
         currency={s.currency}
         daily={d.daily}
         today={s.today}
-        actions={{ add: addFollowup, update: updateFollowup }}
+        actions={canEdit ? { add: addFollowup, update: updateFollowup } : null}
+        me={user.name}
       />
 
       <p className="footnote">

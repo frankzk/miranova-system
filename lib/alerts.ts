@@ -28,8 +28,23 @@ export type AlertView = {
   tag: string;
   title: string;
   detail: string;
+  /** "" = sin enlace (el usuario no tiene acceso a la sección de destino) */
   href: string;
 };
+
+/** Qué secciones puede ver quien mira las alertas: decide montos y enlaces. */
+export type AlertAccess = { money: boolean; orders: boolean; products: boolean };
+const ALL: AlertAccess = { money: true, orders: true, products: true };
+
+/**
+ * Deja solo las alertas que el usuario puede ver: sin Dinero no ve "sin liquidar".
+ * El total se recalcula para que "X de Y hallazgos" no delate las ocultas.
+ */
+export function visibleAlerts(data: OwnerAlerts, access: AlertAccess): OwnerAlerts {
+  if (access.money) return data;
+  const alerts = data.alerts.filter((a) => a.kind !== "unpaid_late");
+  return { total: Math.max(alerts.length, data.total - (data.alerts.length - alerts.length)), alerts };
+}
 
 const TONE = { 1: "danger", 2: "warning", 3: "info" } as const;
 const TAG = { 1: "Hoy", 2: "Esta semana", 3: "Oportunidad" } as const;
@@ -46,8 +61,11 @@ const money = (n: number, currency: string) => fmtMoney(n, currency).replace(" "
 /** Cambia la cuenta activa del panel y abre `next` (como los chips de cuenta). */
 const inAccount = (account: string, next: string) => `/api/scope?${new URLSearchParams({ account, next })}`;
 
-export function describeAlert(a: OwnerAlert, tz?: string): AlertView {
+export function describeAlert(a: OwnerAlert, tz?: string, access: AlertAccess = ALL): AlertView {
   const d = a.data;
+  // enlaces solo a secciones permitidas; si no, la alerta queda como texto
+  const orders = (href: string) => (access.orders ? href : "");
+  const products = (href: string) => (access.products ? href : "");
   const cur = num(d.cur);
   const prev = num(d.prev);
   const change = pctChange(cur, prev);
@@ -59,7 +77,7 @@ export function describeAlert(a: OwnerAlert, tz?: string): AlertView {
         ...base,
         title: `${a.account}: 0 pedidos en 7 días`,
         detail: `La semana anterior tuvo ${fmtInt(prev)}. Último pedido: ${fmtShort(str(d.last_order), tz)}.`,
-        href: inAccount(a.account_id, "/orders"),
+        href: access.orders ? inAccount(a.account_id, "/orders") : inAccount(a.account_id, "/"),
       };
     case "account_drop":
     case "account_growth":
@@ -74,35 +92,35 @@ export function describeAlert(a: OwnerAlert, tz?: string): AlertView {
         ...base,
         title: `${str(d.store)} dejó de pedir`,
         detail: `${a.account} · sin pedidos desde el ${fmtShort(str(d.last_order), tz)}; hacía unos ${fmtInt(num(d.weekly))} por semana.`,
-        href: `/orders?dropshipper=${encodeURIComponent(str(d.store))}`,
+        href: orders(`/orders?dropshipper=${encodeURIComponent(str(d.store))}`),
       };
     case "store_drop":
       return {
         ...base,
         title: `${str(d.store)}: ${change === null ? "cayó" : signed(change)} en 14 días`,
         detail: `${a.account} · ${fmtInt(cur)} pedidos frente a ${fmtInt(prev)} en las 2 semanas anteriores.`,
-        href: `/orders?dropshipper=${encodeURIComponent(str(d.store))}`,
+        href: orders(`/orders?dropshipper=${encodeURIComponent(str(d.store))}`),
       };
     case "product_growth":
       return {
         ...base,
         title: `${str(d.product)}: ${change === null ? "producto nuevo en alza" : `${signed(change)} en 14 días`}`,
         detail: `${a.account} · ${fmtInt(cur)} unidades frente a ${fmtInt(prev)} en las 2 semanas anteriores.`,
-        href: `/products?q=${encodeURIComponent(str(d.product))}`,
+        href: products(`/products?q=${encodeURIComponent(str(d.product))}`),
       };
     case "stock_rejections":
       return {
         ...base,
         title: `${str(d.product)}: ${fmtInt(num(d.orders))} pedidos rechazados por falta de stock`,
         detail: `${a.account} · últimos 7 días. Cada rechazo es una venta en riesgo.`,
-        href: `/products?q=${encodeURIComponent(str(d.product))}`,
+        href: products(`/products?q=${encodeURIComponent(str(d.product))}`),
       };
     case "product_delivery":
       return {
         ...base,
         title: `${str(d.product)}: ${pct(num(d.rate))} de entrega`,
         detail: `${a.account} · promedio de la cuenta ${pct(num(d.avg))}; ${fmtInt(num(d.failed))} no entregados en 60 días.`,
-        href: `/products?q=${encodeURIComponent(str(d.product))}`,
+        href: products(`/products?q=${encodeURIComponent(str(d.product))}`),
       };
     case "stuck_orders": {
       const transit = num(d.transit);
@@ -110,8 +128,8 @@ export function describeAlert(a: OwnerAlert, tz?: string): AlertView {
       return {
         ...base,
         title: `${a.account}: ${fmtInt(num(d.orders))} pedidos sin moverse hace más de 5 días`,
-        detail: `${fmtInt(transit)} en tránsito · ${fmtInt(problem)} con problemas · ${money(num(d.amount), a.currency)} en juego.`,
-        href: inAccount(a.account_id, `/orders?group=${problem > transit ? "problem" : "transit"}`),
+        detail: `${fmtInt(transit)} en tránsito · ${fmtInt(problem)} con problemas${access.money ? ` · ${money(num(d.amount), a.currency)} en juego` : ""}.`,
+        href: orders(inAccount(a.account_id, `/orders?group=${problem > transit ? "problem" : "transit"}`)),
       };
     }
     case "carrier_delivery":
@@ -119,9 +137,11 @@ export function describeAlert(a: OwnerAlert, tz?: string): AlertView {
         ...base,
         title: `${str(d.carrier)}: ${pct(num(d.rate))} de entrega en ${a.account}`,
         detail: `Promedio de la cuenta ${pct(num(d.avg))}; ${fmtInt(num(d.failed))} no entregados de ${fmtInt(num(d.closed))} en 60 días.`,
-        href: inAccount(a.account_id, `/orders?carrier=${encodeURIComponent(str(d.carrier))}`),
+        href: orders(inAccount(a.account_id, `/orders?carrier=${encodeURIComponent(str(d.carrier))}`)),
       };
     case "unpaid_late":
+      // liquidaciones: visibleAlerts() la quita a quien no tiene Dinero
+      if (!access.money) return { ...base, title: `${a.account}: pedidos entregados sin liquidar`, detail: "", href: "" };
       return {
         ...base,
         title: `${a.account}: ${money(num(d.amount), a.currency)} entregados sin liquidar`,
