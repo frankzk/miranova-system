@@ -52,6 +52,7 @@ test("usuario y contraseña: reglas mínimas", () => {
   assert.equal(USERNAME_RE.test("andrea.m"), true);
   assert.equal(USERNAME_RE.test("An"), false);
   assert.equal(USERNAME_RE.test("con espacio"), false);
+  assert.equal(USERNAME_RE.test("frank@ejemplo.com"), true);
   assert.match(passwordProblem("corta") ?? "", /al menos 8/);
   assert.match(passwordProblem("andrea2026", "andrea") ?? "", /usuario/);
   assert.equal(passwordProblem("aaaaaaaaaa"), "La contraseña no puede ser un mismo carácter repetido.");

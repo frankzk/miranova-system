@@ -37,7 +37,7 @@ export async function createUserAction(_prev: UserFormState, form: FormData): Pr
   const name = field(form, "name").slice(0, 80);
   const password = String(form.get("password") ?? "");
   if (!name) return fail("Escribe el nombre.");
-  if (!USERNAME_RE.test(username)) return fail("El usuario debe tener de 3 a 40 caracteres: letras minúsculas, números, punto, guion o guion bajo.");
+  if (!USERNAME_RE.test(username)) return fail("El usuario debe tener de 3 a 80 caracteres: letras minúsculas, números, punto, guion, guion bajo o un correo.");
   const weak = passwordProblem(password, username);
   if (weak) return fail(weak);
 

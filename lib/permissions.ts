@@ -61,8 +61,8 @@ export function ungrantable(actor: Grantee, requested: readonly Permission[]): P
 /** Página de inicio de un usuario: Inicio es para todos. */
 export const HOME = "/";
 
-/** Usuario: minúsculas, números, punto, guion y guion bajo; de 3 a 40. */
-export const USERNAME_RE = /^[a-z0-9._-]{3,40}$/;
+/** Usuario: minúsculas, números, punto, guion, guion bajo, "+" y "@" (sirve un correo); de 3 a 80. */
+export const USERNAME_RE = /^[a-z0-9._+@-]{3,80}$/;
 export const normalizeUsername = (s: string) => s.trim().toLowerCase();
 
 export const MIN_PASSWORD = 8;

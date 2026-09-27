@@ -6,7 +6,7 @@ import { checkLogin } from "@/lib/users";
 // Entrar con usuario y contraseña. Los errores vuelven a /login con un código (sin la contraseña).
 export async function POST(req: NextRequest) {
   const form = await req.formData();
-  const username = normalizeUsername(String(form.get("username") ?? "")).slice(0, 60);
+  const username = normalizeUsername(String(form.get("username") ?? "")).slice(0, 80);
   const password = String(form.get("password") ?? "").slice(0, 200);
   const next = safeNext(String(form.get("next") ?? ""));
 
