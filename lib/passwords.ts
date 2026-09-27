@@ -50,7 +50,7 @@ export const SESSION_COOKIE = "miranova_session";
 export const SESSION_MAX_AGE_S = 60 * 60 * 24 * 30;
 
 export function sessionSecret(): string {
-  const s = process.env.AUTH_SECRET || process.env.ENCRYPTION_KEY || process.env.DASHBOARD_PASSWORD;
+  const s = process.env.AUTH_SECRET || process.env.ENCRYPTION_KEY;
   if (!s) throw new Error("Falta AUTH_SECRET (o ENCRYPTION_KEY) para firmar las sesiones");
   return s;
 }

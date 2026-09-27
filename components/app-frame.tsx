@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget, IconUsers } from "./icons";
+import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget } from "./icons";
 import type { Permission, PermissionFlags } from "@/lib/permissions";
 
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
@@ -17,8 +17,6 @@ const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permissi
   { href: "/stores", label: "Tiendas", icon: IconStore, perm: "stores", match: (p: string) => p.startsWith("/stores") },
   { href: "/products", label: "Productos", icon: IconBox, perm: "products", match: (p: string) => p.startsWith("/products") },
   { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
-  { href: "/settings", label: "Cuentas", icon: IconAccounts, perm: "accounts", match: (p: string) => p.startsWith("/settings") },
-  { href: "/users", label: "Usuarios", icon: IconUsers, perm: "users", match: (p: string) => p.startsWith("/users") },
 ];
 
 const initials = (name: string) =>
@@ -127,7 +125,13 @@ export function AppFrame({
         )}
 
         <nav className="nav">
-          {NAV.filter((n) => !locked && (!n.perm || perms[n.perm])).map(({ href, label, icon: Icon, match }) => (
+          {[
+            ...NAV,
+            // Ajustes: cuentas de plataformas y usuarios, según lo que la persona pueda administrar
+            ...(perms.accounts || perms.users
+              ? [{ href: perms.accounts ? "/settings" : "/settings/users", label: "Ajustes", icon: IconAccounts, match: (p: string) => p.startsWith("/settings") }]
+              : []),
+          ].filter((n) => !locked && (!("perm" in n) || !n.perm || perms[n.perm as Permission])).map(({ href, label, icon: Icon, match }) => (
             <Link key={href} href={href} aria-current={match(pathname) ? "page" : undefined}>
               <Icon />
               {label}
