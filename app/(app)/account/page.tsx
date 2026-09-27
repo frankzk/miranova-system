@@ -3,7 +3,7 @@ import { ChangePasswordForm, CloseSessionsButton } from "@/components/user-forms
 import { requireUser } from "@/lib/auth";
 import { effectivePermissions, permissionLabel } from "@/lib/permissions";
 import { changeOwnPassword, closeOtherSessions } from "./actions";
-import "../users/users.css";
+import "../settings/users/users.css";
 
 export const metadata = { title: "Mi cuenta" };
 

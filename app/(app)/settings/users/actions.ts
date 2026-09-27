@@ -13,7 +13,7 @@ const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail = (msg: string): UserFormState => ({ ok: false, msg });
 const done = (msg: string): UserFormState => {
-  revalidatePath("/users");
+  revalidatePath("/settings/users");
   return { ok: true, msg };
 };
 

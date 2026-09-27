@@ -1,8 +1,10 @@
 import { SubmitButton } from "@/components/submit-button";
 import { IconAlert, IconCheck, IconChevronDown, IconPlus, IconRefresh } from "@/components/icons";
+import { SettingsSubnav } from "@/components/settings-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { COUNTRIES, PLATFORMS, countryByCode } from "@/lib/countries";
 import { fmtAgo, fmtDate, fmtInt } from "@/lib/format";
 import {
@@ -15,12 +17,13 @@ export const maxDuration = 300;
 const platformName = (id: string) => PLATFORMS.find((p) => p.id === id)?.name ?? id;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ msg?: string; ok?: string }> }) {
-  await requirePermission("accounts");
+  const me = await requirePermission("accounts");
   const { msg, ok } = await searchParams;
   const accounts = await listAccounts();
 
   return (
     <div className="page page-narrow">
+      <SettingsSubnav current="accounts" accounts users={can(me, "users")} />
       <PageHead
         title="Cuentas"
         sub="Cada cuenta (plataforma + país) se sincroniza sola cada 10 minutos."
