@@ -49,3 +49,12 @@ test("conector soydrop contra API simulada", async () => {
   assert.match(prods.url, /\/products\/\?page=1&limit=100/);
   srv.close();
 });
+
+test("paginación: cuenta las filas que manda Drop, aunque alguna no se reconozca como pedido", async () => {
+  const { orderRows } = await import("./soydrop.ts");
+  const orders = Array.from({ length: 100 }, (_, i) => ({ id: i }));
+  assert.equal(orderRows({ status: "success", data: { total: 704, orders } }), 100);
+  assert.equal(orderRows({ data: { items: [{ id: 1 }] } }), 1);
+  assert.equal(orderRows({ data: [] }), 0);
+  assert.equal(orderRows({ message: "x" }), undefined);
+});
