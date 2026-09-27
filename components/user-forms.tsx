@@ -98,7 +98,7 @@ export function NewUserForm({ action, lockedPerms, canMakeOwner }: { action: Act
         </label>
         <label className="field">
           <span>Usuario <span className="hint">para entrar</span></span>
-          <input className="input" name="username" required pattern="[a-z0-9._\-]{3,40}" autoCapitalize="none" spellCheck={false} autoComplete="off" placeholder="ej. andrea" />
+          <input className="input" name="username" required pattern="[a-z0-9._+@\-]{3,80}" autoCapitalize="none" spellCheck={false} autoComplete="off" placeholder="ej. andrea o su correo" />
         </label>
       </div>
       <TempPassword />

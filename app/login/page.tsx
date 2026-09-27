@@ -16,7 +16,7 @@ const LOGIN_ERRORS: Record<string, (m?: string) => string> = {
 
 const SETUP_ERRORS: Record<string, string> = {
   panel: "La contraseña actual del panel no es correcta.",
-  username: "El usuario debe tener de 3 a 40 caracteres: letras minúsculas, números, punto, guion o guion bajo.",
+  username: "El usuario debe tener de 3 a 80 caracteres: letras minúsculas, números, punto, guion, guion bajo o un correo.",
   name: "Escribe tu nombre.",
   weak: `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres y no contener el usuario.`,
   mismatch: "Las contraseñas no coinciden.",
@@ -70,7 +70,7 @@ function Login({ sp }: { sp: Awaited<SP> }) {
             autoCorrect="off"
             spellCheck={false}
             autoComplete="username"
-            defaultValue={sp.u?.slice(0, 40) ?? ""}
+            defaultValue={sp.u?.slice(0, 80) ?? ""}
             autoFocus={!sp.u}
             required
           />
@@ -114,8 +114,8 @@ function Setup({ error }: { error?: string }) {
           <input className="input" name="name" required maxLength={80} autoComplete="name" />
         </label>
         <label className="field">
-          <span>Usuario <span className="hint">para entrar, sin espacios</span></span>
-          <input className="input" name="username" required pattern="[a-z0-9._\-]{3,40}" autoCapitalize="none" spellCheck={false} autoComplete="username" placeholder="ej. frank" />
+          <span>Usuario <span className="hint">para entrar, sin espacios (puede ser tu correo)</span></span>
+          <input className="input" name="username" required pattern="[a-z0-9._+@\-]{3,80}" autoCapitalize="none" spellCheck={false} autoComplete="username" placeholder="ej. frank o tu correo" />
         </label>
         <label className="field">
           <span>Nueva contraseña <span className="hint">mínimo {MIN_PASSWORD} caracteres</span></span>
