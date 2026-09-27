@@ -8,7 +8,11 @@ import { storeHref } from "@/lib/store-links";
  * cómo cambia la base (nuevas, reactivadas, dejaron de vender) y cuánto vende cada tienda activa.
  * No depende del período elegido en Inicio: siempre mira las ventanas fijas.
  */
-export function ActiveStores({ o, showAccount, tz }: { o: Overview; showAccount: boolean; tz: string }) {
+export function ActiveStores({ o, showAccount, tz, linkStores }: {
+  o: Overview; showAccount: boolean; tz: string;
+  /** con permiso de Tiendas el nombre enlaza a la ficha; sin él, solo texto */
+  linkStores: boolean;
+}) {
   const s = o.stores;
   const funnel = [
     { label: "Registradas", n: s.registered, hint: "Alguna vez hicieron un pedido" },
@@ -70,9 +74,9 @@ export function ActiveStores({ o, showAccount, tz }: { o: Overview; showAccount:
         </div>
 
         <div className="as-changes">
-          <Change kind="new" title="Nuevas este mes" hint="Su primer pedido fue este mes" items={list("new")} n={s.new_month} showAccount={showAccount} tz={tz} tone="success" />
-          <Change kind="reactivated" title="Reactivadas" hint="Volvieron a pedir en 30 días tras 30+ días sin pedidos" items={list("reactivated")} n={s.reactivated} showAccount={showAccount} tz={tz} tone="info" />
-          <Change kind="stopped" title="Dejaron de vender" hint="Pedían (3+ pedidos) y llevan 14 días sin pedidos" items={list("stopped")} n={s.stopped} showAccount={showAccount} tz={tz} tone="danger" />
+          <Change kind="new" title="Nuevas este mes" hint="Su primer pedido fue este mes" items={list("new")} n={s.new_month} link={linkStores} showAccount={showAccount} tz={tz} tone="success" />
+          <Change kind="reactivated" title="Reactivadas" hint="Volvieron a pedir en 30 días tras 30+ días sin pedidos" items={list("reactivated")} n={s.reactivated} link={linkStores} showAccount={showAccount} tz={tz} tone="info" />
+          <Change kind="stopped" title="Dejaron de vender" hint="Pedían (3+ pedidos) y llevan 14 días sin pedidos" items={list("stopped")} n={s.stopped} link={linkStores} showAccount={showAccount} tz={tz} tone="danger" />
           <Weeks weeks={o.weeks} />
         </div>
       </div>
@@ -80,8 +84,8 @@ export function ActiveStores({ o, showAccount, tz }: { o: Overview; showAccount:
   );
 }
 
-function Change({ kind, title, hint, items, n, showAccount, tz, tone }: {
-  kind: OverviewStore["kind"]; title: string; hint: string; items: OverviewStore[]; n: number; showAccount: boolean; tz: string; tone: string;
+function Change({ kind, title, hint, items, n, link, showAccount, tz, tone }: {
+  kind: OverviewStore["kind"]; title: string; hint: string; items: OverviewStore[]; n: number; link: boolean; showAccount: boolean; tz: string; tone: string;
 }) {
   const head = (
     <>
@@ -97,7 +101,7 @@ function Change({ kind, title, hint, items, n, showAccount, tz, tone }: {
       <ul>
         {items.slice(0, 12).map((x) => (
           <li key={`${x.account_id}:${x.store_id}`}>
-            <Link href={storeHref(x.account_id, x.store_id)}>{x.name}</Link>
+            {link ? <Link href={storeHref(x.account_id, x.store_id)}>{x.name}</Link> : <span style={{ fontWeight: 550 }}>{x.name}</span>}
             <span className="muted">
               {kind === "stopped" ? `${fmtInt(x.orders)} pedidos antes · último ${fmtShort(x.at, tz)}` : `${fmtInt(x.orders)} pedidos en 30 días`}
               {showAccount && ` · ${x.account_name}`}

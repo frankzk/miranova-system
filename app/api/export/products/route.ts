@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isLoggedIn } from "@/lib/auth";
+import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { applyProductFilters, parseProductFilters, SALES_DAYS, soldOf } from "@/lib/product-filters";
 import { listProducts, productSales } from "@/lib/queries";
@@ -13,7 +13,8 @@ const esc = (v: unknown) => {
 };
 
 export async function GET(req: NextRequest) {
-  if (!(await isLoggedIn())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const user = await authorizeRoute("products", "export");
+  if (user instanceof Response) return user;
   const scope = await getScope(await listAccounts());
   const [products, sales] = await Promise.all([listProducts(scope.account), productSales(scope.account, SALES_DAYS)]);
   const rows = applyProductFilters(products, parseProductFilters(Object.fromEntries(req.nextUrl.searchParams)), sales);

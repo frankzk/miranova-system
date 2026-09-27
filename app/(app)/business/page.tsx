@@ -4,12 +4,14 @@ import { ContactQuick, type QuickContact } from "@/components/contact-quick";
 import { IconChevronRight } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey } from "@/lib/contacts";
 import {
   change, concentration, deliveryRate, otherCountries, parsePeriod, PERIODS, PRODUCT_READ, readProducts, STORE_FLOW,
   type StoreItem,
 } from "@/lib/business";
 import { fmtInt, fmtMoney } from "@/lib/format";
+import { permissionFlags, type PermissionFlags } from "@/lib/permissions";
 import { businessOverview } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
@@ -41,6 +43,8 @@ function Share({ value }: { value: number }) {
 }
 
 export default async function BusinessPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const user = await requirePermission("business");
+  const perms = permissionFlags(user);
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
@@ -49,7 +53,11 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
   const knownCountries = [...new Set(accounts.map((a) => a.country))];
   const country = countryParam && knownCountries.includes(countryParam) ? countryParam : undefined;
 
-  const [data, contacts] = await Promise.all([businessOverview({ account: scope.account, days, country }), contactIndex()]);
+  // los contactos son de Tiendas: sin ese permiso ni se cargan
+  const [data, contacts] = await Promise.all([
+    businessOverview({ account: scope.account, days, country }),
+    perms.stores ? contactIndex() : Promise.resolve(undefined),
+  ]);
 
   const href = (patch: { d?: number; c?: string | null }) => {
     const p = new URLSearchParams();
@@ -173,7 +181,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
         <section className="panel" aria-labelledby="h-stores">
           <div className="panel-head">
             <h2 id="h-stores">Tiendas{where}</h2>
-            <Link className="aside link" href="/stores">Ver salud de tiendas <IconChevronRight /></Link>
+            {perms.stores && <Link className="aside link" href="/stores">Ver salud de tiendas <IconChevronRight /></Link>}
           </div>
           <dl className="flow">
             {([
@@ -193,7 +201,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
           <p className="panel-note muted">
             Primera tienda {pct(conc.top1)} · 3 primeras {pct(conc.top3)} · 5 primeras {pct(conc.top5)} de los pedidos.
           </p>
-          <StoreList rows={data.stores.top} total={data.stores.total} showCountry={multiCountry} />
+          <StoreList rows={data.stores.top} total={data.stores.total} showCountry={multiCountry} perms={perms} />
         </section>
 
         <section className="panel" aria-labelledby="h-losing">
@@ -204,7 +212,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
           {data.stores.losing.length === 0 ? (
             <p className="panel-body muted">Ninguna tienda perdida ni en caída fuerte en este período.</p>
           ) : (
-            <StoreList rows={data.stores.losing} total={0} showCountry={multiCountry} showPrev contacts={contacts} />
+            <StoreList rows={data.stores.losing} total={0} showCountry={multiCountry} showPrev contacts={contacts} perms={perms} />
           )}
         </section>
       </div>
@@ -236,7 +244,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
                 return (
                   <tr key={`${p.account}-${p.name}-${i}`}>
                     <td>
-                      <Link className="link" href={`/products?q=${encodeURIComponent(p.name)}`}>{p.name}</Link>
+                      {perms.products ? <Link className="link" href={`/products?q=${encodeURIComponent(p.name)}`}>{p.name}</Link> : p.name}
                       {multiCountry && <span className="muted"> · {p.country}</span>}
                     </td>
                     <td><span className="pill" data-tone={read.tone} title={read.hint}>{read.label}</span></td>
@@ -279,7 +287,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
                 {data.carriers.map((c) => (
                   <tr key={`${c.account}-${c.name}`}>
                     <td>
-                      <Link className="link" href={`/orders?carrier=${encodeURIComponent(c.name)}`}>{c.name}</Link>
+                      {perms.orders ? <Link className="link" href={`/orders?carrier=${encodeURIComponent(c.name)}`}>{c.name}</Link> : c.name}
                       {multiCountry && <span className="muted"> · {c.country}</span>}
                     </td>
                     <td className="num">{fmtInt(c.orders)}</td>
@@ -323,23 +331,26 @@ export default async function BusinessPage({ searchParams }: { searchParams: Pro
 }
 
 function StoreList({
-  rows, total, showCountry, showPrev, contacts,
-}: { rows: StoreItem[]; total: number; showCountry: boolean; showPrev?: boolean; contacts?: Map<string, NonNullable<QuickContact>> }) {
+  rows, total, showCountry, showPrev, contacts, perms,
+}: { rows: StoreItem[]; total: number; showCountry: boolean; showPrev?: boolean; contacts?: Map<string, NonNullable<QuickContact>>; perms: PermissionFlags }) {
   return (
     <ul className="rank panel-flush">
       {rows.map((s) => {
         const flow = STORE_FLOW[s.flow];
-        // con ID (migración 0020) se abre su ficha; sin él, sus pedidos
-        const href = s.account_id && s.store_id ? storeHref(s.account_id, s.store_id) : `/orders?dropshipper=${encodeURIComponent(s.name)}`;
-        const withContact = !!contacts && !!s.account_id && !!s.store_id;
+        // con ID (migración 0020) se abre su ficha; sin él, sus pedidos; sin permiso, texto plano
+        const href = s.account_id && s.store_id
+          ? (perms.stores ? storeHref(s.account_id, s.store_id) : null)
+          : perms.orders ? `/orders?dropshipper=${encodeURIComponent(s.name)}` : null;
+        const withContact = !!contacts && !!href && !!s.account_id && !!s.store_id;
+        const label = <>{s.name}{showCountry && <span className="muted"> · {s.country}</span>}</>;
         return (
           <li key={`${s.account}-${s.name}`}>
-            <Link className="name link" href={href} style={{ color: "inherit", fontWeight: 500 }}>
-              {s.name}{showCountry && <span className="muted"> · {s.country}</span>}
-            </Link>
+            {href
+              ? <Link className="name link" href={href} style={{ color: "inherit", fontWeight: 500 }}>{label}</Link>
+              : <span className="name" style={{ fontWeight: 500 }}>{label}</span>}
             <span className={withContact ? "n with-qc" : "n"}>
               <span className="pill" data-tone={flow.tone}>{flow.label}</span>
-              {withContact && <ContactQuick c={contacts.get(contactKey({ account_id: s.account_id!, store_id: s.store_id! }))} storeHref={href} name={s.name} />}
+              {withContact && <ContactQuick c={contacts.get(contactKey({ account_id: s.account_id!, store_id: s.store_id! }))} storeHref={href!} name={s.name} canEdit={perms.stores_edit} />}
             </span>
             {total > 0 && <Share value={s.cur / total} />}
             <span className="meta">

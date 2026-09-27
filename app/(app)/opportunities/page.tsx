@@ -4,6 +4,7 @@ import { ContactQuick, type QuickContact } from "@/components/contact-quick";
 import { IconChevronRight } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey } from "@/lib/contacts";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { pendingFollowups, type Followup } from "@/lib/followups";
@@ -11,6 +12,7 @@ import { crossSell } from "@/lib/cross-sell";
 import { inventoryAlerts } from "@/lib/inventory";
 import { inventoryStatus } from "@/lib/inventory-data";
 import { allStoreOpportunities, inventoryItems, OPP_GROUPS, productItems, sortOpportunities, withCrossSell, type OppGroup, type OppItem } from "@/lib/opportunities";
+import { can, permissionFlags, type PermissionFlags } from "@/lib/permissions";
 import { productInsights } from "@/lib/product-insights";
 import { productPerformance } from "@/lib/product-performance";
 import { storeHealth } from "@/lib/queries";
@@ -30,16 +32,19 @@ const PRIORITY = {
 } as const;
 
 export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ g?: string }> }) {
+  const user = await requirePermission("opportunities");
+  const perms = permissionFlags(user);
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
+  // seguimientos y contactos son de Tiendas: sin ese permiso ni se cargan
   const [stores, followups, products, matrix, inventory, contacts] = await Promise.all([
     storeHealth(scope.account),
-    pendingFollowups(scope.account),
+    can(user, "stores") ? pendingFollowups(scope.account) : Promise.resolve([] as Followup[]),
     productPerformance(scope.account),
     storeProductMatrix(scope.account, 30),
     inventoryStatus(scope.account),
-    contactIndex(),
+    can(user, "stores") ? contactIndex() : Promise.resolve(new Map() as Awaited<ReturnType<typeof contactIndex>>),
   ]);
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
   const today = todayIn(scope.tz);
@@ -111,6 +116,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
               follow={open.get(`${i.subject.account_id}:${i.subject.store_id}`)}
               contact={i.subject.store_id ? contacts.get(contactKey({ account_id: i.subject.account_id, store_id: i.subject.store_id })) : undefined}
               today={today}
+              perms={perms}
             />
           ))}
         </ol>
@@ -125,12 +131,13 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   );
 }
 
-function Opp({ i, showAccount, follow, contact, today }: { i: OppItem; showAccount: boolean; follow?: Followup; contact?: QuickContact; today: string }) {
+function Opp({ i, showAccount, follow, contact, today, perms }: { i: OppItem; showAccount: boolean; follow?: Followup; contact?: QuickContact; today: string; perms: PermissionFlags }) {
   const p = PRIORITY[i.priority];
+  // la tarjeta enlaza solo a secciones que el usuario puede abrir
   const href = i.subject.type === "store" && i.subject.store_id
-    ? storeHref(i.subject.account_id, i.subject.store_id)
-    : i.subject.type === "account" ? "/settings"
-    : i.subject.type === "product"
+    ? (perms.stores ? storeHref(i.subject.account_id, i.subject.store_id) : null)
+    : i.subject.type === "account" ? (perms.accounts ? "/settings" : null)
+    : i.subject.type === "product" && perms.products
       ? (["stockout", "low_stock", "returns"].includes(i.kind) ? "/products/inventory" : "/products/performance")
       : null;
   const body = (
@@ -161,11 +168,12 @@ function Opp({ i, showAccount, follow, contact, today }: { i: OppItem; showAccou
     </>
   );
   // tiendas: acceso directo a su grupo de WhatsApp (fuera del enlace de la tarjeta)
-  const isStore = i.subject.type === "store" && !!i.subject.store_id && !!href;
+  // (sin contacto y sin permiso de editar, ContactQuick no muestra nada: no reservar su espacio)
+  const isStore = i.subject.type === "store" && !!i.subject.store_id && !!href && (!!contact?.group || !!contact?.phone || perms.stores_edit);
   return (
     <li className={isStore ? "opp has-qc" : "opp"}>
       {href ? <Link href={href}>{body}</Link> : <div>{body}</div>}
-      {isStore && <ContactQuick c={contact} storeHref={href} name={i.subject.name} />}
+      {isStore && <ContactQuick c={contact} storeHref={href} name={i.subject.name} canEdit={perms.stores_edit} />}
     </li>
   );
 }

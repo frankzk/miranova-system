@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ContactState } from "@/components/contact-forms";
-import { isLoggedIn } from "@/lib/auth";
+import { authorizeAction } from "@/lib/auth";
 import { normalizePhone, parseWhatsappGroup, type StoreContact } from "@/lib/store-contacts";
 import { db } from "@/lib/supabase";
 
@@ -46,7 +46,8 @@ const dup = (e: { code?: string; message: string }) =>
  * o el teléfono ya están en otro contacto, vincula la tienda a ese contacto en vez de duplicarlo.
  */
 export async function saveContact(_prev: ContactState, form: FormData): Promise<ContactState> {
-  if (!(await isLoggedIn())) return fail("Tu sesión expiró. Vuelve a entrar.");
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
   const store = await storeOf(form);
   if (!store) return fail("Tienda no válida.");
 
@@ -125,7 +126,8 @@ export async function saveContact(_prev: ContactState, form: FormData): Promise<
 
 /** Vincula una tienda (esta u otra operación) a un contacto existente. */
 export async function linkStore(_prev: ContactState, form: FormData): Promise<ContactState> {
-  if (!(await isLoggedIn())) return fail("Tu sesión expiró. Vuelve a entrar.");
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
   const contactId = field(form, "contact_id");
   const store = await storeOf(form);
   if (!UUID.test(contactId) || !store) return fail("Datos no válidos.");
@@ -147,7 +149,8 @@ export async function linkStore(_prev: ContactState, form: FormData): Promise<Co
 
 /** Quita una tienda de su contacto; si el contacto queda sin tiendas, se borra. */
 export async function unlinkStore(_prev: ContactState, form: FormData): Promise<ContactState> {
-  if (!(await isLoggedIn())) return fail("Tu sesión expiró. Vuelve a entrar.");
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
   const contactId = field(form, "contact_id");
   const store = await storeOf(form);
   if (!UUID.test(contactId) || !store) return fail("Datos no válidos.");

@@ -1,6 +1,7 @@
 // Contacto del dueño de una tienda: una barra bajo el título con los accesos rápidos (grupo de
 // WhatsApp, chat con el dueño) y un panel lateral para editar, ver las otras operaciones del
-// mismo dueño y vincular las que parecen suyas.
+// mismo dueño y vincular las que parecen suyas. Sin permiso de editar (actions = null) el panel
+// es de solo lectura: sin formulario ni botones de vincular o quitar.
 import Link from "next/link";
 import { ContactForm, StoreActionButton, type ContactState } from "./contact-forms";
 import { IconChat, IconExternal, IconPhone, IconPlus } from "./icons";
@@ -14,7 +15,7 @@ type Action = (prev: ContactState, form: FormData) => Promise<ContactState>;
 export type StoreContactProps = {
   view: StoreContactView;
   store: { accountId: string; storeId: string; storeName: string };
-  actions: { save: Action; link: Action; unlink: Action };
+  actions: { save: Action; link: Action; unlink: Action } | null;
 };
 
 /** Barra de contacto: quién es, cómo escribirle y el panel para gestionarlo. */
@@ -22,6 +23,8 @@ export function StoreContactBar({ view, store, actions }: StoreContactProps) {
   const { contact: c, siblings, suggestions, self } = view;
   const samePerson = suggestions.filter((s) => s.reason === "same_person");
   const person = c?.owner_name || self?.person;
+  // solo lectura: el panel se muestra si hay algo que ver
+  const showSheet = !!actions || !!c || suggestions.length > 0;
 
   return (
     <section className="ct-bar" data-state={c ? (c.whatsapp_group_url ? "ok" : "partial") : "missing"} aria-label="Contacto del dueño">
@@ -62,15 +65,17 @@ export function StoreContactBar({ view, store, actions }: StoreContactProps) {
             <IconExternal /> WhatsApp al dueño
           </a>
         )}
-        <SideSheet
-          hash="contacto"
-          triggerClass={c ? "btn btn-ghost" : "btn btn-primary"}
-          trigger={c ? "Gestionar" : <><IconPlus /> Agregar contacto</>}
-          title="Contacto del dueño"
-          sub={<>{store.storeName}{self?.account_name && <> · {self.account_name}</>}</>}
-        >
-          <ContactSheet view={view} store={store} actions={actions} />
-        </SideSheet>
+        {showSheet && (
+          <SideSheet
+            hash="contacto"
+            triggerClass={c || !actions ? "btn btn-ghost" : "btn btn-primary"}
+            trigger={!actions ? "Ver contacto" : c ? "Gestionar" : <><IconPlus /> Agregar contacto</>}
+            title="Contacto del dueño"
+            sub={<>{store.storeName}{self?.account_name && <> · {self.account_name}</>}</>}
+          >
+            <ContactSheet view={view} store={store} actions={actions} />
+          </SideSheet>
+        )}
       </div>
     </section>
   );
@@ -96,20 +101,34 @@ function ContactSheet({ view, store, actions }: StoreContactProps) {
         </div>
       )}
 
-      <div className="section">
-        <h3>{c ? "Datos del contacto" : "Nuevo contacto"}</h3>
-        {!c && (
-          <p className="sheet-note">
-            Si el dueño tiene otras operaciones, usa el mismo grupo en todas: al pegar un enlace que ya existe, la tienda se suma a ese contacto.
-          </p>
-        )}
-        <ContactForm
-          action={actions.save}
-          store={store}
-          defaults={c ? { group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes } : { owner_name: self?.person }}
-          submit={c ? "Guardar cambios" : "Guardar contacto"}
-        />
-      </div>
+      {!actions && c && (
+        <div className="section">
+          <h3>Datos del contacto</h3>
+          <dl className="sd-kv">
+            <div><dt>Responsable</dt><dd>{c.owner_name || self?.person || "—"}</dd></div>
+            <div><dt>Teléfono</dt><dd>{c.owner_phone ? formatPhone(c.owner_phone) : "—"}</dd></div>
+            <div><dt>Grupo de WhatsApp</dt><dd>{c.whatsapp_group_url ? "Registrado" : "—"}</dd></div>
+            {c.notes && <div><dt>Notas</dt><dd>{c.notes}</dd></div>}
+          </dl>
+        </div>
+      )}
+
+      {actions && (
+        <div className="section">
+          <h3>{c ? "Datos del contacto" : "Nuevo contacto"}</h3>
+          {!c && (
+            <p className="sheet-note">
+              Si el dueño tiene otras operaciones, usa el mismo grupo en todas: al pegar un enlace que ya existe, la tienda se suma a ese contacto.
+            </p>
+          )}
+          <ContactForm
+            action={actions.save}
+            store={store}
+            defaults={c ? { group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes } : { owner_name: self?.person }}
+            submit={c ? "Guardar cambios" : "Guardar contacto"}
+          />
+        </div>
+      )}
 
       {c && siblings.length > 0 && (
         <div className="section">
@@ -123,7 +142,7 @@ function ContactSheet({ view, store, actions }: StoreContactProps) {
                     <Link href={storeHref(l.account_id, l.store_id)}>{ref.storeName || "Tienda"}</Link>
                     <span className="muted">{l.store?.account_name ?? ""}{l.store?.person && <> · {l.store.person}</>}</span>
                   </div>
-                  <StoreActionButton action={actions.unlink} contactId={c.id} store={ref} label="Quitar" pending="…" className="btn btn-sm btn-ghost" />
+                  {actions && <StoreActionButton action={actions.unlink} contactId={c.id} store={ref} label="Quitar" pending="…" className="btn btn-sm btn-ghost" />}
                 </li>
               );
             })}
@@ -146,7 +165,7 @@ function ContactSheet({ view, store, actions }: StoreContactProps) {
         </div>
       )}
 
-      {c && (
+      {actions && c && (
         <div className="section ct-unlink">
           <StoreActionButton action={actions.unlink} contactId={c.id} store={store} label="Desvincular esta tienda" pending="Quitando…" className="btn btn-sm btn-danger" />
           <span className="muted">
@@ -166,7 +185,9 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
       : { tone: "neutral", label: "Nombre parecido" };
   const other = { accountId: s.store.account_id, storeId: s.store.store_id, storeName: s.store.name };
   let action: React.ReactNode;
-  if (mine && !s.contact_id) {
+  if (!actions) {
+    action = null;
+  } else if (mine && !s.contact_id) {
     action = <StoreActionButton action={actions.link} contactId={mine} store={other} label="Vincular" pending="…" />;
   } else if (!mine && s.contact_id) {
     action = <StoreActionButton action={actions.link} contactId={s.contact_id} store={store} label="Usar su contacto" pending="…" />;

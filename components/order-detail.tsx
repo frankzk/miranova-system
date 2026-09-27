@@ -15,8 +15,17 @@ function timelineOf(raw: OrderDetail["raw"]): TimelineEntry[] {
     .sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
-/** Encabezado + cuerpo del detalle. `head` recibe los controles del contenedor (cerrar, volver). */
-export function OrderDetailView({ o, headControls }: { o: OrderDetail; headControls?: React.ReactNode }) {
+/**
+ * Encabezado + cuerpo del detalle. `head` recibe los controles del contenedor (cerrar, volver).
+ * `showPaid` (permiso Dinero) muestra si está liquidada; `showRaw` (permiso Cuentas), el JSON de la
+ * plataforma, que trae la liquidación y más. Es componente de servidor: lo que no se muestra no llega al HTML.
+ */
+export function OrderDetailView({ o, headControls, showPaid = false, showRaw = false }: {
+  o: OrderDetail;
+  headControls?: React.ReactNode;
+  showPaid?: boolean;
+  showRaw?: boolean;
+}) {
   const tz = o.accounts?.timezone;
   const cur = o.currency ?? "HNL";
   const timeline = timelineOf(o.raw);
@@ -146,14 +155,14 @@ export function OrderDetailView({ o, headControls }: { o: OrderDetail; headContr
             <div className="total"><dt>Total cobrado al cliente</dt><dd>{fmtMoney(o.total, cur)}</dd></div>
             <div className="you"><dt>Te toca como proveedor</dt><dd>{fmtMoney(o.vendor_amount, cur)}</dd></div>
             {o.vendor_net !== null && <div><dt>Ganancia neta estimada</dt><dd>{fmtMoney(o.vendor_net, cur)}</dd></div>}
-            <div>
+            {showPaid && <div>
               <dt>Liquidación</dt>
               <dd>
                 {o.paid === null ? "—" : o.paid
                   ? <span className="pill" data-tone="success">Liquidada</span>
                   : <span className="pill" data-tone="neutral">Pendiente</span>}
               </dd>
-            </div>
+            </div>}
           </dl>
         </section>
 
@@ -171,10 +180,12 @@ export function OrderDetailView({ o, headControls }: { o: OrderDetail; headContr
           </section>
         )}
 
-        <details className="raw">
-          <summary>Datos originales de la plataforma</summary>
-          <pre>{JSON.stringify(o.raw, null, 2)}</pre>
-        </details>
+        {showRaw && (
+          <details className="raw">
+            <summary>Datos originales de la plataforma</summary>
+            <pre>{JSON.stringify(o.raw, null, 2)}</pre>
+          </details>
+        )}
       </div>
     </>
   );

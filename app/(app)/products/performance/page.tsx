@@ -4,6 +4,7 @@ import { IconBox } from "@/components/icons";
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtMoney } from "@/lib/format";
 import {
   change, LOW_MOVEMENT_CAUSES, perStore, PRODUCT_RULES, PRODUCT_SORTS, productOpportunity, sortProducts, TREND, trend,
@@ -20,6 +21,7 @@ const PATH = "/products/performance";
 const SHOWN = 6;
 
 export default async function ProductPerformancePage({ searchParams }: { searchParams: Promise<SP> }) {
+  await requirePermission("products");
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);

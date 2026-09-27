@@ -7,17 +7,22 @@ import { IconBox, IconClose, IconDownload, IconFilter, IconSearch } from "@/comp
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requirePermission } from "@/lib/auth";
 import { fmtAgo, fmtInt, fmtMoney } from "@/lib/format";
 import {
   applyProductFilters, inTab, isActive, LOW_STOCK, parseProductFilters, PRODUCT_SORTS, productQuery, refine,
   SALES_DAYS, soldOf, TABS, VARIANTS, type ProductSort,
 } from "@/lib/product-filters";
 import { listProducts, productSales } from "@/lib/queries";
+import { can } from "@/lib/permissions";
 import { getScope } from "@/lib/scope";
 
 export const metadata = { title: "Productos" };
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const user = await requirePermission("products");
+  const canExport = can(user, "export");
+  const canAccounts = can(user, "accounts");
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
@@ -35,7 +40,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     .filter(Boolean)
     .sort()
     .pop() ?? null;
-  const syncError = accounts.find((a) => a.products_sync_msg?.startsWith("No se pudo"));
+  // el error de sincronización es de Cuentas
+  const syncError = canAccounts && accounts.find((a) => a.products_sync_msg?.startsWith("No se pudo"));
   const href = (patch: Record<string, string | undefined>) => {
     const s = productQuery(pf, patch);
     return s ? `/products?${s}` : "/products";
@@ -75,7 +81,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <PageHead
         title="Productos"
         sub={<>{fmtInt(all.length)} en el catálogo · {scope.label}{lastSync && <> · actualizado {fmtAgo(lastSync)}</>}</>}
-        actions={all.length > 0 && (
+        actions={canExport && all.length > 0 && (
           <a className="btn" href={`/api/export/products${exportQs ? `?${exportQs}` : ""}`}>
             <IconDownload /> Exportar CSV
           </a>
@@ -137,10 +143,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <h3>{all.length === 0 ? "Aún no hay productos" : "Nada con estos filtros"}</h3>
             <p>
               {all.length === 0
-                ? "El catálogo se descarga con la sincronización de tus cuentas (cada 10 minutos). También puedes sincronizar ahora desde Cuentas."
+                ? `El catálogo se descarga con la sincronización de tus cuentas (cada 10 minutos).${canAccounts ? " También puedes sincronizar ahora desde Cuentas." : ""}`
                 : "Prueba con otra búsqueda o cambia de pestaña."}
             </p>
-            {all.length === 0 && <Link className="btn" href="/settings">Ir a Cuentas</Link>}
+            {all.length === 0 && canAccounts && <Link className="btn" href="/settings">Ir a Cuentas</Link>}
           </div>
         ) : (
           <div className="table-scroll">

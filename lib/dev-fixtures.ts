@@ -287,7 +287,10 @@ const CTX: FixtureCtx = {
 };
 
 /** Tablas en memoria que aportan los módulos de lib/fixtures (p. ej. store_followups). */
-const EXTRA_TABLES: Record<string, Row[]> = Object.assign({}, ...MODULES.map((m) => m.tables ?? {}));
+// compartidas en globalThis: en desarrollo las rutas de API y las acciones cargan copias
+// separadas de los módulos, y así ven los mismos datos (p. ej. un usuario recién creado)
+const g = globalThis as { __miranovaFixtureTables?: Record<string, Row[]> };
+const EXTRA_TABLES: Record<string, Row[]> = (g.__miranovaFixtureTables ??= Object.assign({}, ...MODULES.map((m) => m.tables ?? {})));
 
 export function fixtureClient(): any {
   return {

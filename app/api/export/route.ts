@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isLoggedIn } from "@/lib/auth";
+import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { fmtDate } from "@/lib/format";
+import { can } from "@/lib/permissions";
 import { listAllOrders, parseFilters } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 
@@ -16,7 +17,10 @@ const esc = (v: unknown) => {
 };
 
 export async function GET(req: NextRequest) {
-  if (!(await isLoggedIn())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const user = await authorizeRoute("orders", "export");
+  if (user instanceof Response) return user;
+  // la columna Liquidada es dato de liquidación: solo con permiso de Dinero
+  const paidCol = can(user, "money");
 
   const scope = await getScope(await listAccounts());
   const filters = { ...parseFilters(Object.fromEntries(req.nextUrl.searchParams)), account: scope.account };
@@ -25,7 +29,8 @@ export async function GET(req: NextRequest) {
   const header = [
     "Cuenta", "Orden", "Orden Shopify", "Fecha", "Estado", "Dropshipper", "Cliente", "Teléfono", "Correo",
     "Departamento", "Ciudad", "Dirección", "Punto de referencia", "Indicaciones", "Paquetera", "Guía",
-    "Tracking", "Pago", "Producto", "SKU", "Cantidad", "Precio", "Precio proveedor", "Total orden", "Te toca", "Liquidada", "Moneda",
+    "Tracking", "Pago", "Producto", "SKU", "Cantidad", "Precio", "Precio proveedor", "Total orden", "Te toca",
+    ...(paidCol ? ["Liquidada"] : []), "Moneda",
   ];
   const lines = [header.map(esc).join(",")];
 
@@ -40,7 +45,7 @@ export async function GET(req: NextRequest) {
       lines.push(
         [
           ...base, it?.product_name, it?.sku, it?.quantity, it?.price, it?.vendor_price, o.total, o.vendor_amount,
-          o.paid === null ? "" : o.paid ? "Sí" : "No", o.currency,
+          ...(paidCol ? [o.paid === null ? "" : o.paid ? "Sí" : "No"] : []), o.currency,
         ].map(esc).join(","),
       );
     }

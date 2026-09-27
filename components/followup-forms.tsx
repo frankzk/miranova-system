@@ -15,10 +15,11 @@ function Msg({ state }: { state: FollowupState }) {
   return <p className="fu-msg" data-ok={state.ok} role={state.ok ? "status" : "alert"}>{state.msg}</p>;
 }
 
-/** Nuevo registro de seguimiento (responsable, fecha, recomendación, acción, estado, próximo paso). */
+/** Nuevo registro de seguimiento (responsable, fecha, recomendación, acción, estado, próximo paso).
+ *  El responsable empieza con el usuario de la sesión (`owner`). */
 export function FollowupForm({
-  action, accountId, storeId, storeName, today, owners,
-}: { action: Action; accountId: string; storeId: string; storeName: string; today: string; owners: string[] }) {
+  action, accountId, storeId, storeName, today, owners, owner,
+}: { action: Action; accountId: string; storeId: string; storeName: string; today: string; owners: string[]; owner?: string }) {
   const [state, run] = useActionState(action, null);
   const list = useId();
   // dentro del panel lateral: al guardar se cierra y el registro aparece en el historial
@@ -34,7 +35,7 @@ export function FollowupForm({
       <div className="fu-grid">
         <label className="field">
           <span>Responsable</span>
-          <input className="input" name="owner" list={list} maxLength={80} autoComplete="off" placeholder="Quién la atiende" />
+          <input className="input" name="owner" list={list} maxLength={80} autoComplete="off" placeholder="Quién la atiende" defaultValue={owner ?? ""} />
           <datalist id={list}>{owners.map((o) => <option key={o} value={o} />)}</datalist>
         </label>
         <label className="field">

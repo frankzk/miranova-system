@@ -6,25 +6,32 @@ import { OwnerAlertsPanel } from "@/components/owner-alerts";
 import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
+import { requireUser } from "@/lib/auth";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort } from "@/lib/format";
 import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
 import { activeStores } from "@/lib/overview";
 import { getScope } from "@/lib/scope";
+import { can } from "@/lib/permissions";
 import { RANGES, resolveRange } from "@/lib/ranges";
 
 export const metadata = { title: "Inicio" };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ r?: string; days?: string }> }) {
+  // Inicio es para todos los usuarios; cada bloque se muestra según sus permisos
+  const user = await requireUser();
+  const canOrders = can(user, "orders");
+  const canMoney = can(user, "money");
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
 
-  if (accounts.length === 0) return <Welcome />;
+  if (accounts.length === 0) return <Welcome canConnect={can(user, "accounts")} />;
 
   const sp = await searchParams;
   const range = resolveRange(sp.r ?? sp.days, scope.tz);
   const [s, attention, alerts, overview] = await Promise.all([
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
-    attentionOrders(scope.account),
+    // órdenes con problemas: datos del cliente, solo con permiso de Órdenes
+    canOrders ? attentionOrders(scope.account) : null,
     ownerAlerts(scope.account),
     activeStores(scope.account),
   ]);
@@ -32,7 +39,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const snap = s.snapshot;
   const periodOrders = s.daily.reduce((t, d) => t + d.orders, 0);
   const periodDelivered = s.daily.reduce((t, d) => t + d.delivered, 0);
-  const multi = s.money.length > 1 || s.unpaid.length > 1;
+  const multi = s.money.length > 1 || (canMoney && s.unpaid.length > 1);
+  const go = canOrders ? <IconArrowRight className="go" /> : null;
 
   return (
     <div className="page">
@@ -52,32 +60,41 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
       <AccountChips accounts={accounts} current={scope.account} next={range.id === "30" ? "/" : `/?r=${range.id}`} />
 
-      <OwnerAlertsPanel data={alerts} tz={scope.tz} />
+      <OwnerAlertsPanel data={alerts} tz={scope.tz} access={{ money: canMoney, orders: canOrders, products: can(user, "products") }} />
 
       <section className="metrics" aria-label="Resumen">
-        <Link className="metric" href="/orders?group=dispatch">
+        <Metric href={canOrders ? "/orders?group=dispatch" : undefined}>
           <span className="label"><span className="dot" data-tone="warning" aria-hidden />Por despachar</span>
           <span className="value">{fmtInt(snap.dispatch ?? 0)}</span>
-          <span className="foot">Pendientes o con guía creada<IconArrowRight className="go" /></span>
-        </Link>
-        <Link className="metric" href="/orders?group=problem" data-alert={(snap.problem ?? 0) > 0}>
+          <span className="foot">Pendientes o con guía creada{go}</span>
+        </Metric>
+        <Metric href={canOrders ? "/orders?group=problem" : undefined} alert={(snap.problem ?? 0) > 0}>
           <span className="label"><span className="dot" data-tone="danger" aria-hidden />Con problemas</span>
           <span className="value">{fmtInt(snap.problem ?? 0)}</span>
-          <span className="foot">Por verificar o en gestión<IconArrowRight className="go" /></span>
-        </Link>
-        <Link className="metric" href="/money">
-          <span className="label"><span className="dot" data-tone="success" aria-hidden />Por liquidar</span>
-          {s.unpaid.length === 0 ? (
-            <span className="value">{fmtMoney(0, scope.current?.currency ?? "HNL")}</span>
-          ) : (
-            s.unpaid.map((u) => (
-              <span key={u.currency} className={`value${multi ? " sm" : ""}`}>{fmtMoney(u.amount, u.currency)}</span>
-            ))
-          )}
-          <span className="foot">
-            {fmtInt(s.unpaid.reduce((t, u) => t + u.orders, 0))} entregadas sin pagar<IconArrowRight className="go" />
-          </span>
-        </Link>
+          <span className="foot">Por verificar o en gestión{go}</span>
+        </Metric>
+        {/* liquidaciones: solo con permiso de Dinero; si no, lo entregado en el período */}
+        {canMoney ? (
+          <Link className="metric" href="/money">
+            <span className="label"><span className="dot" data-tone="success" aria-hidden />Por liquidar</span>
+            {s.unpaid.length === 0 ? (
+              <span className="value">{fmtMoney(0, scope.current?.currency ?? "HNL")}</span>
+            ) : (
+              s.unpaid.map((u) => (
+                <span key={u.currency} className={`value${multi ? " sm" : ""}`}>{fmtMoney(u.amount, u.currency)}</span>
+              ))
+            )}
+            <span className="foot">
+              {fmtInt(s.unpaid.reduce((t, u) => t + u.orders, 0))} entregadas sin pagar<IconArrowRight className="go" />
+            </span>
+          </Link>
+        ) : (
+          <div className="metric">
+            <span className="label"><span className="dot" data-tone="success" aria-hidden />Entregadas · {range.short}</span>
+            <span className="value">{fmtInt(periodDelivered)}</span>
+            <span className="foot">de {fmtInt(periodOrders)} recibidas</span>
+          </div>
+        )}
         <div className="metric">
           <span className="label">Ventas · {range.short}</span>
           {s.money.length === 0 ? (
@@ -93,9 +110,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         </div>
       </section>
 
-      <ActiveStores o={overview} showAccount={!scope.account && accounts.length > 1} tz={scope.tz} />
+      <ActiveStores o={overview} showAccount={!scope.account && accounts.length > 1} tz={scope.tz} linkStores={can(user, "stores")} />
 
-      <div className="grid-2">
+      {/* sin "Requieren atención" el gráfico ocupa todo el ancho */}
+      <div className="grid-2" style={attention ? undefined : { gridTemplateColumns: "minmax(0, 1fr)" }}>
         <section className="panel">
           <div className="panel-head">
             <h2>Órdenes</h2>
@@ -115,47 +133,49 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Requieren atención</h2>
-            <span className="aside">{fmtInt(attention.count)}</span>
-          </div>
-          {attention.orders.length === 0 ? (
-            <div className="empty" style={{ padding: "36px 18px" }}>
-              <h3>Todo en orden</h3>
-              <p>No hay órdenes por verificar ni con problemas en gestión.</p>
+        {attention && (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Requieren atención</h2>
+              <span className="aside">{fmtInt(attention.count)}</span>
             </div>
-          ) : (
-            <>
-              <ul className="list-rows panel-flush">
-                {attention.orders.map((o) => (
-                  <li key={o.id}>
-                    <Link href={`/orders?group=problem&order=${o.id}`}>
-                      <span className="t">#{o.external_id}</span>
-                      <StatusPill code={o.status_code} label={o.status} />
-                      <span className="s">
-                        {o.customer_name ?? "Sin nombre"} · {place(o.city, o.department) || "Sin ciudad"}
-                      </span>
-                      <span className="s" style={{ textAlign: "right" }}>{fmtShort(o.ordered_at, o.accounts?.timezone)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <div className="panel-foot">
-                <Link className="btn btn-ghost btn-sm" href="/orders?group=problem">
-                  Ver las {fmtInt(attention.count)} <IconChevronRight />
-                </Link>
+            {attention.orders.length === 0 ? (
+              <div className="empty" style={{ padding: "36px 18px" }}>
+                <h3>Todo en orden</h3>
+                <p>No hay órdenes por verificar ni con problemas en gestión.</p>
               </div>
-            </>
-          )}
-        </section>
+            ) : (
+              <>
+                <ul className="list-rows panel-flush">
+                  {attention.orders.map((o) => (
+                    <li key={o.id}>
+                      <Link href={`/orders?group=problem&order=${o.id}`}>
+                        <span className="t">#{o.external_id}</span>
+                        <StatusPill code={o.status_code} label={o.status} />
+                        <span className="s">
+                          {o.customer_name ?? "Sin nombre"} · {place(o.city, o.department) || "Sin ciudad"}
+                        </span>
+                        <span className="s" style={{ textAlign: "right" }}>{fmtShort(o.ordered_at, o.accounts?.timezone)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <div className="panel-foot">
+                  <Link className="btn btn-ghost btn-sm" href="/orders?group=problem">
+                    Ver las {fmtInt(attention.count)} <IconChevronRight />
+                  </Link>
+                </div>
+              </>
+            )}
+          </section>
+        )}
       </div>
 
       <div className="grid-3">
         <Ranking
           title="Dropshippers"
           rows={s.sellers}
-          href={(r) => `/orders?dropshipper=${encodeURIComponent(r.name)}`}
+          href={canOrders ? (r) => `/orders?dropshipper=${encodeURIComponent(r.name)}` : undefined}
           meta={(r) => `${fmtInt(r.delivered ?? 0)} entregadas · ${fmtInt(r.problems ?? 0)} con problemas`}
           split
         />
@@ -168,12 +188,21 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <Ranking
           title="Paqueteras"
           rows={s.carriers}
-          href={(r) => `/orders?carrier=${encodeURIComponent(r.name)}`}
+          href={canOrders ? (r) => `/orders?carrier=${encodeURIComponent(r.name)}` : undefined}
           meta={(r) => `${pct(r.delivered ?? 0, r.orders)} entregadas · ${pct(r.problems ?? 0, r.orders)} con problemas`}
           split
         />
       </div>
     </div>
+  );
+}
+
+/** Métrica de la franja: enlace si hay destino permitido; si no, solo texto. */
+function Metric({ href, alert, children }: { href?: string; alert?: boolean; children: React.ReactNode }) {
+  return href ? (
+    <Link className="metric" href={href} data-alert={alert}>{children}</Link>
+  ) : (
+    <div className="metric" data-alert={alert}>{children}</div>
   );
 }
 
@@ -232,7 +261,20 @@ function Ranking({
   );
 }
 
-function Welcome() {
+function Welcome({ canConnect }: { canConnect: boolean }) {
+  // conectar cuentas es de quien tiene permiso de Cuentas; los demás solo ven el aviso
+  if (!canConnect)
+    return (
+      <div className="page page-narrow">
+        <PageHead title="Bienvenido a Miranova" sub="Todavía no hay datos para mostrar." />
+        <section className="panel">
+          <div className="empty">
+            <h3>Aún no hay cuentas conectadas</h3>
+            <p>Cuando el dueño conecte una cuenta de Drop, aquí verás el resumen de las órdenes.</p>
+          </div>
+        </section>
+      </div>
+    );
   return (
     <div className="page page-narrow">
       <PageHead title="Bienvenido a Miranova" sub="Conecta tu primera cuenta para empezar a ver tus órdenes." />

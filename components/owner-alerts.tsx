@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { IconChevronRight } from "@/components/icons";
-import { describeAlert, type OwnerAlerts } from "@/lib/alerts";
+import { describeAlert, visibleAlerts, type AlertAccess, type OwnerAlerts } from "@/lib/alerts";
 import { fmtInt } from "@/lib/format";
 
-/** Bloque "Atención del dueño": máximo 10 hallazgos del día, del más grave al menos grave. */
-export function OwnerAlertsPanel({ data, tz }: { data: OwnerAlerts; tz: string }) {
+/**
+ * Bloque "Atención del dueño": máximo 10 hallazgos del día, del más grave al menos grave.
+ * Se filtra en el servidor según los permisos del usuario (montos de liquidación y enlaces).
+ */
+export function OwnerAlertsPanel({ data: all, tz, access }: { data: OwnerAlerts; tz: string; access: AlertAccess }) {
+  const data = visibleAlerts(all, access);
   const shown = data.alerts.length;
   return (
     <section className="panel owner-alerts" aria-labelledby="owner-alerts-title">
@@ -19,7 +23,7 @@ export function OwnerAlertsPanel({ data, tz }: { data: OwnerAlerts; tz: string }
       ) : (
         <ul className="alert-list panel-flush">
           {data.alerts.map((a, i) => {
-            const v = describeAlert(a, tz);
+            const v = describeAlert(a, tz, access);
             const body = (
               <>
                 <span className="text">
@@ -27,13 +31,16 @@ export function OwnerAlertsPanel({ data, tz }: { data: OwnerAlerts; tz: string }
                   <span className="s">{v.detail}</span>
                 </span>
                 <span className="pill" data-tone={v.tone}>{v.tag}</span>
-                <IconChevronRight className="go" aria-hidden />
+                {v.href && <IconChevronRight className="go" aria-hidden />}
               </>
             );
             // los enlaces que cambian la cuenta activa pasan por /api/scope: <a> normal, sin precarga
             return (
               <li key={`${a.kind}-${a.account_id}-${i}`}>
-                {v.href.startsWith("/api/") ? (
+                {/* sin acceso a la sección de destino: <a> sin href (solo texto, mismo estilo) */}
+                {!v.href ? (
+                  <a data-tone={v.tone} style={{ background: "none", cursor: "default" }}>{body}</a>
+                ) : v.href.startsWith("/api/") ? (
                   <a href={v.href} data-tone={v.tone}>{body}</a>
                 ) : (
                   <Link href={v.href} data-tone={v.tone}>{body}</Link>

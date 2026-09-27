@@ -104,6 +104,9 @@ export async function createUser(u: NewUser): Promise<{ id: string } | { error: 
       password_hash: await hashPassword(u.password),
       permissions: u.permissions,
       is_owner: !!u.is_owner,
+      active: true,
+      session_version: 1,
+      failed_attempts: 0,
       must_change_password: !!u.must_change_password,
       created_by: u.created_by ?? null,
     })
