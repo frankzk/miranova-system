@@ -8,9 +8,10 @@ const ITEMS = [
   { href: "/products/performance", label: "Rendimiento" },
   { href: "/products/inventory", label: "Inventario" },
   { href: "/products/matrix", label: "Tienda × producto" },
+  { href: "/products/photos", label: "Fotos reales" },
 ];
 
-/** Vistas de Productos: catálogo del proveedor, rendimiento en pedidos y matriz tienda × producto. */
+/** Vistas de Productos: catálogo del proveedor, rendimiento en pedidos, matriz tienda × producto y fotos reales. */
 export function ProductsSubnav() {
   const path = usePathname();
   return (

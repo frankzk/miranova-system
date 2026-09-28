@@ -119,3 +119,18 @@ export const IconUsers = (p: P) => (
 export const IconLock = (p: P) => (
   <Svg {...p}><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></Svg>
 );
+export const IconImage = (p: P) => (
+  <Svg {...p}><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><circle cx="5.75" cy="6" r="1.25" /><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3" /></Svg>
+);
+export const IconUpload = (p: P) => (
+  <Svg {...p}><path d="M8 10.5v-8M4.5 6 8 2.5 11.5 6M3 13.5h10" /></Svg>
+);
+export const IconShare = (p: P) => (
+  <Svg {...p}><path d="M8 9.5V2M5 4.5 8 1.75 11 4.5M5.5 6.5h-2v7h9v-7h-2" /></Svg>
+);
+export const IconTrash = (p: P) => (
+  <Svg {...p}><path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 9h6.6l.7-9M6.75 7v4M9.25 7v4" /></Svg>
+);
+export const IconPlay = (p: P) => (
+  <Svg {...p}><path d="M5 3.5v9l7-4.5-7-4.5Z" /></Svg>
+);
