@@ -28,7 +28,10 @@ export type ProductSort = keyof typeof PRODUCT_SORTS;
 
 export const VARIANTS = { con: "Con variantes", sin: "Sin variantes" } as const;
 
-export type ProductFilters = { q: string; tab: string; status?: string; variants?: keyof typeof VARIANTS; sort?: ProductSort };
+/** Fotos reales del repositorio interno (lib/product-media.ts). */
+export const PHOTOS = { con: "Con fotos reales", sin: "Sin fotos reales" } as const;
+
+export type ProductFilters = { q: string; tab: string; status?: string; variants?: keyof typeof VARIANTS; photos?: keyof typeof PHOTOS; sort?: ProductSort };
 export type Sales = Record<string, { units: number; orders: number }>;
 
 export function parseProductFilters(sp: Record<string, string | string[] | undefined>): ProductFilters {
@@ -40,11 +43,13 @@ export function parseProductFilters(sp: Record<string, string | string[] | undef
   const tab = one("f") ?? "";
   const variants = one("var");
   const sort = one("sort");
+  const photos = one("ph");
   return {
     q: one("q") ?? "",
     tab: TABS.some((t) => t.id === tab) ? tab : "",
     status: one("status"),
     variants: variants && variants in VARIANTS ? (variants as keyof typeof VARIANTS) : undefined,
+    photos: photos && photos in PHOTOS ? (photos as keyof typeof PHOTOS) : undefined,
     sort: sort && sort in PRODUCT_SORTS ? (sort as ProductSort) : undefined,
   };
 }
@@ -63,14 +68,18 @@ export function inTab(p: Product, tab: string) {
 export const soldOf = (p: Product, sales: Sales) =>
   sales[`${p.account_id}:id:${p.external_id}`] ?? sales[`${p.account_id}:${p.sku ?? ""}`] ?? sales[`${p.account_id}:${p.name}`];
 
-/** Búsqueda + estado exacto + variantes (sin la pestaña): base de los conteos de las pestañas. */
-export function refine(all: Product[], f: ProductFilters): Product[] {
+/**
+ * Búsqueda + estado exacto + variantes + fotos (sin la pestaña): base de los conteos de las pestañas.
+ * `hasPhotos` dice si el producto tiene fotos reales; sin él, el filtro de fotos no se aplica.
+ */
+export function refine(all: Product[], f: ProductFilters, hasPhotos?: (p: Product) => boolean): Product[] {
   const q = f.q.toLowerCase();
   return all.filter(
     (p) =>
       (!q || [p.name, p.sku, p.code].some((v) => v?.toLowerCase().includes(q))) &&
       (!f.status || (p.status ?? "") === f.status) &&
-      (!f.variants || (f.variants === "con" ? p.variants_count > 0 : p.variants_count === 0)),
+      (!f.variants || (f.variants === "con" ? p.variants_count > 0 : p.variants_count === 0)) &&
+      (!f.photos || !hasPhotos || (f.photos === "con") === hasPhotos(p)),
   );
 }
 
@@ -90,13 +99,13 @@ export function sortProducts(rows: Product[], sort: ProductSort | undefined, sal
 }
 
 /** Filas finales: búsqueda, estado, variantes, pestaña y orden. */
-export function applyProductFilters(all: Product[], f: ProductFilters, sales: Sales): Product[] {
-  return sortProducts(refine(all, f).filter((p) => inTab(p, f.tab)), f.sort, sales);
+export function applyProductFilters(all: Product[], f: ProductFilters, sales: Sales, hasPhotos?: (p: Product) => boolean): Product[] {
+  return sortProducts(refine(all, f, hasPhotos).filter((p) => inTab(p, f.tab)), f.sort, sales);
 }
 
 /** Query string con los filtros actuales + cambios (vacíos se omiten). */
 export function productQuery(f: ProductFilters, patch: Record<string, string | undefined> = {}): string {
-  const merged: Record<string, string | undefined> = { q: f.q, f: f.tab, status: f.status, var: f.variants, sort: f.sort, ...patch };
+  const merged: Record<string, string | undefined> = { q: f.q, f: f.tab, status: f.status, var: f.variants, ph: f.photos, sort: f.sort, ...patch };
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
   return p.toString();

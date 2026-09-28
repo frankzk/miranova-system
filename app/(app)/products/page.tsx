@@ -3,17 +3,21 @@ import { AccountChips } from "@/components/account-chips";
 import { GetForm } from "@/components/client";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { FilterSelect } from "@/components/filter-select";
-import { IconBox, IconClose, IconDownload, IconFilter, IconSearch } from "@/components/icons";
+import { IconClose, IconDownload, IconFilter, IconSearch } from "@/components/icons";
+import { ProductPhotos } from "@/components/product-photos";
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { fmtAgo, fmtInt, fmtMoney } from "@/lib/format";
 import {
-  applyProductFilters, inTab, isActive, LOW_STOCK, parseProductFilters, PRODUCT_SORTS, productQuery, refine,
+  applyProductFilters, inTab, isActive, LOW_STOCK, parseProductFilters, PHOTOS, PRODUCT_SORTS, productQuery, refine,
   SALES_DAYS, soldOf, TABS, VARIANTS, type ProductSort,
 } from "@/lib/product-filters";
-import { listProducts, productSales } from "@/lib/queries";
+import { mediaKey } from "@/lib/media-rules";
+import { mediaByKey } from "@/lib/product-media";
+import { listProducts, productSales, type Product } from "@/lib/queries";
+import { listUsers } from "@/lib/users";
 import { can } from "@/lib/permissions";
 import { getScope } from "@/lib/scope";
 
@@ -26,12 +30,32 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [all, sales] = await Promise.all([listProducts(scope.account), productSales(scope.account, SALES_DAYS)]);
+  const [all, sales, media, users, everywhere] = await Promise.all([
+    listProducts(scope.account),
+    productSales(scope.account, SALES_DAYS),
+    mediaByKey(),
+    listUsers(),
+    // las fotos van por SKU en todos los países: para decir en cuáles, hace falta el catálogo completo
+    scope.account ? listProducts() : null,
+  ]);
+  const canPhotos = can(user, "photos");
+  const photosOf = (p: Product) => media.get(mediaKey(p)) ?? [];
+  const hasPhotos = (p: Product) => photosOf(p).length > 0;
+  const country = new Map(accounts.map((a) => [a.id, a.country]));
+  const countriesOf = new Map<string, string[]>();
+  for (const p of everywhere ?? all) {
+    const k = mediaKey(p);
+    const c = country.get(p.account_id);
+    const list = countriesOf.get(k) ?? [];
+    if (c && !list.includes(c)) list.push(c);
+    countriesOf.set(k, list);
+  }
+  const who = new Map(users.map((u) => [u.id, u.name.split(" ")[0]]));
 
   const pf = parseProductFilters(sp);
   const f = pf.tab;
-  const refined = refine(all, pf);
-  const rows = applyProductFilters(all, pf, sales);
+  const refined = refine(all, pf, hasPhotos);
+  const rows = applyProductFilters(all, pf, sales, hasPhotos);
   const counts = Object.fromEntries(TABS.map((x) => [x.id, refined.filter((p) => inTab(p, x.id)).length]));
 
   const showAccount = !scope.account && accounts.length > 1;
@@ -70,9 +94,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     sold: ["sold_desc", "sold_asc"] as ProductSort[],
   };
 
+  const withPhotos = all.filter(hasPhotos).length;
+  const photoOpts: FilterOption[] = [
+    { value: "con", label: PHOTOS.con, count: withPhotos },
+    { value: "sin", label: PHOTOS.sin, count: all.length - withPhotos },
+  ];
+
   const applied = [
     pf.status && { key: "status", label: `Estado: ${pf.status}` },
     pf.variants && { key: "var", label: VARIANTS[pf.variants] },
+    pf.photos && { key: "ph", label: PHOTOS[pf.photos] },
     pf.sort && { key: "sort", label: `Orden: ${PRODUCT_SORTS[pf.sort]}` },
   ].filter(Boolean) as { key: string; label: string }[];
 
@@ -121,10 +152,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <div className="more-panel">
             <FilterSelect name="status" label="Estado" value={pf.status} all="Todos los estados" options={statusOpts} />
             <FilterSelect name="var" label="Variantes" value={pf.variants} all="Con y sin variantes" options={variantOpts} />
+            <FilterSelect name="ph" label="Fotos reales" value={pf.photos} all="Con y sin fotos reales" options={photoOpts} />
             <FilterSelect name="sort" label="Ordenar por" value={pf.sort} all="Más nuevos primero" options={sortOpts(Object.keys(PRODUCT_SORTS) as ProductSort[])} />
           </div>
         </details>
-        {(pf.q || applied.length > 0) && <Link className="btn btn-ghost" href={href({ q: undefined, status: undefined, var: undefined, sort: undefined })}>Limpiar</Link>}
+        {(pf.q || applied.length > 0) && <Link className="btn btn-ghost" href={href({ q: undefined, status: undefined, var: undefined, ph: undefined, sort: undefined })}>Limpiar</Link>}
       </GetForm>
 
       {applied.length > 0 && (
@@ -169,7 +201,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <tr key={p.id}>
                       <td data-slot="id">
                         <div className="product-cell">
-                          {p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <span className="ph" aria-hidden><IconBox /></span>}
+                          <ProductPhotos
+                            mediaKey={mediaKey(p)}
+                            name={p.name}
+                            sku={p.sku?.trim() || null}
+                            image={p.image_url}
+                            countries={countriesOf.get(mediaKey(p)) ?? []}
+                            canEdit={canPhotos}
+                            items={photosOf(p).map((m) => ({
+                              id: m.id, kind: m.kind, content_type: m.content_type, size_bytes: m.size_bytes, caption: m.caption,
+                              created_at: m.created_at, by: m.uploaded_by ? who.get(m.uploaded_by) ?? null : null,
+                            }))}
+                          />
                           <div style={{ minWidth: 0 }}>
                             <div className="strong clip" style={{ maxWidth: 340 }} title={p.name}>{p.name}</div>
                             <div className="sub">

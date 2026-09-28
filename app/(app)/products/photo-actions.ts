@@ -40,7 +40,7 @@ export async function finishUpload(key: string, path: string, filename: string):
   } catch (e) {
     return { ok: false, msg: e instanceof Error ? e.message : "No se pudo registrar el archivo." };
   }
-  revalidatePath("/products/photos");
+  revalidatePath("/products");
   return { ok: true };
 }
 
@@ -50,7 +50,7 @@ export async function saveCaption(id: string, caption: string): Promise<Result> 
   const item = await getMedia(String(id ?? ""));
   if (!item) return { ok: false, msg: "Ese archivo ya no existe." };
   await updateCaption(item.id, String(caption ?? ""));
-  revalidatePath("/products/photos");
+  revalidatePath("/products");
   return { ok: true };
 }
 
@@ -64,6 +64,6 @@ export async function removeMedia(id: string): Promise<Result> {
   } catch {
     return { ok: false, msg: "No se pudo borrar. Inténtalo de nuevo." };
   }
-  revalidatePath("/products/photos");
+  revalidatePath("/products");
   return { ok: true };
 }
