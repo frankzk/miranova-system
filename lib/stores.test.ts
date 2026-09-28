@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classify, matchesStore, opportunities, sortStores, toContact, typicalTickets, type StoreRow } from "./stores.ts";
+import { classify, filterStores, matchesStore, opportunities, sortStores, storeKey, toContact, typicalTickets, type StoreRow } from "./stores.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
   account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
@@ -68,4 +68,26 @@ test("búsqueda de tienda por nombre: sin mayúsculas ni tildes, todas las palab
   assert.equal(matchesStore("Velora Honduras", "velora guatemala"), false);
   assert.equal(matchesStore("Velora Honduras", ""), true);
   assert.equal(matchesStore("Velora Honduras", undefined), true);
+});
+
+test("buscador de tiendas: elegidas de la lista más las que coinciden con el texto", () => {
+  const a = row({ account_id: "hn", store_id: "1", name: "MercaGo HN" });
+  const b = row({ account_id: "gt", store_id: "1", name: "MercaGo HN" });
+  const c = row({ account_id: "hn", store_id: "2", name: "Velora Honduras" });
+  const d = row({ account_id: "hn", store_id: "name:Nutralix", name: "Nutralix" });
+  const all = [a, b, c, d];
+  assert.equal(storeKey(d), "hn:name:Nutralix");
+  // sin filtros: todas
+  assert.deepEqual(filterStores(all, {}), all);
+  assert.deepEqual(filterStores(all, { keys: [], q: "  " }), all);
+  // elegir la misma tienda en una sola cuenta
+  assert.deepEqual(filterStores(all, { keys: [storeKey(b)] }), [b]);
+  // varias elegidas
+  assert.deepEqual(filterStores(all, { keys: [storeKey(c), storeKey(d)] }), [c, d]);
+  // elegidas + texto
+  assert.deepEqual(filterStores(all, { keys: [storeKey(d)], q: "velora" }), [c, d]);
+  // solo texto: las dos cuentas
+  assert.deepEqual(filterStores(all, { q: "mercago" }), [a, b]);
+  // una elegida que ya no existe no trae nada
+  assert.deepEqual(filterStores(all, { keys: ["xx:9"] }), []);
 });

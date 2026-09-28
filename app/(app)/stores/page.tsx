@@ -3,7 +3,8 @@ import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
-import { IconChat, IconSearch } from "@/components/icons";
+import { IconChat } from "@/components/icons";
+import { StoreSearch, type StoreOption } from "@/components/store-search";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
@@ -14,7 +15,7 @@ import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
 import {
-  change, classify, deliveryRate, HEALTH, HEALTH_ORDER, matchesStore, opportunities, sortStores, STORE_SORTS, toContact, typicalTickets,
+  change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, storeKey, toContact, typicalTickets,
   type Health, type Opportunity, type StoreRow, type StoreSort,
 } from "@/lib/stores";
 
@@ -24,6 +25,10 @@ type SP = Record<string, string | string[] | undefined>;
 const one = (sp: SP, k: string) => {
   const v = sp[k];
   return (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
+};
+const many = (sp: SP, k: string) => {
+  const v = sp[k];
+  return [...new Set((Array.isArray(v) ? v : v ? [v] : []).map((x) => x.trim()).filter(Boolean))];
 };
 
 export default async function StoresPage({ searchParams }: { searchParams: Promise<SP> }) {
@@ -43,9 +48,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const gParam = one(sp, "g");
   const g = gParam === "con" || gParam === "sin" ? gParam : undefined;
   const byGroup = (s: StoreRow) => !g || (g === "con") === !!groupOf(s);
-  // búsqueda por nombre: también cambia los conteos de pestañas y de grupo
+  // buscador: tiendas elegidas de la lista (t) y texto (q); también cambia los conteos de pestañas y de grupo
   const q = one(sp, "q")?.slice(0, 80);
-  const found = q ? all.filter((s) => matchesStore(s.name, q)) : all;
+  const picked = many(sp, "t").slice(0, 50);
+  const searching = !!q || picked.length > 0;
+  const found = filterStores(all, { keys: picked, q });
   const withGroup = found.filter((s) => groupOf(s)).length;
 
   const health = new Map(all.map((s) => [s, classify(s)]));
@@ -56,11 +63,20 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
   const contact = toContact(all);
   const showAccount = !scope.account && accounts.length > 1;
+  // sugerencias del buscador: todas las tiendas de la vista, las que más venden primero
+  const options: StoreOption[] = sortStores(all, "d7_desc").map((s) => ({
+    key: storeKey(s),
+    name: s.name,
+    account: showAccount ? s.account_name : null,
+    d7: s.d7,
+  }));
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const merged = { q, h, g, sort: sort === "d7_desc" ? undefined : sort, ...patch };
-    for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+    for (const [k, v] of Object.entries(merged)) if (v && k !== "t") p.set(k, v);
+    // las tiendas elegidas se conservan salvo que el cambio las quite ({ t: undefined })
+    if (!("t" in patch)) for (const k of picked) p.append("t", k);
     return p.toString();
   };
   const href = (patch: Record<string, string | undefined>) => {
@@ -107,16 +123,13 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         {h && <input type="hidden" name="h" value={h} />}
         {g && <input type="hidden" name="g" value={g} />}
         {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
-        <label className="input-icon search">
-          <span className="sr-only">Buscar tienda</span>
-          <IconSearch />
-          <input className="input" type="search" name="q" defaultValue={q} placeholder="Buscar tienda por nombre" maxLength={80} />
-        </label>
+        {/* key: al cambiar la búsqueda en la URL (Limpiar, pestañas) el buscador vuelve a empezar desde ella */}
+        <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} />
         <button className="btn" type="submit">Buscar</button>
-        {q && <Link className="btn btn-ghost" href={href({ q: undefined })}>Limpiar</Link>}
+        {searching && <Link className="btn btn-ghost" href={href({ q: undefined, t: undefined })}>Limpiar</Link>}
       </GetForm>
 
-      {contact.length > 0 && !h && !g && !q && (
+      {contact.length > 0 && !h && !g && !searching && (
         <section className="panel contact-today">
           <div className="panel-head">
             <h2>Contactar hoy</h2>
@@ -159,12 +172,14 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <div className="table-wrap">
         {rows.length === 0 ? (
           <div className="empty">
-            <h3>{all.length === 0 ? "Aún no hay tiendas" : q && pool.length === 0 ? `Ninguna tienda coincide con “${q}”` : "Ninguna tienda en este estado"}</h3>
+            <h3>{all.length === 0 ? "Aún no hay tiendas" : searching && pool.length === 0 ? (q ? `Ninguna tienda coincide con “${q}”` : "Ninguna de las tiendas elegidas en esta vista") : "Ninguna tienda en este estado"}</h3>
             <p>
               {all.length === 0
                 ? "Cuando lleguen órdenes con dropshipper en los últimos 60 días, aparecerán aquí."
-                : q && pool.length === 0
-                  ? "Revisa el nombre o busca solo una parte (por ejemplo, la primera palabra)."
+                : searching && pool.length === 0
+                  ? q
+                    ? "Revisa el nombre o busca solo una parte (por ejemplo, la primera palabra)."
+                    : "Puede que sean de otra cuenta o que no tengan pedidos en 60 días."
                   : "Prueba con otra pestaña."}
             </p>
           </div>

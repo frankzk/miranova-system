@@ -202,6 +202,23 @@ export function matchesStore(name: string, q: string | undefined | null): boolea
   return words.every((w) => n.includes(w));
 }
 
+/** Identidad de una tienda en la URL (`?t=`): la misma tienda puede estar en varias cuentas. */
+export const storeKey = (s: Pick<StoreRow, "account_id" | "store_id">) => `${s.account_id}:${s.store_id}`;
+
+/**
+ * Filtro del buscador de Salud de tiendas: las tiendas elegidas de la lista (`keys`) más las que
+ * coinciden con el texto (`q`). Sin ninguno de los dos, todas.
+ */
+export function filterStores<T extends Pick<StoreRow, "account_id" | "store_id" | "name">>(
+  rows: T[],
+  { keys, q }: { keys?: readonly string[]; q?: string | null },
+): T[] {
+  const picked = new Set(keys ?? []);
+  const text = norm(q ?? "");
+  if (!picked.size && !text) return rows;
+  return rows.filter((s) => picked.has(storeKey(s)) || (!!text && matchesStore(s.name, text)));
+}
+
 /** Tiendas a contactar hoy: en alerta o descenso, las que más pedidos dejaron de hacer. */
 export function toContact(rows: StoreRow[], limit = 5): StoreRow[] {
   return rows
