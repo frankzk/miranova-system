@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classify, opportunities, sortStores, toContact, typicalTickets, type StoreRow } from "./stores.ts";
+import { classify, matchesStore, opportunities, sortStores, toContact, typicalTickets, type StoreRow } from "./stores.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
   account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
@@ -59,4 +59,13 @@ test("crecimiento fuerte, producto ganador y tienda de un solo producto", () => 
   assert.deepEqual(kinds({ d7: 10, prev7: 10, n30: 40, skus30: 1, top_product: "Cinturón", top_share: 1 }), []); // 1.4/día: aún no
   assert.deepEqual(kinds({ d7: 460, prev7: 450, n30: 2000, skus30: 11, top_product: "DLG", top_share: 0.93 }), ["winner"]);
   assert.deepEqual(kinds({ d7: 460, prev7: 450, n30: 2000, skus30: 11, top_product: "DLG", top_share: 0.55 }), []);
+});
+
+test("búsqueda de tienda por nombre: sin mayúsculas ni tildes, todas las palabras", () => {
+  assert.equal(matchesStore("Velora Honduras", "velora"), true);
+  assert.equal(matchesStore("Velora Honduras", "  hond   VELORA "), true);
+  assert.equal(matchesStore("Tienda Económica", "economica"), true);
+  assert.equal(matchesStore("Velora Honduras", "velora guatemala"), false);
+  assert.equal(matchesStore("Velora Honduras", ""), true);
+  assert.equal(matchesStore("Velora Honduras", undefined), true);
 });

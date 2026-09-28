@@ -7,16 +7,17 @@ import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
 import { PageHead, place, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
-import { fmtInt, fmtLongDay, fmtMoney, fmtShort } from "@/lib/format";
+import { fmtInt, fmtLongDay, fmtMoney, fmtShort, todayIn } from "@/lib/format";
 import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
 import { activeStores } from "@/lib/overview";
 import { getScope } from "@/lib/scope";
 import { can } from "@/lib/permissions";
-import { RANGES, resolveRange } from "@/lib/ranges";
+import { RangePicker } from "@/components/range-picker";
+import { RANGES, rangeQuery, resolveRange } from "@/lib/ranges";
 
 export const metadata = { title: "Inicio" };
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ r?: string; days?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ r?: string; days?: string; from?: string; to?: string }> }) {
   // Inicio es para todos los usuarios; cada bloque se muestra según sus permisos
   const user = await requireUser();
   const canOrders = can(user, "orders");
@@ -27,7 +28,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   if (accounts.length === 0) return <Welcome canConnect={can(user, "accounts")} />;
 
   const sp = await searchParams;
-  const range = resolveRange(sp.r ?? sp.days, scope.tz);
+  const range = resolveRange(sp.r ?? sp.days, scope.tz, { from: sp.from, to: sp.to });
+  const rq = rangeQuery(range);
+  const here = rq ? `/?${rq}` : "/";
   const [s, attention, alerts, overview] = await Promise.all([
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     // órdenes con problemas: datos del cliente, solo con permiso de Órdenes
@@ -54,11 +57,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
                 {r.label}
               </Link>
             ))}
+            <RangePicker range={range} today={todayIn(scope.tz)} path="/" />
           </nav>
         }
       />
 
-      <AccountChips accounts={accounts} current={scope.account} next={range.id === "30" ? "/" : `/?r=${range.id}`} />
+      <AccountChips accounts={accounts} current={scope.account} next={here} />
 
       <OwnerAlertsPanel data={alerts} tz={scope.tz} access={{ money: canMoney, orders: canOrders, products: can(user, "products") }} />
 
@@ -126,7 +130,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
             <div className="chart-total">
               <strong>{fmtInt(periodOrders)}</strong>
               <span className="muted">
-                recibidas {range.bucket === "hour" ? range.short : `en ${range.short}`} · {fmtInt(periodDelivered)} ya entregadas
+                recibidas {range.during} · {fmtInt(periodDelivered)} ya entregadas
               </span>
             </div>
             <BarChart days={s.daily} bucket={range.bucket} />

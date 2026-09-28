@@ -1,6 +1,8 @@
 // Salud de tiendas (dropshippers): semáforo por ritmo de ventas y alertas comerciales.
 // Datos de la función SQL `store_health`; aquí solo se clasifica, para poder probarlo.
 
+import { norm } from "./store-contacts.ts";
+
 export type StoreRow = {
   account_id: string;
   /** ID del vendedor en la plataforma (o "name:<nombre>" si no viene). */
@@ -187,6 +189,17 @@ export function sortStores(rows: StoreRow[], sort: StoreSort): StoreRow[] {
   };
   const k = key[sort];
   return [...rows].sort((a, b) => k(a) - k(b) || b.d7 - a.d7 || a.name.localeCompare(b.name, "es"));
+}
+
+/**
+ * Búsqueda por nombre de tienda: sin distinguir mayúsculas ni tildes, y cada palabra buscada
+ * tiene que aparecer ("hond velora" encuentra "Velora Honduras"). Vacío = todas.
+ */
+export function matchesStore(name: string, q: string | undefined | null): boolean {
+  const words = norm(q ?? "").split(" ").filter(Boolean);
+  if (!words.length) return true;
+  const n = norm(name);
+  return words.every((w) => n.includes(w));
 }
 
 /** Tiendas a contactar hoy: en alerta o descenso, las que más pedidos dejaron de hacer. */
