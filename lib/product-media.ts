@@ -106,3 +106,10 @@ export async function signedRead(item: MediaItem, seconds: number, download?: st
   if (error || !data) throw error ?? new Error("Storage no devolvió el enlace");
   return data.signedUrl;
 }
+
+/** Fotos y videos por clave (SKU o producto), en el orden en que se subieron. */
+export async function mediaByKey(): Promise<Map<string, MediaItem[]>> {
+  const map = new Map<string, MediaItem[]>();
+  for (const m of await listMedia()) map.set(m.media_key, [...(map.get(m.media_key) ?? []), m]);
+  return map;
+}

@@ -13,10 +13,12 @@ export const useSheet = () => useContext(SheetCtx);
  * entra al abrir y vuelve al botón al cerrar. `hash` lo abre al llegar con ese #ancla.
  */
 export function SideSheet({
-  trigger, triggerClass = "btn", title, sub, hash, children,
+  trigger, triggerClass = "btn", triggerLabel, title, sub, hash, children,
 }: {
   trigger: React.ReactNode;
   triggerClass?: string;
+  /** Nombre y descripción emergente del botón, cuando el contenido no lo dice (p. ej. una imagen). */
+  triggerLabel?: string;
   title: React.ReactNode;
   sub?: React.ReactNode;
   hash?: string;
@@ -66,7 +68,7 @@ export function SideSheet({
 
   return (
     <>
-      <button ref={button} type="button" className={triggerClass} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+      <button ref={button} type="button" className={triggerClass} aria-label={triggerLabel} title={triggerLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
         {trigger}
       </button>
       {open && (

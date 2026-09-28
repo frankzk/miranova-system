@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { finishUpload, removeMedia, saveCaption, startUpload } from "@/app/(app)/products/photos/actions";
+import { finishUpload, removeMedia, saveCaption, startUpload } from "@/app/(app)/products/photo-actions";
 import { IconCheck, IconCopy, IconDownload, IconPlay, IconShare, IconTrash, IconUpload } from "./icons";
 import { downloadName, fmtBytes, MAX_FILES_PER_UPLOAD, MEDIA_ACCEPT, mediaProblem } from "@/lib/media-rules";
+import "./media-panel.css";
 
 export type PanelItem = {
   id: string;
