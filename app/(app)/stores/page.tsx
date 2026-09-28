@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
+import { GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
-import { IconChat } from "@/components/icons";
+import { IconChat, IconSearch } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
@@ -13,7 +14,7 @@ import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
 import {
-  change, classify, deliveryRate, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, toContact, typicalTickets,
+  change, classify, deliveryRate, HEALTH, HEALTH_ORDER, matchesStore, opportunities, sortStores, STORE_SORTS, toContact, typicalTickets,
   type Health, type Opportunity, type StoreRow, type StoreSort,
 } from "@/lib/stores";
 
@@ -42,12 +43,15 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const gParam = one(sp, "g");
   const g = gParam === "con" || gParam === "sin" ? gParam : undefined;
   const byGroup = (s: StoreRow) => !g || (g === "con") === !!groupOf(s);
-  const withGroup = all.filter((s) => groupOf(s)).length;
+  // búsqueda por nombre: también cambia los conteos de pestañas y de grupo
+  const q = one(sp, "q")?.slice(0, 80);
+  const found = q ? all.filter((s) => matchesStore(s.name, q)) : all;
+  const withGroup = found.filter((s) => groupOf(s)).length;
 
   const health = new Map(all.map((s) => [s, classify(s)]));
-  const pool = all.filter(byGroup);
+  const pool = found.filter(byGroup);
   const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, pool.filter((s) => health.get(s) === k).length]));
-  const rows = sortStores(all.filter((s) => (!h || health.get(s) === h) && byGroup(s)), sort);
+  const rows = sortStores(pool.filter((s) => !h || health.get(s) === h), sort);
   const typical = typicalTickets(all);
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
   const contact = toContact(all);
@@ -55,7 +59,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { h, g, sort: sort === "d7_desc" ? undefined : sort, ...patch };
+    const merged = { q, h, g, sort: sort === "d7_desc" ? undefined : sort, ...patch };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return p.toString();
   };
@@ -91,7 +95,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               Con grupo <span className="c">{fmtInt(withGroup)}</span>
             </Link>
             <Link href={href({ g: "sin" })} aria-current={g === "sin"} title="Tiendas sin grupo de WhatsApp registrado">
-              Sin grupo <span className="c">{fmtInt(all.length - withGroup)}</span>
+              Sin grupo <span className="c">{fmtInt(found.length - withGroup)}</span>
             </Link>
           </nav>
         }
@@ -99,7 +103,20 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
       <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 
-      {contact.length > 0 && !h && !g && (
+      <GetForm className="toolbar" role="search" action="/stores">
+        {h && <input type="hidden" name="h" value={h} />}
+        {g && <input type="hidden" name="g" value={g} />}
+        {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
+        <label className="input-icon search">
+          <span className="sr-only">Buscar tienda</span>
+          <IconSearch />
+          <input className="input" type="search" name="q" defaultValue={q} placeholder="Buscar tienda por nombre" maxLength={80} />
+        </label>
+        <button className="btn" type="submit">Buscar</button>
+        {q && <Link className="btn btn-ghost" href={href({ q: undefined })}>Limpiar</Link>}
+      </GetForm>
+
+      {contact.length > 0 && !h && !g && !q && (
         <section className="panel contact-today">
           <div className="panel-head">
             <h2>Contactar hoy</h2>
@@ -142,8 +159,14 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <div className="table-wrap">
         {rows.length === 0 ? (
           <div className="empty">
-            <h3>{all.length === 0 ? "Aún no hay tiendas" : "Ninguna tienda en este estado"}</h3>
-            <p>{all.length === 0 ? "Cuando lleguen órdenes con dropshipper en los últimos 60 días, aparecerán aquí." : "Prueba con otra pestaña."}</p>
+            <h3>{all.length === 0 ? "Aún no hay tiendas" : q && pool.length === 0 ? `Ninguna tienda coincide con “${q}”` : "Ninguna tienda en este estado"}</h3>
+            <p>
+              {all.length === 0
+                ? "Cuando lleguen órdenes con dropshipper en los últimos 60 días, aparecerán aquí."
+                : q && pool.length === 0
+                  ? "Revisa el nombre o busca solo una parte (por ejemplo, la primera palabra)."
+                  : "Prueba con otra pestaña."}
+            </p>
           </div>
         ) : (
           <>

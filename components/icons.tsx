@@ -38,6 +38,9 @@ export const IconAccounts = (p: P) => (
 export const IconSearch = (p: P) => (
   <Svg {...p}><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></Svg>
 );
+export const IconCalendar = (p: P) => (
+  <Svg {...p}><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" /></Svg>
+);
 export const IconDownload = (p: P) => (
   <Svg {...p}><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" /></Svg>
 );
