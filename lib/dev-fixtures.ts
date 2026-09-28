@@ -292,8 +292,34 @@ const CTX: FixtureCtx = {
 const g = globalThis as { __miranovaFixtureTables?: Record<string, Row[]> };
 const EXTRA_TABLES: Record<string, Row[]> = (g.__miranovaFixtureTables ??= Object.assign({}, ...MODULES.map((m) => m.tables ?? {})));
 
+/** Archivos de Storage en memoria (ruta → tipo y bytes), compartidos con app/api/dev-storage. */
+export type DevFile = { type: string; data: Uint8Array; created_at: string };
+const gf = globalThis as { __miranovaFixtureFiles?: Map<string, DevFile> };
+export const DEV_FILES: Map<string, DevFile> = (gf.__miranovaFixtureFiles ??= new Map());
+
+function storageBucket(bucket: string) {
+  const key = (path: string) => `${bucket}/${path}`;
+  const url = (kind: string, path: string) => `/api/dev-storage/${kind}/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`;
+  return {
+    createSignedUploadUrl: async (path: string) => ({ data: { signedUrl: `${url("upload", path)}?token=dev`, token: "dev", path }, error: null }),
+    createSignedUrl: async (path: string, _s: number, o?: { download?: string | boolean }) =>
+      DEV_FILES.has(key(path))
+        ? { data: { signedUrl: `${url("object", path)}${o?.download ? `?download=${encodeURIComponent(String(o.download))}` : ""}` }, error: null }
+        : { data: null, error: { message: "Object not found" } },
+    info: async (path: string) => {
+      const f = DEV_FILES.get(key(path));
+      return f ? { data: { name: path, size: f.data.byteLength, contentType: f.type, createdAt: f.created_at }, error: null } : { data: null, error: { message: "Object not found" } };
+    },
+    remove: async (paths: string[]) => {
+      for (const p of paths) DEV_FILES.delete(key(p));
+      return { data: paths.map((name) => ({ name })), error: null };
+    },
+  };
+}
+
 export function fixtureClient(): any {
   return {
+    storage: { from: storageBucket },
     from: (t: string) => new Query(t),
     rpc: async (name: string, args: Row) => {
       if (name === "dashboard_summary") return { data: summary(args), error: null };

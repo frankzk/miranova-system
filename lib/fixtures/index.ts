@@ -5,6 +5,7 @@ import { fixtures as contacts } from "./contacts";
 import { fixtures as followups } from "./followups";
 import { fixtures as inventory } from "./inventory";
 import { fixtures as matrix } from "./matrix";
+import { fixtures as media } from "./media";
 import { fixtures as opportunities } from "./opportunities";
 import { fixtures as overview } from "./overview";
 import { fixtures as productPerformance } from "./product-performance";
@@ -13,4 +14,4 @@ import { fixtures as stores } from "./stores";
 import type { FixtureModule } from "./types";
 import { fixtures as users } from "./users";
 
-export const MODULES: FixtureModule[] = [stores, overview, storeDetail, followups, productPerformance, matrix, opportunities, business, inventory, contacts, users];
+export const MODULES: FixtureModule[] = [stores, overview, storeDetail, followups, productPerformance, matrix, opportunities, business, inventory, contacts, users, media];

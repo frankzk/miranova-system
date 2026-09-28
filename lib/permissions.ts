@@ -7,6 +7,7 @@ export const PERMISSIONS = [
   { key: "stores", label: "Tiendas", hint: "Salud de tiendas, ficha de cada tienda, contactos y seguimientos (solo ver)" },
   { key: "stores_edit", label: "Editar tiendas", hint: "Guardar contactos y grupos de WhatsApp, y registrar seguimientos" },
   { key: "products", label: "Productos", hint: "Catálogo, rendimiento, inventario y tienda × producto" },
+  { key: "photos", label: "Fotos", hint: "Subir y borrar fotos y videos reales de productos (verlas y descargarlas va con Productos)" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
   { key: "export", label: "Exportar", hint: "Descargar órdenes y catálogo en CSV" },
@@ -47,6 +48,8 @@ export function normalizePermissions(values: readonly unknown[]): Permission[] {
   const set = new Set(values.filter(isPermission));
   // editar tiendas sin poder verlas no tiene sentido
   if (set.has("stores_edit")) set.add("stores");
+  // subir fotos sin ver productos tampoco
+  if (set.has("photos")) set.add("products");
   return PERMISSION_KEYS.filter((p) => set.has(p));
 }
 

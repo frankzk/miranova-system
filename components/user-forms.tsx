@@ -60,6 +60,8 @@ function PermissionChecks({ value, lockedPerms, allLocked }: { value: readonly s
     // editar tiendas incluye verlas
     if (k === "stores_edit" && on) next.add("stores");
     if (k === "stores" && !on) next.delete("stores_edit");
+    if (k === "photos" && on) next.add("products");
+    if (k === "products" && !on) next.delete("photos");
     setSel(next);
   };
   return (
