@@ -62,3 +62,20 @@ export async function contactIndex(): Promise<Map<string, { group: string | null
 }
 
 export const contactKey = key;
+
+/**
+ * Contacto completo de cada tienda (cuenta|tienda) y las otras tiendas del mismo contacto,
+ * para exportar el listado.
+ */
+export async function contactsByStore(): Promise<Map<string, StoreContact & { others: string[] }>> {
+  const links = await contactLinks();
+  const contacts = await contactsById([...new Set(links.map((l) => l.contact_id))]);
+  const out = new Map<string, StoreContact & { others: string[] }>();
+  for (const l of links) {
+    const c = contacts.get(l.contact_id);
+    if (!c) continue;
+    const others = links.filter((x) => x.contact_id === l.contact_id && key(x) !== key(l)).map((x) => x.store_name ?? x.store_id);
+    out.set(key(l), { ...c, others });
+  }
+  return out;
+}

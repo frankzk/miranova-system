@@ -208,3 +208,77 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
     </li>
   );
 }
+
+/**
+ * Contacto dentro del panel lateral de Salud de tiendas: los datos a la vista, accesos para
+ * escribir o llamar y la edición plegada. Vincular otras operaciones sigue en la ficha completa.
+ */
+export function StoreContactSection({ view, store, actions, fullHref }: StoreContactProps & { fullHref: string }) {
+  const { contact: c, siblings, suggestions, self } = view;
+  const person = c?.owner_name || self?.person;
+  return (
+    <div className="section sd-drawer-ct" id="contacto">
+      <h3>Contacto</h3>
+      {c ? (
+        <>
+          {(c.whatsapp_group_url || c.owner_phone) && (
+            <div className="ct-quick">
+              {c.whatsapp_group_url && (
+                <a className="btn btn-wa" href={c.whatsapp_group_url} target="_blank" rel="noopener noreferrer"><IconChat /> Abrir grupo</a>
+              )}
+              {c.owner_phone && (
+                <a className="btn" href={whatsappChat(c.owner_phone)} target="_blank" rel="noopener noreferrer"><IconExternal /> WhatsApp al dueño</a>
+              )}
+              {c.owner_phone && <a className="btn btn-ghost" href={`tel:+${c.owner_phone}`}><IconPhone /> Llamar</a>}
+            </div>
+          )}
+          <dl className="kv">
+            <dt>Responsable</dt>
+            <dd>{person || "—"}</dd>
+            <dt>Teléfono</dt>
+            <dd>{c.owner_phone ? formatPhone(c.owner_phone) : "—"}</dd>
+            <dt>Grupo de WhatsApp</dt>
+            <dd>{c.whatsapp_group_url ? "Registrado" : "Falta el enlace del grupo"}</dd>
+            {c.notes && (
+              <>
+                <dt>Notas</dt>
+                <dd>{c.notes}</dd>
+              </>
+            )}
+            {siblings.length > 0 && (
+              <>
+                <dt>También atiende</dt>
+                <dd>{siblings.map((l) => opName(l.store?.name ?? l.store_name, l.store?.account_name)).join(", ")}</dd>
+              </>
+            )}
+          </dl>
+          {actions && (
+            <details className="ct-edit">
+              <summary>Editar contacto</summary>
+              <ContactForm
+                action={actions.save}
+                store={store}
+                defaults={{ group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes }}
+                submit="Guardar cambios"
+              />
+            </details>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="sheet-note">
+            {person && <>Responsable según la plataforma: <b>{person}</b>. </>}
+            Aún no hay grupo de WhatsApp ni teléfono guardado.
+          </p>
+          {actions && <ContactForm action={actions.save} store={store} defaults={{ owner_name: self?.person }} submit="Guardar contacto" />}
+        </>
+      )}
+      {suggestions.length > 0 && (
+        <p className="sheet-note ct-more">
+          {suggestions.length === 1 ? "Hay 1 operación que podría ser" : `Hay ${suggestions.length} operaciones que podrían ser`} del mismo dueño.{" "}
+          <Link href={`${fullHref}#contacto`}>Revisar en la ficha</Link>
+        </p>
+      )}
+    </div>
+  );
+}

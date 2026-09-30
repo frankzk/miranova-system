@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addDays, daysBetween, impact, isDay, isFollowupStatus, metricOf, niceMax, rangeSummary, vsAverage, windowStats, type StoreDay,
+  addDays, daysBetween, impact, isDay, isFollowupStatus, metricOf, niceMax, rangeSummary, summarizeFollowups, vsAverage, windowStats, type StoreDay,
 } from "./store-metrics.ts";
 
 /** Serie de `n` días que termina en `end`, con los pedidos dados (ticket fijo por día). */
@@ -76,4 +76,19 @@ test("gráfica: ticket del día sin pedidos es 0 y el del rango es ponderado", (
 test("estado del seguimiento válido", () => {
   assert.ok(isFollowupStatus("en_curso"));
   assert.ok(!isFollowupStatus("toString"));
+});
+
+test("resumen de seguimiento por tienda: último contacto, abiertos y próximo", () => {
+  const f = (p: Partial<{ account_id: string; store_id: string; contacted_at: string; owner: string | null; status: string; next_followup: string | null }>) => ({
+    account_id: "a", store_id: "s", contacted_at: "2026-09-20", owner: "Ana", status: "hecho", next_followup: null, ...p,
+  });
+  const m = summarizeFollowups([
+    f({ contacted_at: "2026-09-20", owner: "Ana", status: "hecho" }),
+    f({ contacted_at: "2026-09-28", owner: " Luis ", status: "pendiente", next_followup: "2026-10-03" }),
+    f({ contacted_at: "2026-09-25", owner: null, status: "en_curso", next_followup: "2026-10-01" }),
+    f({ store_id: "otra", contacted_at: "2026-09-10", owner: "", status: "sin_respuesta" }),
+  ]);
+  assert.deepEqual(m.get("a|s"), { count: 3, last: "2026-09-28", lastOwner: "Luis", open: 2, next: "2026-10-01" });
+  assert.deepEqual(m.get("a|otra"), { count: 1, last: "2026-09-10", lastOwner: null, open: 0, next: null });
+  assert.equal(m.get("a|nada"), undefined);
 });

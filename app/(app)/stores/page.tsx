@@ -1,23 +1,30 @@
 import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
-import { GetForm } from "@/components/client";
+import { Drawer, GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
-import { IconChat } from "@/components/icons";
+import { IconChat, IconDownload } from "@/components/icons";
+import { StoreDrawer } from "@/components/store-drawer";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
-import { contactIndex, contactKey } from "@/lib/contacts";
-import { fmtInt, fmtMoney } from "@/lib/format";
+import { contactIndex, contactKey, storeContactView } from "@/lib/contacts";
+import { followupIndex } from "@/lib/followups";
+import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
-import { storeHref } from "@/lib/store-links";
+import { storeDetail } from "@/lib/store-detail";
+import { daysBetween, fmtDay } from "@/lib/store-metrics";
 import {
   change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, storeKey, toContact, typicalTickets,
   type Health, type Opportunity, type StoreRow, type StoreSort,
 } from "@/lib/stores";
+import { addFollowup, updateFollowup } from "./[account]/[store]/actions";
+import { linkStore, saveContact, unlinkStore } from "./[account]/[store]/contact-actions";
+// estilos de contacto y seguimiento (los mismos de la ficha), para el panel lateral
+import "./[account]/[store]/store-detail.css";
 
 export const metadata = { title: "Salud de tiendas" };
 
@@ -26,6 +33,14 @@ const one = (sp: SP, k: string) => {
   const v = sp[k];
   return (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** `ficha=<cuenta>:<tienda>` (storeKey) → la tienda del panel lateral. */
+function parseFicha(v: string | undefined) {
+  if (!v || v.length > 300) return null;
+  const accountId = v.slice(0, 36);
+  const storeId = v.slice(37);
+  return UUID.test(accountId) && v[36] === ":" && storeId ? { accountId, storeId } : null;
+}
 const many = (sp: SP, k: string) => {
   const v = sp[k];
   return [...new Set((Array.isArray(v) ? v : v ? [v] : []).map((x) => x.trim()).filter(Boolean))];
@@ -37,7 +52,15 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [all, contacts] = await Promise.all([storeHealth(scope.account), contactIndex()]);
+  // panel lateral de una tienda (?ficha=): contacto e historial de seguimiento sin salir del listado
+  const ficha = parseFicha(one(sp, "ficha"));
+  const [all, contacts, followups, fichaDetail, fichaContact] = await Promise.all([
+    storeHealth(scope.account),
+    contactIndex(),
+    followupIndex(),
+    ficha ? storeDetail(ficha.accountId, ficha.storeId) : null,
+    ficha ? storeContactView(ficha.accountId, ficha.storeId) : null,
+  ]);
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
   const hParam = one(sp, "h");
@@ -97,7 +120,21 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
     />
   );
   // la ficha de la tienda (historial, productos, seguimiento); sus pedidos se abren desde ahí
-  const ordersHref = (s: StoreRow) => storeHref(s.account_id, s.store_id);
+  // el nombre de la tienda abre su panel lateral (contacto y seguimiento); la ficha completa se abre desde ahí
+  const fichaHref = (s: StoreRow) => href({ ficha: storeKey(s) });
+  const fichaRow = ficha ? all.find((s) => s.account_id === ficha.accountId && s.store_id === ficha.storeId) ?? null : null;
+  const today = todayIn(scope.tz);
+  const followupNote = (s: StoreRow) => {
+    const f = followups.get(contactKey(s));
+    if (!f) return null;
+    const overdue = f.next && f.next < today;
+    return (
+      <span className="fu-note" data-overdue={overdue || undefined} title={`${f.count} ${f.count === 1 ? "registro" : "registros"} de seguimiento`}>
+        Seguimiento {fmtDay(f.last, today)}{f.lastOwner && <> · {f.lastOwner}</>}
+        {f.next && <> · próximo {overdue ? `vencido hace ${daysBetween(f.next, today)} d` : fmtDay(f.next, today)}</>}
+      </span>
+    );
+  };
 
   return (
     <div className="page">
@@ -127,6 +164,15 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} />
         <button className="btn" type="submit">Buscar</button>
         {searching && <Link className="btn btn-ghost" href={href({ q: undefined, t: undefined })}>Limpiar</Link>}
+        {can(user, "export") && (
+          <>
+            <span className="spacer" />
+            {/* el mismo listado (filtros y orden) con el contacto y el seguimiento de cada tienda */}
+            <a className="btn" href={`/api/export/stores${qs({}) ? `?${qs({})}` : ""}`} download title="Descargar este listado en Excel, con los datos de contacto">
+              <IconDownload /> Exportar a Excel
+            </a>
+          </>
+        )}
       </GetForm>
 
       {contact.length > 0 && !h && !g && !searching && (
@@ -140,7 +186,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               const ops = opportunities(s, typical[s.account_id], money(s));
               return (
                 <li key={`${s.account_id}:${s.store_id}`} className="row-qc">
-                  <Link href={ordersHref(s)}>
+                  <Link href={fichaHref(s)} scroll={false}>
                     <span className="t">{s.name}</span>
                     <HealthPill h={health.get(s)!} />
                     <span className="s">
@@ -149,7 +195,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="s reason">{ops[0] ? `${ops[0].text} → ${ops[0].action}` : ""}</span>
                   </Link>
-                  <ContactQuick c={contacts.get(contactKey(s))} storeHref={ordersHref(s)} name={s.name} canEdit={canEdit} />
+                  <ContactQuick c={contacts.get(contactKey(s))} storeHref={fichaHref(s)} name={s.name} canEdit={canEdit} />
                 </li>
               );
             })}
@@ -189,11 +235,12 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               {rows.map((s) => (
                 <li key={`${s.account_id}:${s.store_id}`}>
                   <div className="top">
-                    <Link className="strong" href={ordersHref(s)}>{s.name}</Link>
+                    <Link className="strong" href={fichaHref(s)} scroll={false}>{s.name}</Link>
                     <GroupLink url={groupOf(s)} />
                     <HealthPill h={health.get(s)!} />
                   </div>
                   <div className="sub">{lastSale(s)}{showAccount && <> · {s.account_name}</>}</div>
+                  {followupNote(s)}
                   <Spark days={s.daily} />
                   <dl>
                     <div><dt>Hoy</dt><dd>{fmtInt(s.today)}</dd></div>
@@ -236,13 +283,14 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     return (
                       <tr key={`${s.account_id}:${s.store_id}`}>
                         <td>
-                          <Link className="strong store-name" href={ordersHref(s)}>{s.name}</Link>
+                          <Link className="strong store-name" href={fichaHref(s)} scroll={false}>{s.name}</Link>
                           <GroupLink url={groupOf(s)} />
                           <div className="sub">
                             {lastSale(s)}
                             {dr !== null && <> · entrega {Math.round(dr * 100)}%</>}
                             {showAccount && <> · {s.account_name}</>}
                           </div>
+                          {followupNote(s)}
                           <Ops ops={ops} />
                         </td>
                         <td className="num">{fmtInt(s.today)}</td>
@@ -267,6 +315,21 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
           </>
         )}
       </div>
+      {ficha && fichaDetail && fichaContact && (
+        <Drawer closeHref={href({})} label={`Tienda ${fichaDetail.store.name}`}>
+          <StoreDrawer
+            d={fichaDetail}
+            contact={fichaContact}
+            health={fichaRow ? classify(fichaRow) : null}
+            ops={fichaRow ? opportunities(fichaRow, typical[fichaRow.account_id], money(fichaRow)) : []}
+            closeHref={href({})}
+            me={user.name}
+            canOrders={can(user, "orders")}
+            actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore }, followup: { add: addFollowup, update: updateFollowup } } : null}
+          />
+        </Drawer>
+      )}
+
       <p className="footnote">
         Sin órdenes canceladas ni rechazadas. Ticket, unidades y &ldquo;te toca&rdquo; son promedios de los últimos 30 días; el ticket bajo se compara con la
         mediana de las tiendas de la misma cuenta.

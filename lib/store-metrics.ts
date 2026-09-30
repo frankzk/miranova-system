@@ -169,3 +169,37 @@ export const FOLLOWUP_STATUS = {
 export type FollowupStatus = keyof typeof FOLLOWUP_STATUS;
 export const OPEN_STATUSES: FollowupStatus[] = ["pendiente", "en_curso"];
 export const isFollowupStatus = (s: string): s is FollowupStatus => Object.hasOwn(FOLLOWUP_STATUS, s);
+
+/** Resumen del seguimiento de una tienda para los listados. */
+export type FollowupSummary = {
+  count: number;
+  /** Último contacto (YYYY-MM-DD) y quién lo registró. */
+  last: string;
+  lastOwner: string | null;
+  /** Registros pendientes o en curso. */
+  open: number;
+  /** Próximo seguimiento más cercano entre los abiertos (YYYY-MM-DD), si hay. */
+  next: string | null;
+};
+
+type FollowupLite = { account_id: string; store_id: string; contacted_at: string; owner: string | null; status: string; next_followup: string | null; created_at?: string };
+
+/** Agrupa los registros por tienda ("cuenta|tienda", como contactKey). */
+export function summarizeFollowups(rows: FollowupLite[]): Map<string, FollowupSummary> {
+  const out = new Map<string, FollowupSummary>();
+  for (const f of rows) {
+    const k = `${f.account_id}|${f.store_id}`;
+    const s = out.get(k) ?? { count: 0, last: "", lastOwner: null, open: 0, next: null };
+    s.count += 1;
+    if (f.contacted_at > s.last) {
+      s.last = f.contacted_at;
+      s.lastOwner = f.owner?.trim() || null;
+    }
+    if ((OPEN_STATUSES as string[]).includes(f.status)) {
+      s.open += 1;
+      if (f.next_followup && (!s.next || f.next_followup < s.next)) s.next = f.next_followup;
+    }
+    out.set(k, s);
+  }
+  return out;
+}

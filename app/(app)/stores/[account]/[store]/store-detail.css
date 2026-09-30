@@ -147,3 +147,38 @@
   .ct-bar-actions > * { flex: 1 1 auto; justify-content: center; }
   .sheet .fu-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* panel lateral de una tienda (Salud de tiendas): cifras rápidas, contacto y seguimiento */
+.sd-drawer-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 16px 0 0; }
+.sd-drawer-kpis div { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-subtle); }
+.sd-drawer-kpis dt { font-size: var(--t-xs); color: var(--ink-3); }
+.sd-drawer-kpis dd { margin: 2px 0 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sd-drawer-kpis .delta { font-size: var(--t-xs); font-weight: 550; }
+.sd-drawer-ops li { padding: 8px 0 8px 16px; }
+.sd-drawer-ops li::before { left: 2px; top: 15px; }
+.sd-drawer .kv { grid-template-columns: 150px minmax(0, 1fr); }
+.ct-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.ct-edit { margin-top: 14px; }
+.ct-edit > summary, .fu-new > summary { list-style: none; cursor: pointer; width: fit-content; }
+.ct-edit > summary::-webkit-details-marker, .fu-new > summary::-webkit-details-marker { display: none; }
+.ct-edit > summary { font-size: var(--t-sm); font-weight: 500; color: var(--accent-ink); }
+.ct-edit[open] > summary { margin-bottom: 12px; }
+.ct-more { margin: 12px 0 0; }
+.fu-new { margin-bottom: 14px; }
+.fu-new[open] > summary { margin-bottom: 12px; }
+.sd-drawer .fu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sd-drawer .fu-list { border-top: 1px solid var(--line); }
+.sd-drawer .fu-item { padding: 12px 0; }
+.sd-drawer .fu-item .k { min-width: 96px; }
+.sd-drawer-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* seguimiento en el listado de Salud de tiendas */
+.fu-note { display: block; margin-top: 3px; font-size: var(--t-xs); color: var(--accent-ink); }
+.fu-note[data-overdue] { color: var(--danger); font-weight: 550; }
+
+@media (max-width: 560px) {
+  .sd-drawer-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sd-drawer .fu-grid { grid-template-columns: minmax(0, 1fr); }
+  .sd-drawer .kv { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .sd-drawer .kv dd { margin-bottom: 8px; }
+}
