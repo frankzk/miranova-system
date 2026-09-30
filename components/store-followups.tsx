@@ -22,18 +22,51 @@ export type StoreFollowupsProps = {
   actions: { add: Action; update: Action } | null;
   /** Nombre del usuario de la sesión: responsable por defecto de un seguimiento nuevo. */
   me?: string;
+  /** "drawer": dentro del panel lateral de Salud de tiendas, con el formulario a la vista. */
+  variant?: "page" | "drawer";
 };
 
-export async function StoreFollowups({ accountId, storeId, storeName, currency, daily, today, actions, me }: StoreFollowupsProps) {
+export async function StoreFollowups({ accountId, storeId, storeName, currency, daily, today, actions, me, variant = "page" }: StoreFollowupsProps) {
   const [items, owners] = await Promise.all([listFollowups(accountId, storeId), actions ? followupOwners() : Promise.resolve([])]);
   const open = items.filter((f) => OPEN_STATUSES.includes(f.status));
+  const summary = items.length
+    ? `${items.length} ${items.length === 1 ? "registro" : "registros"} · ${open.length} ${open.length === 1 ? "abierto" : "abiertos"}`
+    : null;
+
+  if (variant === "drawer") {
+    return (
+      <div className="section sd-drawer-fu" id="seguimiento">
+        <h3>Seguimiento del equipo {summary && <span className="count">{summary}</span>}</h3>
+        {actions && (
+          // abierto mientras no haya registros; después, un clic para agregar el del día
+          <details className="fu-new" open={items.length === 0 || undefined}>
+            <summary className="btn btn-sm"><IconPlus /> Nuevo registro</summary>
+            <FollowupForm action={actions.add} accountId={accountId} storeId={storeId} storeName={storeName} today={today} owners={owners} owner={me} />
+          </details>
+        )}
+        {items.length === 0 ? (
+          <p className="sheet-note">
+            {actions
+              ? "Registra cada contacto con la tienda: qué se habló, qué se recomendó y cuándo volver a escribirle."
+              : "Aún no hay registros de seguimiento."}
+          </p>
+        ) : (
+          <ol className="fu-list">
+            {items.map((f) => (
+              <Entry key={f.id} f={f} daily={daily} today={today} currency={currency} update={actions?.update ?? null} />
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  }
 
   return (
     <section id="seguimiento" className="panel store-followups" aria-labelledby="fu-title">
       <div className="panel-head">
         <h2 id="fu-title">Seguimiento Miranova</h2>
         <span className="aside">
-          {items.length ? `${items.length} ${items.length === 1 ? "registro" : "registros"} · ${open.length} ${open.length === 1 ? "abierto" : "abiertos"}` : "Interno"}
+          {summary ?? "Interno"}
         </span>
         {actions && (
           <SideSheet

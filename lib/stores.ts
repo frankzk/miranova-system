@@ -226,3 +226,34 @@ export function toContact(rows: StoreRow[], limit = 5): StoreRow[] {
     .sort((a, b) => (b.prev7 - b.d7) - (a.prev7 - a.d7))
     .slice(0, limit);
 }
+
+/** Filtros de la URL de Salud de tiendas (los mismos para la página y la exportación). */
+export type StoreFilters = { h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort };
+
+type Params = Record<string, string | string[] | undefined>;
+const first = (p: Params, k: string) => {
+  const v = p[k];
+  return (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
+};
+
+export function parseStoreFilters(p: Params): StoreFilters {
+  const h = first(p, "h");
+  const s = first(p, "sort");
+  const g = first(p, "g");
+  const t = p.t;
+  return {
+    h: h && h in HEALTH ? (h as Health) : undefined,
+    g: g === "con" || g === "sin" ? g : undefined,
+    q: first(p, "q")?.slice(0, 80),
+    t: [...new Set((Array.isArray(t) ? t : t ? [t] : []).map((x) => x.trim()).filter(Boolean))].slice(0, 50),
+    sort: s && s in STORE_SORTS ? (s as StoreSort) : "d7_desc",
+  };
+}
+
+/** Filas del listado con los filtros aplicados y en el orden elegido. */
+export function applyStoreFilters(rows: StoreRow[], f: StoreFilters, hasGroup: (s: StoreRow) => boolean): StoreRow[] {
+  return sortStores(
+    filterStores(rows, { keys: f.t, q: f.q }).filter((s) => (!f.g || (f.g === "con") === hasGroup(s)) && (!f.h || classify(s) === f.h)),
+    f.sort,
+  );
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classify, filterStores, matchesStore, opportunities, sortStores, storeKey, toContact, typicalTickets, type StoreRow } from "./stores.ts";
+import { applyStoreFilters, classify, filterStores, matchesStore, opportunities, parseStoreFilters, sortStores, storeKey, toContact, typicalTickets, type StoreRow } from "./stores.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
   account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
@@ -90,4 +90,19 @@ test("buscador de tiendas: elegidas de la lista más las que coinciden con el te
   assert.deepEqual(filterStores(all, { q: "mercago" }), [a, b]);
   // una elegida que ya no existe no trae nada
   assert.deepEqual(filterStores(all, { keys: ["xx:9"] }), []);
+});
+
+test("filtros de la URL de Salud de tiendas: los mismos para la página y el Excel", () => {
+  const f = parseStoreFilters({ h: "alert", g: "con", q: " velora ", t: ["hn:1", "hn:1", " gt:2 "], sort: "ticket_desc" });
+  assert.deepEqual(f, { h: "alert", g: "con", q: "velora", t: ["hn:1", "gt:2"], sort: "ticket_desc" });
+  assert.deepEqual(parseStoreFilters({ h: "otra", g: "x", sort: "nada" }), { h: undefined, g: undefined, q: undefined, t: [], sort: "d7_desc" });
+
+  const a = row({ account_id: "hn", store_id: "1", name: "Velora", d7: 3 });
+  const b = row({ account_id: "hn", store_id: "2", name: "Nutralix", d7: 9 });
+  const c = row({ account_id: "gt", store_id: "3", name: "Velora GT", d7: 5 });
+  const grupo = (s: StoreRow) => s.store_id !== "2";
+  assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({}), grupo), [b, c, a]);
+  assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ q: "velora" }), grupo), [c, a]);
+  assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ g: "sin" }), grupo), [b]);
+  assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ t: "hn:2" }), grupo), [b]);
 });

@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import { OPEN_STATUSES, type FollowupStatus } from "./store-metrics";
+import { OPEN_STATUSES, summarizeFollowups, type FollowupStatus, type FollowupSummary } from "./store-metrics";
 
 export type Followup = {
   id: string;
@@ -48,4 +48,13 @@ export async function followupOwners(): Promise<string[]> {
   const { data, error } = await db().from("store_followups").select("owner").order("updated_at", { ascending: false }).limit(500);
   if (error) throw error;
   return [...new Set((data ?? []).map((r: { owner: string | null }) => r.owner?.trim()).filter((x): x is string => !!x))];
+}
+
+/** Resumen del seguimiento de todas las tiendas (para los listados), por "cuenta|tienda". */
+export async function followupIndex(account?: string): Promise<Map<string, FollowupSummary>> {
+  let q = db().from("store_followups").select("account_id, store_id, contacted_at, owner, status, next_followup");
+  if (account) q = q.eq("account_id", account);
+  const { data, error } = await q.limit(5000);
+  if (error) throw error;
+  return summarizeFollowups((data ?? []) as Parameters<typeof summarizeFollowups>[0]);
 }

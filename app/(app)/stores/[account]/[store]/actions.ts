@@ -13,6 +13,8 @@ const MAX_TEXT = 1000;
 const fail = (msg: string): FollowupState => ({ ok: false, msg });
 const done = (msg: string): FollowupState => {
   revalidatePath("/stores/[account]/[store]", "page");
+  // el panel lateral de Salud de tiendas también muestra el historial
+  revalidatePath("/stores");
   return { ok: true, msg };
 };
 
