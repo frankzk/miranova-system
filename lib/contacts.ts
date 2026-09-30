@@ -1,4 +1,5 @@
 import "server-only";
+import { memo } from "./memo";
 import { db } from "./supabase";
 import { suggestLinks, type ContactLink, type DirectoryStore, type StoreContact, type Suggestion } from "./store-contacts";
 
@@ -36,7 +37,8 @@ export type StoreContactView = {
 
 /** Contacto de una tienda, las otras operaciones del mismo dueño y sugerencias para vincular. */
 export async function storeContactView(accountId: string, storeId: string): Promise<StoreContactView> {
-  const [directory, links] = await Promise.all([storeDirectory(), contactLinks()]);
+  // el directorio recorre todos los pedidos (~0.2 s): memoria de 1 minuto; los contactos, siempre al día
+  const [directory, links] = await Promise.all([memo("store_directory", 60_000, storeDirectory), contactLinks()]);
   const self = directory.find((s) => s.account_id === accountId && s.store_id === storeId) ?? null;
   const mine = links.find((l) => l.account_id === accountId && l.store_id === storeId);
   const contact = mine ? (await contactsById([mine.contact_id])).get(mine.contact_id) ?? null : null;

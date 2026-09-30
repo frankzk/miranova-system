@@ -1,4 +1,5 @@
 import "server-only";
+import { memo } from "./memo";
 import { db } from "./supabase";
 import type { OwnerAlerts } from "./alerts";
 import type { BusinessOverview } from "./business";
@@ -353,6 +354,12 @@ export async function storeHealth(account?: string): Promise<import("./stores").
   if (error) throw error;
   return (data ?? []) as import("./stores").StoreRow[];
 }
+
+/**
+ * Salud de tiendas con memoria de 1 minuto (la consulta tarda ~0.4 s y los pedidos se
+ * sincronizan cada 10 min): abrir y cerrar el panel de varias tiendas no la repite.
+ */
+export const storeHealthRecent = (account?: string) => memo(`store_health:${account ?? "*"}`, 60_000, () => storeHealth(account));
 
 /** "Atención del dueño": hallazgos del día calculados en la base (owner_alerts). */
 export async function ownerAlerts(account?: string): Promise<OwnerAlerts> {

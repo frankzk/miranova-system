@@ -1,6 +1,7 @@
 // Acceso rápido al contacto de una tienda en los listados: abre su grupo de WhatsApp (o el chat
 // con el dueño si solo hay teléfono); sin contacto y con permiso de editar tiendas, lleva a su
-// ficha con el panel para agregarlo. Quien lo usa debe mostrarlo solo con permiso de Tiendas.
+// ficha con el panel para agregarlo (en Salud de tiendas, su panel lateral: sin mover la página).
+// Quien lo usa debe mostrarlo solo con permiso de Tiendas.
 import Link from "next/link";
 import { IconChat, IconPlus } from "./icons";
 import { formatPhone, whatsappChat } from "@/lib/store-contacts";
@@ -29,7 +30,7 @@ function QuickLink({ c, storeHref, name }: { c: QuickContact; storeHref: string;
     );
   }
   return (
-    <Link className="qc qc-add" href={`${storeHref}#contacto`} title={`Agregar el grupo de WhatsApp de ${name}`}>
+    <Link className="qc qc-add" href={`${storeHref}#contacto`} prefetch={false} scroll={!storeHref.startsWith("/stores?")} title={`Agregar el grupo de WhatsApp de ${name}`}>
       <IconPlus /> Grupo
     </Link>
   );
