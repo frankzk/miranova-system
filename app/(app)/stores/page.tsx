@@ -1,21 +1,23 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { Drawer, GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
 import { IconChat, IconDownload } from "@/components/icons";
 import { StoreDrawer } from "@/components/store-drawer";
+import { DrawerSkeleton, StoreDrawerLink } from "@/components/store-drawer-link";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
-import { contactIndex, contactKey, storeContactView } from "@/lib/contacts";
+import { contactIndex, contactKey, storeContactView, type StoreContactView } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { storeHealth } from "@/lib/queries";
+import { storeHealthRecent } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
-import { storeDetail } from "@/lib/store-detail";
+import { storeDetail, type StoreDetail } from "@/lib/store-detail";
 import { daysBetween, fmtDay } from "@/lib/store-metrics";
 import {
   change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, storeKey, toContact, typicalTickets,
@@ -54,13 +56,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const scope = await getScope(accounts);
   // panel lateral de una tienda (?ficha=): contacto e historial de seguimiento sin salir del listado
   const ficha = parseFicha(one(sp, "ficha"));
-  const [all, contacts, followups, fichaDetail, fichaContact] = await Promise.all([
-    storeHealth(scope.account),
-    contactIndex(),
-    followupIndex(),
-    ficha ? storeDetail(ficha.accountId, ficha.storeId) : null,
-    ficha ? storeContactView(ficha.accountId, ficha.storeId) : null,
-  ]);
+  // los datos del panel se piden ya, en paralelo con la lista, y se muestran con Suspense
+  const drawerData = ficha ? Promise.all([storeDetail(ficha.accountId, ficha.storeId), storeContactView(ficha.accountId, ficha.storeId)]) : null;
+  // si la lista falla antes de llegar al panel, que ese error no quede sin atender
+  drawerData?.catch(() => {});
+  const [all, contacts, followups] = await Promise.all([storeHealthRecent(scope.account), contactIndex(), followupIndex()]);
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
   const hParam = one(sp, "h");
@@ -186,7 +186,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               const ops = opportunities(s, typical[s.account_id], money(s));
               return (
                 <li key={`${s.account_id}:${s.store_id}`} className="row-qc">
-                  <Link href={fichaHref(s)} scroll={false}>
+                  <StoreDrawerLink href={fichaHref(s)} name={s.name}>
                     <span className="t">{s.name}</span>
                     <HealthPill h={health.get(s)!} />
                     <span className="s">
@@ -194,7 +194,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                       {showAccount && <> · {s.account_name}</>}
                     </span>
                     <span className="s reason">{ops[0] ? `${ops[0].text} → ${ops[0].action}` : ""}</span>
-                  </Link>
+                  </StoreDrawerLink>
                   <ContactQuick c={contacts.get(contactKey(s))} storeHref={fichaHref(s)} name={s.name} canEdit={canEdit} />
                 </li>
               );
@@ -235,7 +235,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               {rows.map((s) => (
                 <li key={`${s.account_id}:${s.store_id}`}>
                   <div className="top">
-                    <Link className="strong" href={fichaHref(s)} scroll={false}>{s.name}</Link>
+                    <StoreDrawerLink className="strong" href={fichaHref(s)} name={s.name}>{s.name}</StoreDrawerLink>
                     <GroupLink url={groupOf(s)} />
                     <HealthPill h={health.get(s)!} />
                   </div>
@@ -283,7 +283,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     return (
                       <tr key={`${s.account_id}:${s.store_id}`}>
                         <td>
-                          <Link className="strong store-name" href={fichaHref(s)} scroll={false}>{s.name}</Link>
+                          <StoreDrawerLink className="strong store-name" href={fichaHref(s)} name={s.name}>{s.name}</StoreDrawerLink>
                           <GroupLink url={groupOf(s)} />
                           <div className="sub">
                             {lastSale(s)}
@@ -315,19 +315,19 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
           </>
         )}
       </div>
-      {ficha && fichaDetail && fichaContact && (
-        <Drawer closeHref={href({})} label={`Tienda ${fichaDetail.store.name}`}>
-          <StoreDrawer
-            d={fichaDetail}
-            contact={fichaContact}
-            health={fichaRow ? classify(fichaRow) : null}
-            ops={fichaRow ? opportunities(fichaRow, typical[fichaRow.account_id], money(fichaRow)) : []}
+      {ficha && drawerData && (
+        // key: al pasar de una tienda a otra se vuelve a mostrar la carga
+        <Suspense key={`${ficha.accountId}:${ficha.storeId}`} fallback={<DrawerSkeleton name={fichaRow?.name} />}>
+          <StoreDrawerPanel
+            data={drawerData}
+            row={fichaRow}
+            typical={fichaRow ? typical[fichaRow.account_id] : null}
             closeHref={href({})}
             me={user.name}
             canOrders={can(user, "orders")}
-            actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore }, followup: { add: addFollowup, update: updateFollowup } } : null}
+            canEdit={canEdit}
           />
-        </Drawer>
+        </Suspense>
       )}
 
       <p className="footnote">
@@ -335,6 +335,31 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         mediana de las tiendas de la misma cuenta.
       </p>
     </div>
+  );
+}
+
+/** Panel lateral de una tienda: carga su ficha y su contacto (lo único que el panel necesita). */
+async function StoreDrawerPanel({
+  data, row, typical, closeHref, me, canOrders, canEdit,
+}: {
+  data: Promise<[StoreDetail | null, StoreContactView]>; row: StoreRow | null; typical: number | null | undefined;
+  closeHref: string; me: string; canOrders: boolean; canEdit: boolean;
+}) {
+  const [d, contact] = await data;
+  if (!d) return null;
+  return (
+    <Drawer closeHref={closeHref} label={`Tienda ${d.store.name}`}>
+      <StoreDrawer
+        d={d}
+        contact={contact}
+        health={row ? classify(row) : null}
+        ops={row ? opportunities(row, typical, (n) => fmtMoney(n, row.currency, { compact: true })) : []}
+        closeHref={closeHref}
+        me={me}
+        canOrders={canOrders}
+        actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore }, followup: { add: addFollowup, update: updateFollowup } } : null}
+      />
+    </Drawer>
   );
 }
 

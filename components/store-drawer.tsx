@@ -48,7 +48,7 @@ export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders,
           </p>
         </div>
         <div style={{ display: "flex", gap: 4 }}>
-          <Link className="btn btn-ghost btn-icon" href={full} aria-label="Abrir la ficha completa" title="Abrir la ficha completa">
+          <Link className="btn btn-ghost btn-icon" href={full} prefetch={false} aria-label="Abrir la ficha completa" title="Abrir la ficha completa">
             <IconExternal />
           </Link>
           <DrawerClose href={closeHref} />
@@ -107,8 +107,8 @@ export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders,
         />
 
         <div className="sd-drawer-foot">
-          <Link className="btn" href={full}>Ficha completa <IconArrowRight /></Link>
-          {canOrders && <Link className="btn btn-ghost" href={`/orders?dropshipper=${encodeURIComponent(s.name)}`}>Ver pedidos</Link>}
+          <Link className="btn" href={full} prefetch={false}>Ficha completa <IconArrowRight /></Link>
+          {canOrders && <Link className="btn btn-ghost" href={`/orders?dropshipper=${encodeURIComponent(s.name)}`} prefetch={false}>Ver pedidos</Link>}
         </div>
       </div>
     </>

@@ -276,7 +276,7 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
       {suggestions.length > 0 && (
         <p className="sheet-note ct-more">
           {suggestions.length === 1 ? "Hay 1 operación que podría ser" : `Hay ${suggestions.length} operaciones que podrían ser`} del mismo dueño.{" "}
-          <Link href={`${fullHref}#contacto`}>Revisar en la ficha</Link>
+          <Link href={`${fullHref}#contacto`} prefetch={false}>Revisar en la ficha</Link>
         </p>
       )}
     </div>

@@ -3,7 +3,7 @@ import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeDirectory } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
-import { storeHealth } from "@/lib/queries";
+import { storeHealthRecent } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { formatPhone, whatsappChat } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   for (const k of new Set(req.nextUrl.searchParams.keys())) params[k] = req.nextUrl.searchParams.getAll(k);
   const f = parseStoreFilters(params);
 
-  const [all, contacts, directory, followups] = await Promise.all([storeHealth(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account)]);
+  const [all, contacts, directory, followups] = await Promise.all([storeHealthRecent(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account)]);
   const person = new Map(directory.map((d) => [contactKey(d), d.person]));
   const hasGroup = (s: { account_id: string; store_id: string }) => !!contacts.get(contactKey(s))?.whatsapp_group_url;
   const origin = req.nextUrl.origin;
