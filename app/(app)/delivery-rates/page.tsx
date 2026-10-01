@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { AccountChips } from "@/components/account-chips";
 import { DeliveryFilters } from "@/components/delivery-filters";
 import { PageHead } from "@/components/ui";
@@ -65,30 +66,38 @@ export default async function DeliveryRatesPage({ searchParams }: { searchParams
 
     <section className="panel" aria-labelledby="delivery-comparison-title">
       <div className="panel-head"><h2 id="delivery-comparison-title">Por transportadora y país</h2><span className="aside">{fmtInt(total.total)} pedidos · {fmtInt(rows.length)} grupos</span></div>
-      {rows.length ? <div className="table-scroll" tabIndex={0} role="region" aria-label="Comparación de transportadoras, tabla desplazable">
+      {rows.length ? <div className="delivery-table-scroll" tabIndex={0} role="region" aria-label="Comparación de transportadoras, tabla desplazable">
         <table className="table delivery-table">
           <caption className="sr-only">Entregados sobre todos los pedidos y entregados entre operaciones completadas. Cada tasa muestra su denominador.</caption>
-          <thead><tr><th scope="col">Transportadora / país</th><th scope="col">Tasas de entrega</th><th scope="col" className="r">Base completados{includeCancelled ? " + cancelados" : ""}</th>
-            <th scope="col" className="r">Entregados</th><th scope="col" className="r">No entregados</th><th scope="col" className="r">Cancelados</th><th scope="col" className="r">Abiertos</th><th scope="col" className="r">Sin clasificar</th></tr></thead>
-          <tbody>{rows.map((row) => {
+          <thead><tr><th scope="col" className="delivery-carrier-heading">Transportadora</th>
+            <th scope="col" className="r delivery-rate-heading">Sobre el total</th>
+            <th scope="col" className="r delivery-rate-heading">Entre completados{includeCancelled ? " + cancelados" : ""}</th>
+            <th scope="col" className="r delivery-count">Entregados</th><th scope="col" className="r delivery-count">No entregados</th><th scope="col" className="r delivery-count">Cancelados</th><th scope="col" className="r delivery-count">Abiertos</th><th scope="col" className="r delivery-count">Sin clasificar</th></tr></thead>
+          {[...new Set(rows.map((row) => row.country))].map((code) => <tbody key={code} aria-label={countryByCode(code)?.name ?? code}>
+            <tr className="delivery-country-row"><th scope="rowgroup" colSpan={8}>{countryByCode(code)?.name ?? code}</th></tr>
+            {rows.filter((row) => row.country === code).map((row) => {
             const rate = deliveryRate(row, includeCancelled);
             const totalRate = totalDeliveryRate(row);
             const base = completedOrders(row, includeCancelled);
-            return <tr key={JSON.stringify([row.country, row.carrier])}>
-              <th scope="row"><span className="delivery-carrier">{row.carrier}</span><span className="delivery-country">{countryByCode(row.country)?.name ?? row.country}</span></th>
-              <td><div className="delivery-rate-pair">
-                <div><span className="delivery-rate-label">Sobre el total</span>
-                  <div className="delivery-rate"><strong>{pct(totalRate)}</strong>{totalRate !== null && <meter min={0} max={1} value={totalRate} aria-label={`Entregados sobre el total de ${row.carrier} en ${row.country}`} />}</div>
-                  <span className="delivery-sample">{fmtInt(row.delivered)} de {fmtInt(row.total)} pedidos</span></div>
-                <div><span className="delivery-rate-label">Entre completados{includeCancelled ? " + cancelados" : ""}</span>
-                  <div className="delivery-rate"><strong>{pct(rate)}</strong>{rate !== null && <meter min={0} max={1} value={rate} aria-label={`Entregados entre completados${includeCancelled ? " y cancelados" : ""} de ${row.carrier} en ${row.country}`} />}</div>
-                  <span className="delivery-sample">{fmtInt(row.delivered)} de {fmtInt(base)} en la base</span>
-                  {base < 30 && <span className="delivery-sample">{base === 0 ? "Sin operaciones en la base" : "Muestra pequeña · menos de 30"}</span>}</div>
-              </div></td>
-              <td className="num strong">{fmtInt(base)}</td><td className="num">{fmtInt(row.delivered)}</td><td className="num">{fmtInt(row.failed)}</td>
-              <td className="num">{fmtInt(row.cancelled)}</td><td className="num" title={`${row.dispatch} por despachar · ${row.transit} en tránsito · ${row.problem} en gestión`}>{fmtInt(openOrders(row))}</td><td className="num">{fmtInt(row.unknown)}</td>
-            </tr>;
-          })}</tbody>
+            return <Fragment key={row.carrier}><tr className="delivery-data-row">
+              <th scope="row"><span className="delivery-carrier">{row.carrier}</span>
+                {base < 30 && <span className="delivery-sample-badge">{base === 0 ? "Sin completados" : <>Muestra pequeña<span className="sr-only">: menos de 30 operaciones en la base de completados</span></>}</span>}</th>
+              <td className="num delivery-rate"><strong>{pct(totalRate)}</strong>
+                <span className="delivery-sample"><span className="sr-only">Entregados sobre el total: </span>{fmtInt(row.delivered)} / {fmtInt(row.total)}</span></td>
+              <td className="num delivery-rate"><strong>{pct(rate)}</strong>
+                <span className="delivery-sample"><span className="sr-only">Entregados entre completados{includeCancelled ? " y cancelados" : ""}: </span>{fmtInt(row.delivered)} / {fmtInt(base)}</span></td>
+              <td className="num delivery-count">{fmtInt(row.delivered)}</td><td className="num delivery-count">{fmtInt(row.failed)}</td>
+              <td className="num delivery-count">{fmtInt(row.cancelled)}</td><td className="num delivery-count" title={`${row.dispatch} por despachar · ${row.transit} en tránsito · ${row.problem} en gestión`}>{fmtInt(openOrders(row))}</td><td className="num delivery-count">{fmtInt(row.unknown)}</td>
+            </tr><tr className="delivery-details-row"><td colSpan={8}><details>
+              <summary>Ver estados<span className="sr-only"> de {row.carrier} en {countryByCode(code)?.name ?? code}</span></summary>
+              <dl className="delivery-states">
+                <div><dt>Entregados</dt><dd>{fmtInt(row.delivered)}</dd></div><div><dt>No entregados</dt><dd>{fmtInt(row.failed)}</dd></div>
+                <div><dt>Cancelados / rechazados</dt><dd>{fmtInt(row.cancelled)}</dd></div><div><dt>Abiertos</dt><dd>{fmtInt(openOrders(row))}</dd></div>
+                <div><dt>Por despachar</dt><dd>{fmtInt(row.dispatch)}</dd></div><div><dt>En tránsito</dt><dd>{fmtInt(row.transit)}</dd></div>
+                <div><dt>En gestión</dt><dd>{fmtInt(row.problem)}</dd></div><div><dt>Sin clasificar</dt><dd>{fmtInt(row.unknown)}</dd></div>
+              </dl>
+            </details></td></tr></Fragment>;
+          })}</tbody>)}
         </table>
       </div> : <div className="empty"><h3>No hay pedidos para estos filtros</h3><p>Amplía las fechas o reduce la antigüedad mínima para ver las transportadoras.</p><Link className="btn" href="/delivery-rates">Restablecer filtros</Link></div>}
     </section>
