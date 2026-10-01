@@ -982,3 +982,24 @@ html[data-drawer-loading] .drawer:not(.drawer-loading), html[data-drawer-loading
 .banner[data-tone="warning"] { background: var(--warning-bg); border-color: #f5d9a8; color: var(--warning); }
 .no-access-icon { display: inline-grid; place-items: center; width: 44px; height: 44px; margin-bottom: 12px; border-radius: 999px; background: var(--bg-app); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
 .no-access-icon svg { width: 20px; height: 20px; }
+
+/* Tasas de entrega */
+.delivery-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; align-items: end; padding: 18px; background: var(--bg-surface); border: 1px solid var(--line); border-radius: 10px; }
+.delivery-filters .field { min-width: 0; margin: 0; }
+.delivery-filters .input { width: 100%; }
+.delivery-context { margin: 12px 0 22px; color: var(--ink-3); font-size: 12px; line-height: 1.6; }
+.delivery-table { min-width: 960px; }
+.delivery-table tbody th { background: transparent; text-transform: none; letter-spacing: normal; vertical-align: top; border-bottom: 1px solid var(--line); }
+.delivery-carrier { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+.delivery-country, .delivery-sample { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 3px; }
+.delivery-rate { display: flex; align-items: center; gap: 12px; min-width: 180px; font-variant-numeric: tabular-nums; }
+.delivery-rate strong { min-width: 62px; font-size: 15px; }
+.delivery-rate meter { width: 90px; height: 8px; border: 0; border-radius: 4px; background: var(--bg-active); }
+.delivery-rate meter::-webkit-meter-bar { background: var(--bg-active); border: 0; height: 8px; border-radius: 4px; }
+.delivery-rate meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 4px; }
+.delivery-rate meter::-moz-meter-bar { background: var(--accent); border-radius: 4px; }
+.delivery-method { margin-top: 22px; max-width: 90ch; color: var(--ink-3); font-size: 13px; line-height: 1.7; }
+.delivery-method h2 { color: var(--ink); font-size: 14px; font-weight: 600; }
+.delivery-method p { margin-top: 8px; }
+.delivery-loading { padding: 32px; color: var(--ink-3); }
+@media (max-width: 600px) { .delivery-filters { padding: 14px; grid-template-columns: minmax(0, 1fr); } .delivery-filters > button { width: 100%; } }

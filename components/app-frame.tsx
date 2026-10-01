@@ -12,6 +12,7 @@ export type SideAccount = { id: string; name: string; tone: "success" | "danger"
 const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permission; match: (p: string) => boolean }[] = [
   { href: "/", label: "Inicio", icon: IconHome, match: (p: string) => p === "/" },
   { href: "/business", label: "Negocio", icon: IconChart, perm: "business", match: (p: string) => p.startsWith("/business") },
+  { href: "/delivery-rates", label: "Tasas de entrega", icon: IconChart, perm: "business", match: (p: string) => p.startsWith("/delivery-rates") },
   { href: "/opportunities", label: "Oportunidades", icon: IconTarget, perm: "opportunities", match: (p: string) => p.startsWith("/opportunities") },
   { href: "/orders", label: "Órdenes", icon: IconOrders, perm: "orders", match: (p: string) => p.startsWith("/orders") },
   { href: "/stores", label: "Tiendas", icon: IconStore, perm: "stores", match: (p: string) => p.startsWith("/stores") },
