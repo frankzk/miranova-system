@@ -2,7 +2,7 @@
 // usarlo en servidor, en componentes de cliente y en pruebas.
 
 export const PERMISSIONS = [
-  { key: "business", label: "Negocio", hint: "Comparación entre países, flujo de tiendas y operación" },
+  { key: "business", label: "Negocio", hint: "Comparación entre países, flujo de tiendas, operación y tasas de entrega" },
   { key: "orders", label: "Órdenes", hint: "Órdenes con datos del cliente, y el aviso de órdenes con problemas" },
   { key: "stores", label: "Tiendas", hint: "Salud de tiendas, ficha de cada tienda, contactos y seguimientos (solo ver)" },
   { key: "stores_edit", label: "Editar tiendas", hint: "Guardar contactos y grupos de WhatsApp, y registrar seguimientos" },

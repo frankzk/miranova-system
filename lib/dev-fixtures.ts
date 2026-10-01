@@ -173,6 +173,7 @@ class Query {
   order(col: string, o?: { ascending?: boolean }) { this.sorts.push({ col, asc: o?.ascending ?? true }); return this; }
   range(a: number, b: number) { this.from = a; this.to = b; return this; }
   limit(n: number) { this.to = this.from + n - 1; return this; }
+  abortSignal(_signal: AbortSignal) { return this; }
   maybeSingle() { this.one = "maybe"; return this; }
   single() { this.one = "single"; return this; }
   private write: { op: "insert" | "update" | "delete"; rows?: Row[]; patch?: Row } | null = null;

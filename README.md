@@ -90,6 +90,21 @@ npm test                     # pruebas del normalizador y del conector
 npm run dev:fixtures         # panel con datos sintéticos, sin Supabase (contraseña: demo)
 ```
 
+## Tasas de entrega
+
+El menú **Tasas de entrega** (`/delivery-rates`, permiso **Negocio**) compara las
+transportadoras por país y cuenta. Permite seleccionar 7, 30 o 90 días, un rango
+propio y una antigüedad mínima de 7 o 14 días completos en la zona indicada.
+Las fechas filtran la **creación del pedido**; se utiliza su estado actual.
+
+La tasa predeterminada es entregados / (entregados + no entregados). Se pueden
+incluir cancelaciones y rechazos en la base. Pendientes, tránsito, gestión y
+estados desconocidos siempre quedan fuera. Una base vacía se representa con «—».
+Los grupos con menos de 30 operaciones muestran un aviso de muestra pequeña.
+
+Usa consultas de solo lectura paginadas, con caché de un minuto, sin migraciones
+ni variables nuevas. La clave privilegiada de Supabase permanece en el servidor.
+
 ## Seguridad
 
 - La `service_role key` solo vive en Vercel; las tablas tienen RLS activado sin
