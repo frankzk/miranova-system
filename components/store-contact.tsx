@@ -4,10 +4,10 @@
 // es de solo lectura: sin formulario ni botones de vincular o quitar.
 import Link from "next/link";
 import { ContactForm, StoreActionButton, type ContactState } from "./contact-forms";
-import { IconChat, IconExternal, IconPhone, IconPlus } from "./icons";
+import { IconChat, IconExternal, IconMail, IconPhone, IconPlus } from "./icons";
 import { SideSheet } from "./side-sheet";
 import type { StoreContactView } from "@/lib/contacts";
-import { formatPhone, whatsappChat, type Suggestion } from "@/lib/store-contacts";
+import { formatPhone, storeEmail, whatsappChat, type Suggestion } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
 
 type Action = (prev: ContactState, form: FormData) => Promise<ContactState>;
@@ -21,6 +21,7 @@ export type StoreContactProps = {
 /** Barra de contacto: quién es, cómo escribirle y el panel para gestionarlo. */
 export function StoreContactBar({ view, store, actions }: StoreContactProps) {
   const { contact: c, siblings, suggestions, self } = view;
+  const mail = storeEmail(c?.email, view.detectedEmail);
   const samePerson = suggestions.filter((s) => s.reason === "same_person");
   const person = c?.owner_name || self?.person;
   // solo lectura: el panel se muestra si hay algo que ver
@@ -35,9 +36,13 @@ export function StoreContactBar({ view, store, actions }: StoreContactProps) {
             <>
               {person || "Contacto sin nombre"}
               {c.owner_phone && <span className="ct-bar-phone">{formatPhone(c.owner_phone)}</span>}
+              {mail && <MailLink mail={mail} />}
             </>
           ) : (
-            "Sin grupo de WhatsApp"
+            <>
+              Sin grupo de WhatsApp
+              {mail && <MailLink mail={mail} />}
+            </>
           )}
         </p>
         <p className="ct-bar-sub">
@@ -107,6 +112,7 @@ function ContactSheet({ view, store, actions }: StoreContactProps) {
           <dl className="sd-kv">
             <div><dt>Responsable</dt><dd>{c.owner_name || self?.person || "—"}</dd></div>
             <div><dt>Teléfono</dt><dd>{c.owner_phone ? formatPhone(c.owner_phone) : "—"}</dd></div>
+            <div><dt>Correo de la tienda</dt><dd>{storeEmail(c.email, view.detectedEmail)?.email ?? "—"}</dd></div>
             <div><dt>Grupo de WhatsApp</dt><dd>{c.whatsapp_group_url ? "Registrado" : "—"}</dd></div>
             {c.notes && <div><dt>Notas</dt><dd>{c.notes}</dd></div>}
           </dl>
@@ -124,7 +130,7 @@ function ContactSheet({ view, store, actions }: StoreContactProps) {
           <ContactForm
             action={actions.save}
             store={store}
-            defaults={c ? { group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes } : { owner_name: self?.person }}
+            defaults={c ? { group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, email: c.email, notes: c.notes } : { owner_name: self?.person }}
             submit={c ? "Guardar cambios" : "Guardar contacto"}
           />
         </div>
@@ -216,6 +222,7 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
 export function StoreContactSection({ view, store, actions, fullHref }: StoreContactProps & { fullHref: string }) {
   const { contact: c, siblings, suggestions, self } = view;
   const person = c?.owner_name || self?.person;
+  const mail = storeEmail(c?.email, view.detectedEmail);
   return (
     <div className="section sd-drawer-ct" id="contacto">
       <h3>Contacto</h3>
@@ -237,6 +244,8 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
             <dd>{person || "—"}</dd>
             <dt>Teléfono</dt>
             <dd>{c.owner_phone ? formatPhone(c.owner_phone) : "—"}</dd>
+            <dt>Correo de la tienda</dt>
+            <dd>{mail ? <MailLink mail={mail} /> : "—"}</dd>
             <dt>Grupo de WhatsApp</dt>
             <dd>{c.whatsapp_group_url ? "Registrado" : "Falta el enlace del grupo"}</dd>
             {c.notes && (
@@ -258,7 +267,7 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
               <ContactForm
                 action={actions.save}
                 store={store}
-                defaults={{ group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, notes: c.notes }}
+                defaults={{ group: c.whatsapp_group_url, phone: c.owner_phone, owner_name: c.owner_name, email: c.email, notes: c.notes }}
                 submit="Guardar cambios"
               />
             </details>
@@ -266,10 +275,13 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
         </>
       ) : (
         <>
-          <p className="sheet-note">
-            {person && <>Responsable según la plataforma: <b>{person}</b>. </>}
-            Aún no hay grupo de WhatsApp ni teléfono guardado.
-          </p>
+          <dl className="kv">
+            <dt>Dueño según Drop</dt>
+            <dd>{person || "—"}</dd>
+            <dt>Correo de la tienda</dt>
+            <dd>{mail ? <MailLink mail={mail} /> : "—"}</dd>
+          </dl>
+          <p className="sheet-note ct-none">Aún no hay grupo de WhatsApp ni teléfono guardado.</p>
           {actions && <ContactForm action={actions.save} store={store} defaults={{ owner_name: self?.person }} submit="Guardar contacto" />}
         </>
       )}
@@ -280,5 +292,15 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
         </p>
       )}
     </div>
+  );
+}
+
+/** Correo de la tienda con su origen: el del contacto o el detectado en los pedidos. */
+function MailLink({ mail }: { mail: { email: string; source: "contacto" | "pedidos" } }) {
+  return (
+    <span className="ct-mail">
+      <a href={`mailto:${mail.email}`}><IconMail /> {mail.email}</a>
+      {mail.source === "pedidos" && <span className="ct-mail-src" title="Drop no manda el correo de la tienda: es el que la tienda pone en sus pedidos">detectado en los pedidos</span>}
+    </span>
   );
 }

@@ -8,6 +8,8 @@ export type StoreContact = {
   whatsapp_group_code: string | null;
   owner_name: string | null;
   owner_phone: string | null;
+  /** Correo de la tienda cargado a mano (migración 0024); tiene prioridad sobre el detectado. */
+  email?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -134,4 +136,20 @@ export function suggestLinks(self: DirectoryStore, all: DirectoryStore[], links:
   return out
     .sort((a, b) => rank(a) - rank(b) || (b.store.last_at ?? "").localeCompare(a.store.last_at ?? ""))
     .slice(0, max);
+}
+
+/** Correo válido en minúsculas, o null. */
+export function normalizeEmail(input: string): string | null {
+  const v = input.trim().toLowerCase();
+  return v.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? v : null;
+}
+
+/**
+ * Correo de la tienda: el cargado en su contacto o, si no hay, el detectado en los pedidos
+ * (función store_profiles). `source` dice de dónde salió, para mostrarlo.
+ */
+export function storeEmail(manual: string | null | undefined, detected: string | null | undefined): { email: string; source: "contacto" | "pedidos" } | null {
+  if (manual?.trim()) return { email: manual.trim(), source: "contacto" };
+  if (detected?.trim()) return { email: detected.trim(), source: "pedidos" };
+  return null;
 }

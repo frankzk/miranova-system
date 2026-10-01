@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
-import { contactKey, contactsByStore, storeDirectory } from "@/lib/contacts";
+import { contactKey, contactsByStore, storeDirectory, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
 import { storeHealthRecent } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
-import { formatPhone, whatsappChat } from "@/lib/store-contacts";
+import { formatPhone, storeEmail, whatsappChat } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
 import type { FollowupSummary } from "@/lib/store-metrics";
 import {
@@ -35,6 +35,7 @@ const CONTACT_HEADERS = [
   { header: "Responsable según Drop", width: 22 },
   { header: "Teléfono del dueño", width: 18 },
   { header: "WhatsApp del dueño", width: 28 },
+  { header: "Correo de la tienda", width: 32 },
   { header: "Grupo de WhatsApp", width: 44 },
   { header: "Notas del contacto", width: 36 },
   { header: "También atiende", width: 30 },
@@ -58,8 +59,11 @@ export async function GET(req: NextRequest) {
   for (const k of new Set(req.nextUrl.searchParams.keys())) params[k] = req.nextUrl.searchParams.getAll(k);
   const f = parseStoreFilters(params);
 
-  const [all, contacts, directory, followups] = await Promise.all([storeHealthRecent(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account)]);
+  const [all, contacts, directory, followups, profiles] = await Promise.all([
+    storeHealthRecent(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account), storeProfiles(),
+  ]);
   const person = new Map(directory.map((d) => [contactKey(d), d.person]));
+  const detected = new Map(profiles.map((p) => [contactKey(p), p.email]));
   const hasGroup = (s: { account_id: string; store_id: string }) => !!contacts.get(contactKey(s))?.whatsapp_group_url;
   const origin = req.nextUrl.origin;
 
@@ -72,6 +76,7 @@ export async function GET(req: NextRequest) {
       person.get(k) ?? null,
       c?.owner_phone ? formatPhone(c.owner_phone) : null,
       c?.owner_phone ? whatsappChat(c.owner_phone) : null,
+      storeEmail(c?.email, detected.get(k))?.email ?? null,
       c?.whatsapp_group_url ?? null,
       c?.notes ?? null,
       c?.others.length ? c.others.join(", ") : null,

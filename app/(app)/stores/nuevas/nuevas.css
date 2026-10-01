@@ -1,0 +1,24 @@
+/* Tiendas nuevas */
+.ns-search { display: flex; gap: 8px; align-items: center; flex: 1 1 320px; max-width: 460px; }
+.ns-search .input-icon { flex: 1; min-width: 0; }
+.ns-summary { margin: 0 2px 10px; font-size: var(--t-sm); color: var(--ink-3); }
+.ns-summary b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ns-table td { vertical-align: top; }
+.ns-table .ns-when { white-space: nowrap; width: 1%; }
+.ns-mail { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); word-break: break-all; }
+.ns-mail svg { color: var(--ink-4); flex: none; }
+.ns-mail:hover { color: var(--accent); }
+.ns-add { font-size: var(--t-sm); color: var(--accent); }
+.ns-add:hover { text-decoration: underline; }
+.ns-cards { list-style: none; margin: 0; padding: 0; }
+.ns-cards li { padding: 14px 16px; border-top: 1px solid var(--line); }
+.ns-cards li:first-child { border-top: 0; }
+.ns-cards .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ns-cards .top .strong { font-weight: 600; color: var(--ink); }
+.ns-cards .ns-date { font-size: var(--t-sm); color: var(--ink-3); white-space: nowrap; }
+.ns-cards dl { display: grid; gap: 6px; margin: 8px 0 0; font-size: var(--t-sm); }
+.ns-cards dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+.ns-cards dt { color: var(--ink-3); }
+.ns-cards dd { margin: 0; min-width: 0; }
+.ns-cards > li > .sub { font-size: var(--t-xs); color: var(--ink-3); margin-top: 1px; }
+.ns-cards dd .sub { font-size: var(--t-xs); color: var(--ink-3); }

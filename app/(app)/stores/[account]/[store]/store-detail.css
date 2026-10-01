@@ -118,6 +118,15 @@
 .ct-bar[data-state="partial"] .ct-bar-sub { color: var(--warning); }
 .ct-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
+/* correo de la tienda (del contacto o detectado en los pedidos) */
+.ct-mail { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; min-width: 0; }
+.ct-mail a { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-weight: 450; font-size: var(--t-sm); overflow-wrap: anywhere; }
+.ct-mail a svg { flex: none; color: var(--ink-4); }
+.ct-mail a:hover { color: var(--accent-ink); }
+.kv .ct-mail a { color: var(--ink); }
+.ct-mail-src { font-size: var(--t-xs); font-weight: 400; color: var(--ink-3); }
+.ct-none { margin-top: 12px; }
+
 /* panel lateral (contacto y seguimiento) */
 .sheet .fu-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .sheet .fu-grid .wide { grid-column: 1 / -1; }

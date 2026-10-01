@@ -1,32 +1,27 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
-import { Drawer, GetForm } from "@/components/client";
+import { GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
 import { IconChat, IconDownload } from "@/components/icons";
-import { StoreDrawer } from "@/components/store-drawer";
-import { DrawerSkeleton, StoreDrawerLink } from "@/components/store-drawer-link";
+import { StoreDrawerLink } from "@/components/store-drawer-link";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
-import { contactIndex, contactKey, storeContactView, type StoreContactView } from "@/lib/contacts";
+import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { storeHealthRecent } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
-import { storeDetail, type StoreDetail } from "@/lib/store-detail";
 import { daysBetween, fmtDay } from "@/lib/store-metrics";
 import {
   change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, storeKey, toContact, typicalTickets,
   type Health, type Opportunity, type StoreRow, type StoreSort,
 } from "@/lib/stores";
-import { addFollowup, updateFollowup } from "./[account]/[store]/actions";
-import { linkStore, saveContact, unlinkStore } from "./[account]/[store]/contact-actions";
-// estilos de contacto y seguimiento (los mismos de la ficha), para el panel lateral
-import "./[account]/[store]/store-detail.css";
+import { StoresSubnav } from "@/components/stores-subnav";
+import { loadDrawer, parseFicha, StoreDrawerSlot } from "./store-drawer-panel";
 
 export const metadata = { title: "Salud de tiendas" };
 
@@ -35,14 +30,6 @@ const one = (sp: SP, k: string) => {
   const v = sp[k];
   return (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
 };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** `ficha=<cuenta>:<tienda>` (storeKey) → la tienda del panel lateral. */
-function parseFicha(v: string | undefined) {
-  if (!v || v.length > 300) return null;
-  const accountId = v.slice(0, 36);
-  const storeId = v.slice(37);
-  return UUID.test(accountId) && v[36] === ":" && storeId ? { accountId, storeId } : null;
-}
 const many = (sp: SP, k: string) => {
   const v = sp[k];
   return [...new Set((Array.isArray(v) ? v : v ? [v] : []).map((x) => x.trim()).filter(Boolean))];
@@ -57,9 +44,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   // panel lateral de una tienda (?ficha=): contacto e historial de seguimiento sin salir del listado
   const ficha = parseFicha(one(sp, "ficha"));
   // los datos del panel se piden ya, en paralelo con la lista, y se muestran con Suspense
-  const drawerData = ficha ? Promise.all([storeDetail(ficha.accountId, ficha.storeId), storeContactView(ficha.accountId, ficha.storeId)]) : null;
-  // si la lista falla antes de llegar al panel, que ese error no quede sin atender
-  drawerData?.catch(() => {});
+  const drawerData = loadDrawer(ficha);
+  // el correo detectado del panel (~0.5 s) queda en memoria desde ya, antes del primer clic
+  storeProfiles().catch(() => {});
   const [all, contacts, followups] = await Promise.all([storeHealthRecent(scope.account), contactIndex(), followupIndex()]);
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
@@ -154,6 +141,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         }
       />
 
+      <StoresSubnav />
       <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 
       <GetForm className="toolbar" role="search" action="/stores">
@@ -316,18 +304,16 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         )}
       </div>
       {ficha && drawerData && (
-        // key: al pasar de una tienda a otra se vuelve a mostrar la carga
-        <Suspense key={`${ficha.accountId}:${ficha.storeId}`} fallback={<DrawerSkeleton name={fichaRow?.name} />}>
-          <StoreDrawerPanel
-            data={drawerData}
-            row={fichaRow}
-            typical={fichaRow ? typical[fichaRow.account_id] : null}
-            closeHref={href({})}
-            me={user.name}
-            canOrders={can(user, "orders")}
-            canEdit={canEdit}
-          />
-        </Suspense>
+        <StoreDrawerSlot
+          ficha={ficha}
+          data={drawerData}
+          row={fichaRow}
+          typical={fichaRow ? typical[fichaRow.account_id] : null}
+          closeHref={href({})}
+          me={user.name}
+          canOrders={can(user, "orders")}
+          canEdit={canEdit}
+        />
       )}
 
       <p className="footnote">
@@ -335,31 +321,6 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         mediana de las tiendas de la misma cuenta.
       </p>
     </div>
-  );
-}
-
-/** Panel lateral de una tienda: carga su ficha y su contacto (lo único que el panel necesita). */
-async function StoreDrawerPanel({
-  data, row, typical, closeHref, me, canOrders, canEdit,
-}: {
-  data: Promise<[StoreDetail | null, StoreContactView]>; row: StoreRow | null; typical: number | null | undefined;
-  closeHref: string; me: string; canOrders: boolean; canEdit: boolean;
-}) {
-  const [d, contact] = await data;
-  if (!d) return null;
-  return (
-    <Drawer closeHref={closeHref} label={`Tienda ${d.store.name}`}>
-      <StoreDrawer
-        d={d}
-        contact={contact}
-        health={row ? classify(row) : null}
-        ops={row ? opportunities(row, typical, (n) => fmtMoney(n, row.currency, { compact: true })) : []}
-        closeHref={closeHref}
-        me={me}
-        canOrders={canOrders}
-        actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore }, followup: { add: addFollowup, update: updateFollowup } } : null}
-      />
-    </Drawer>
   );
 }
 

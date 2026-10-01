@@ -23,13 +23,13 @@ function StoreFields({ s }: { s: StoreRef }) {
   );
 }
 
-/** Alta o edición del contacto: grupo de WhatsApp, teléfono, responsable y notas. */
+/** Alta o edición del contacto: grupo de WhatsApp, teléfono, responsable, correo y notas. */
 export function ContactForm({
   action, store, defaults, submit,
 }: {
   action: Action;
   store: StoreRef;
-  defaults: { group?: string | null; phone?: string | null; owner_name?: string | null; notes?: string | null };
+  defaults: { group?: string | null; phone?: string | null; owner_name?: string | null; email?: string | null; notes?: string | null };
   submit: string;
 }) {
   const [state, run] = useActionState(action, null);
@@ -50,6 +50,10 @@ export function ContactForm({
           <input className="input" name="owner_name" maxLength={120} defaultValue={defaults.owner_name ?? ""} autoComplete="off" />
         </label>
       </div>
+      <label className="field">
+        <span>Correo de la tienda <span className="hint">si no se detecta solo en los pedidos</span></span>
+        <input className="input" name="email" type="email" inputMode="email" spellCheck={false} defaultValue={defaults.email ?? ""} placeholder="tienda@correo.com" autoComplete="off" maxLength={200} />
+      </label>
       <label className="field">
         <span>Notas</span>
         <input className="input" name="notes" maxLength={1000} defaultValue={defaults.notes ?? ""} placeholder="Ej. atiende de 8 a 5, prefiere audios" />
