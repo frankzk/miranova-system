@@ -27,8 +27,36 @@ export async function contactsById(ids: string[]): Promise<Map<string, StoreCont
 
 const key = (s: { account_id: string; store_id: string }) => `${s.account_id}|${s.store_id}`;
 
+/** Una tienda con su ingreso, dueño y correo detectado (función `store_profiles`, migración 0024). */
+export type StoreProfile = {
+  account_id: string;
+  store_id: string;
+  account_name: string;
+  country: string;
+  name: string;
+  /** Dueño según Drop (seller.lastName). */
+  person: string | null;
+  /** Primer pedido con Miranova: el ingreso de la tienda. */
+  first_at: string;
+  last_at: string;
+  orders: number;
+  /** Correo repetido en pedidos de 3+ clientes distintos: el de la tienda. */
+  email: string | null;
+};
+
+/** Perfiles de todas las tiendas (recorre todos los pedidos: memoria de 1 minuto). */
+export function storeProfiles(): Promise<StoreProfile[]> {
+  return memo("store_profiles", 60_000, async () => {
+    const { data, error } = await db().rpc("store_profiles");
+    if (error) throw error;
+    return ((data ?? []) as StoreProfile[]).map((p) => ({ ...p, orders: Number(p.orders) }));
+  });
+}
+
 export type StoreContactView = {
   self: DirectoryStore | null;
+  /** Correo detectado en los pedidos de esta tienda (null si no se detecta). */
+  detectedEmail: string | null;
   contact: StoreContact | null;
   /** Las demás tiendas del mismo contacto (sin esta). */
   siblings: (ContactLink & { store: DirectoryStore | null })[];
@@ -38,7 +66,12 @@ export type StoreContactView = {
 /** Contacto de una tienda, las otras operaciones del mismo dueño y sugerencias para vincular. */
 export async function storeContactView(accountId: string, storeId: string): Promise<StoreContactView> {
   // el directorio recorre todos los pedidos (~0.2 s): memoria de 1 minuto; los contactos, siempre al día
-  const [directory, links] = await Promise.all([memo("store_directory", 60_000, storeDirectory), contactLinks()]);
+  // el correo detectado es un extra: si su consulta falla, el panel se muestra igual
+  const profilesOrNone = storeProfiles().catch((e) => {
+    console.error("store_profiles", e);
+    return [] as StoreProfile[];
+  });
+  const [directory, links, profiles] = await Promise.all([memo("store_directory", 60_000, storeDirectory), contactLinks(), profilesOrNone]);
   const self = directory.find((s) => s.account_id === accountId && s.store_id === storeId) ?? null;
   const mine = links.find((l) => l.account_id === accountId && l.store_id === storeId);
   const contact = mine ? (await contactsById([mine.contact_id])).get(mine.contact_id) ?? null : null;
@@ -48,7 +81,8 @@ export async function storeContactView(accountId: string, storeId: string): Prom
         .filter((l) => l.contact_id === mine.contact_id && key(l) !== key(mine))
         .map((l) => ({ ...l, store: byKey.get(key(l)) ?? null }))
     : [];
-  return { self, contact, siblings, suggestions: self ? suggestLinks(self, directory, links) : [] };
+  const detectedEmail = profiles.find((p) => p.account_id === accountId && p.store_id === storeId)?.email ?? null;
+  return { self, detectedEmail, contact, siblings, suggestions: self ? suggestLinks(self, directory, links) : [] };
 }
 
 /** Por tienda (cuenta|store_id): enlace del grupo y teléfono, para los listados. */

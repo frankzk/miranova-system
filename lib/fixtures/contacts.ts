@@ -1,4 +1,4 @@
-// Simulación local de los contactos de tiendas (grupo de WhatsApp) y de store_directory.
+// Simulación local de los contactos de tiendas (grupo de WhatsApp), de store_directory y de store_profiles.
 import type { FixtureCtx, FixtureModule, Row } from "./types";
 
 // responsables inventados; en Guatemala "Nutralix" es de otra persona (nombre igual, otro dueño)
@@ -26,6 +26,24 @@ function storeDirectory(_args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId }:
   });
 }
 
+// correos "detectados en los pedidos" inventados; el resto de tiendas queda sin correo
+const EMAIL: Record<string, string> = {
+  "Velora Honduras": "ventas@velorahn.com", Trendyhaus: "trendyhaus.hn@gmail.com", Nutralix: "nutralixoficial@gmail.com",
+  "Noelia Home": "noeliahome.store@gmail.com",
+};
+
+function storeProfiles(args: Row, ctx: FixtureCtx) {
+  return (storeDirectory(args, ctx) as Row[]).map((s) => {
+    const mine = ctx.ORDERS.filter((o) => o.account_id === s.account_id && o.dropshipper && ctx.storeId(o) === s.store_id);
+    const first = mine.map((o) => o.ordered_at).sort()[0];
+    return {
+      account_id: s.account_id, store_id: s.store_id, account_name: s.account_name, country: s.country, name: s.name,
+      person: s.person, first_at: first, last_at: s.last_at, orders: mine.length,
+      email: s.country === "GT" ? null : EMAIL[s.name] ?? null, email_orders: EMAIL[s.name] ? 5 : null,
+    };
+  });
+}
+
 const HN = "11111111-1111-4111-8111-111111111111";
 const now = new Date().toISOString();
 const store_contacts: Row[] = [
@@ -39,4 +57,4 @@ const store_contact_links: Row[] = [
   { account_id: HN, store_id: "name:ZONAHN", contact_id: store_contacts[0].id, store_name: "ZONAHN", created_at: now },
 ];
 
-export const fixtures: FixtureModule = { rpc: { store_directory: storeDirectory }, tables: { store_contacts, store_contact_links } };
+export const fixtures: FixtureModule = { rpc: { store_directory: storeDirectory, store_profiles: storeProfiles }, tables: { store_contacts, store_contact_links } };

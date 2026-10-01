@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ContactState } from "@/components/contact-forms";
 import { authorizeAction } from "@/lib/auth";
-import { normalizePhone, parseWhatsappGroup, type StoreContact } from "@/lib/store-contacts";
+import { normalizeEmail, normalizePhone, parseWhatsappGroup, type StoreContact } from "@/lib/store-contacts";
 import { db } from "@/lib/supabase";
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -13,6 +13,7 @@ const fail = (msg: string): ContactState => ({ ok: false, msg });
 const done = (msg: string): ContactState => {
   revalidatePath("/stores/[account]/[store]", "page");
   revalidatePath("/stores");
+  revalidatePath("/stores/nuevas");
   return { ok: true, msg };
 };
 
@@ -57,13 +58,17 @@ export async function saveContact(_prev: ContactState, form: FormData): Promise<
   if (groupIn && !group) return fail("Pega el enlace de invitación del grupo (https://chat.whatsapp.com/…).");
   const phone = phoneIn ? normalizePhone(phoneIn, store.country) : null;
   if (phoneIn && !phone) return fail("El teléfono no es válido. Usa el número con código de país, por ejemplo +504 9999 8888.");
-  if (!group && !phone) return fail("Escribe el enlace del grupo o el teléfono del dueño.");
+  const emailIn = field(form, "email");
+  const email = emailIn ? normalizeEmail(emailIn) : null;
+  if (emailIn && !email) return fail("El correo no es válido. Ejemplo: tienda@gmail.com");
+  if (!group && !phone && !email) return fail("Escribe el enlace del grupo, el teléfono del dueño o el correo de la tienda.");
 
   const patch = {
     whatsapp_group_url: group?.url ?? null,
     whatsapp_group_code: group?.code ?? null,
     owner_phone: phone,
     owner_name: field(form, "owner_name").slice(0, 120) || null,
+    email,
     notes: field(form, "notes").slice(0, 1000) || null,
   };
 
@@ -99,6 +104,7 @@ export async function saveContact(_prev: ContactState, form: FormData): Promise<
     if (!existing.whatsapp_group_code && group && !byGroup) Object.assign(fill, { whatsapp_group_url: group.url, whatsapp_group_code: group.code });
     if (!existing.owner_phone && phone && !byPhone) fill.owner_phone = phone;
     if (!existing.owner_name && patch.owner_name) fill.owner_name = patch.owner_name;
+    if (!existing.email && patch.email) fill.email = patch.email;
     if (!existing.notes && patch.notes) fill.notes = patch.notes;
     if (Object.keys(fill).length) {
       const { error } = await db().from("store_contacts").update({ ...fill, updated_at: new Date().toISOString() }).eq("id", existing.id);

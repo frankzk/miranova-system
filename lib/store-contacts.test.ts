@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatPhone, nameTokens, normalizePhone, parseWhatsappGroup, suggestLinks, type DirectoryStore } from "./store-contacts.ts";
+import { formatPhone, nameTokens, normalizeEmail, normalizePhone, parseWhatsappGroup, storeEmail, suggestLinks, type DirectoryStore } from "./store-contacts.ts";
 
 const CODE = "AbCdEfGhIjKlMnOpQrStUv";
 
@@ -66,4 +66,13 @@ test("sugerencias: se omiten las que ya están en el mismo contacto y se informa
   assert.equal(s[0].store.store_id, "3");
   assert.equal(s[0].contact_id, "c9");
   assert.equal(s[0].other_person, false);
+});
+
+test("correo de la tienda: el del contacto manda sobre el detectado en los pedidos", () => {
+  assert.equal(normalizeEmail("  Info@ClickSiHonduras.com "), "info@clicksihonduras.com");
+  assert.equal(normalizeEmail("sin correo"), null);
+  assert.equal(normalizeEmail("a@b"), null);
+  assert.deepEqual(storeEmail("tienda@x.com", "otra@y.com"), { email: "tienda@x.com", source: "contacto" });
+  assert.deepEqual(storeEmail(null, "otra@y.com"), { email: "otra@y.com", source: "pedidos" });
+  assert.deepEqual(storeEmail("  ", undefined), null);
 });
