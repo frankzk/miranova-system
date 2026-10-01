@@ -988,18 +988,39 @@ html[data-drawer-loading] .drawer:not(.drawer-loading), html[data-drawer-loading
 .delivery-filters .field { min-width: 0; margin: 0; }
 .delivery-filters .input { width: 100%; }
 .delivery-context { margin: 12px 0 22px; color: var(--ink-3); font-size: 12px; line-height: 1.6; }
-.delivery-table { min-width: 960px; }
-.delivery-table tbody th { background: transparent; text-transform: none; letter-spacing: normal; vertical-align: top; border-bottom: 1px solid var(--line); }
+.delivery-table-scroll { overflow: auto; max-height: 70vh; margin-top: 14px; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.delivery-table { table-layout: fixed; }
+.delivery-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-subtle); box-shadow: 0 1px 0 var(--line); text-transform: none; letter-spacing: normal; font-size: 11px; padding: 10px; white-space: normal; }
+.delivery-carrier-heading { width: 22%; }
+.delivery-rate-heading { width: 16%; }
+.delivery-table tbody th { background: transparent; text-transform: none; letter-spacing: normal; border-bottom: 1px solid var(--line); }
+.delivery-table .delivery-data-row > * { padding: 10px; height: 60px; vertical-align: middle; border-bottom: 1px solid var(--line); }
+.delivery-table .delivery-country-row th { padding: 7px 10px; background: var(--bg-subtle); font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .delivery-carrier { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
-.delivery-country, .delivery-sample { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 3px; }
-.delivery-rate { display: flex; align-items: center; gap: 12px; min-width: 180px; font-variant-numeric: tabular-nums; }
-.delivery-rate strong { min-width: 62px; font-size: 15px; }
-.delivery-rate-pair { display: grid; gap: 12px; }
-.delivery-rate-label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
-.delivery-rate meter { width: 90px; height: 8px; border: 0; border-radius: 4px; background: var(--bg-active); }
-.delivery-rate meter::-webkit-meter-bar { background: var(--bg-active); border: 0; height: 8px; border-radius: 4px; }
-.delivery-rate meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 4px; }
-.delivery-rate meter::-moz-meter-bar { background: var(--accent); border-radius: 4px; }
+.delivery-sample { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 2px; }
+.delivery-rate strong { font-size: 15px; font-weight: 650; }
+.delivery-sample-badge { display: inline-block; margin-top: 3px; padding: 1px 5px; border-radius: 4px; background: var(--bg-active); color: var(--ink-2); font-size: 10px; font-weight: 400; }
+.delivery-details-row { display: none; }
+.delivery-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; padding: 6px 0 12px; font-size: 12px; }
+.delivery-states > div { display: flex; justify-content: space-between; gap: 8px; }
+.delivery-states dt { color: var(--ink-3); }
+.delivery-states dd { margin: 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 1200px) {
+  .delivery-table .delivery-count { display: none; }
+  .delivery-carrier-heading { width: 40%; }
+  .delivery-rate-heading { width: 30%; }
+  .delivery-details-row { display: table-row; }
+  .delivery-table .delivery-data-row > * { border-bottom: 0; }
+  .delivery-table .delivery-details-row > td { padding: 0 10px; border-bottom: 1px solid var(--line); }
+  .delivery-details-row summary { cursor: pointer; width: fit-content; padding: 8px 0; color: var(--accent-ink); font-size: 12px; }
+}
+@media (max-width: 600px) {
+  .delivery-table thead th, .delivery-table .delivery-data-row > * { padding-left: 8px; padding-right: 8px; }
+  .delivery-carrier { overflow-wrap: anywhere; font-size: 12px; }
+  .delivery-rate strong { font-size: 14px; }
+  .delivery-sample { font-size: 10px; }
+  .delivery-states { grid-template-columns: minmax(0, 1fr); }
+}
 .delivery-method { margin-top: 22px; max-width: 90ch; color: var(--ink-3); font-size: 13px; line-height: 1.7; }
 .delivery-method h2 { color: var(--ink); font-size: 14px; font-weight: 600; }
 .delivery-method p { margin-top: 8px; }
