@@ -1,9 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { completedOrders, deliveryRate, openOrders, readDeliveryPages, summarizeDeliveries, type DeliveryOrder } from "./delivery-rates.ts";
+import { completedOrders, deliveryRate, totalDeliveryRate, emptyDeliveryCounts, openOrders, readDeliveryPages, summarizeDeliveries, type DeliveryOrder } from "./delivery-rates.ts";
 
 const accounts = [{ id: "sv", country: "SV" }, { id: "hn", country: "HN" }];
 const order = (status_code: string | null, account_id = "sv", carrier: string | null = "Xpress"): DeliveryOrder => ({ id: "1", status_code, account_id, carrier });
+
+test("Honduras snapshot: shows 50.0% of all orders alongside 76.8% of completed orders", () => {
+  const counts = { total: 4293, delivered: 2147, failed: 650, dispatch: 115, transit: 1011, problem: 315, cancelled: 55, unknown: 0 };
+  assert.equal((totalDeliveryRate(counts)! * 100).toFixed(1), "50.0");
+  assert.equal((deliveryRate(counts)! * 100).toFixed(1), "76.8");
+  assert.equal((deliveryRate(counts, true)! * 100).toFixed(1), "75.3");
+  assert.equal(totalDeliveryRate(counts), 2147 / 4293);
+});
+
+test("total includes every state, with zero for pending-only and unavailable for no orders", () => {
+  const counts = summarizeDeliveries([order("4"), order("3"), order("cancelled"), order(null)], accounts).total;
+  assert.equal(totalDeliveryRate(counts), 0.25);
+  assert.equal(deliveryRate(counts), 1);
+  assert.equal(deliveryRate(counts, true), 0.5);
+  assert.equal(totalDeliveryRate(summarizeDeliveries([order("3")], accounts).total), 0);
+  assert.equal(totalDeliveryRate(emptyDeliveryCounts()), null);
+});
 
 test("terminal outcomes: all pending, transit, problems and unknown codes stay outside the denominator", () => {
   const codes = ["4", "4", "7", "8", "5", "cancelled", "rejected", "registered", "pending", "fulfilled", "-1", "1", "2", "3", "12", "pending_correction", "6", "future", null];

@@ -994,6 +994,8 @@ html[data-drawer-loading] .drawer:not(.drawer-loading), html[data-drawer-loading
 .delivery-country, .delivery-sample { display: block; font-size: 11px; color: var(--ink-3); font-weight: 400; margin-top: 3px; }
 .delivery-rate { display: flex; align-items: center; gap: 12px; min-width: 180px; font-variant-numeric: tabular-nums; }
 .delivery-rate strong { min-width: 62px; font-size: 15px; }
+.delivery-rate-pair { display: grid; gap: 12px; }
+.delivery-rate-label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
 .delivery-rate meter { width: 90px; height: 8px; border: 0; border-radius: 4px; background: var(--bg-active); }
 .delivery-rate meter::-webkit-meter-bar { background: var(--bg-active); border: 0; height: 8px; border-radius: 4px; }
 .delivery-rate meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 4px; }

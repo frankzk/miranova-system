@@ -97,9 +97,11 @@ transportadoras por país y cuenta. Permite seleccionar 7, 30 o 90 días, un ran
 propio y una antigüedad mínima de 7 o 14 días completos en la zona indicada.
 Las fechas filtran la **creación del pedido**; se utiliza su estado actual.
 
-La tasa predeterminada es entregados / (entregados + no entregados). Se pueden
-incluir cancelaciones y rechazos en la base. Pendientes, tránsito, gestión y
-estados desconocidos siempre quedan fuera. Una base vacía se representa con «—».
+El resumen y cada transportadora muestran ambas tasas: entregados / total de
+pedidos y entregados / (entregados + no entregados). Se pueden incluir cancelaciones
+y rechazos en la segunda base; la primera siempre incluye todos los estados.
+Pendientes, tránsito, gestión y estados desconocidos quedan fuera de completados.
+Una base vacía se representa con «—».
 Los grupos con menos de 30 operaciones muestran un aviso de muestra pequeña.
 
 Usa consultas de solo lectura paginadas, con caché de un minuto, sin migraciones

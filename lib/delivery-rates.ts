@@ -17,6 +17,10 @@ export function deliveryRate(row: DeliveryCounts, includeCancelled = false): num
   const completed = completedOrders(row, includeCancelled);
   return completed ? row.delivered / completed : null;
 }
+/** Progress across every selected order, including open, cancelled and unknown states. */
+export function totalDeliveryRate(row: DeliveryCounts): number | null {
+  return row.total ? row.delivered / row.total : null;
+}
 export const openOrders = (row: DeliveryCounts) => row.dispatch + row.transit + row.problem;
 
 export function summarizeDeliveries(orders: DeliveryOrder[], accounts: DeliveryAccount[]) {

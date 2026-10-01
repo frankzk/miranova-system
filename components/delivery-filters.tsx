@@ -24,7 +24,7 @@ export function DeliveryFilters(props: Props) {
     <label className="field"><span>Antigüedad mínima</span><select className="input" name="age" defaultValue={props.age}>
       <option value="0">Todos los pedidos</option><option value="7">7 días completos</option><option value="14">14 días completos</option>
     </select></label>
-    <label className="field"><span>Base de la tasa</span><select className="input" name="cancelled" defaultValue={props.includeCancelled ? "1" : "0"}>
+    <label className="field"><span>Base de completados</span><select className="input" name="cancelled" defaultValue={props.includeCancelled ? "1" : "0"}>
       <option value="0">Entregados + no entregados</option><option value="1">Incluir cancelados / rechazados</option>
     </select></label>
     <button className="btn btn-primary" type="submit">Aplicar filtros</button>
