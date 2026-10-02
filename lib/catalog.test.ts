@@ -81,6 +81,43 @@ test("parseCatalogExport enruta a CSV cuando la cadena no es JSON", () => {
   assert.equal(ps[0].cost, 10);
 });
 
+test("parseCatalogExport acepta un solo objeto producto (sin arreglo)", () => {
+  const ps = parseCatalogExport({ productName: "Solo", vendorPrice: 10, suggestedPrice: 20, totalAvailable: 5 });
+  assert.equal(ps.length, 1);
+  assert.equal(ps[0].name, "Solo");
+  assert.equal(ps[0].stock, 5);
+});
+
+test("reconoce campos reales de Drop: totalAvailable y shortId", () => {
+  const p = mapProduct({ name: "X", shortId: "ID-ABC12", vendorPrice: 100, suggestedPrice: 250, totalAvailable: 42 });
+  assert.equal(p.id, "ID-ABC12");
+  assert.equal(p.stock, 42);
+  assert.equal(p.cost, 100);
+});
+
+test("parseCatalogExport extrae productos de un payload RSC/flight", () => {
+  // Se ignoran las filas de routing/módulos y se junta solo lo que parece producto.
+  const flight = [
+    '0:{"b":"abc","f":[["children","catalog",null]],"S":false}',
+    '1:I["./chunk.js",["app"],"Catalog"]',
+    '2:[{"productName":"King maker","vendor":{"name":"Ecomfive"},"shortId":"ID-IUFSV","totalAvailable":200,"vendorPrice":5499,"suggestedPrice":11748.5},{"productName":"Yerba Magic","vendor":{"name":"Ecomfive"},"shortId":"ID-EOX96","totalAvailable":200,"vendorPrice":5731.95,"suggestedPrice":11688.5}]',
+  ].join("\n");
+  const ps = parseCatalogExport(flight);
+  assert.equal(ps.length, 2);
+  assert.equal(ps[0].name, "King maker");
+  assert.equal(ps[0].vendor, "Ecomfive");
+  assert.equal(ps[0].cost, 5499);
+  assert.equal(ps[1].id, "ID-EOX96");
+});
+
+test("el payload RSC de prefetch (sin productos) da cero y no truena", () => {
+  const prefetch = '0:{"b":"wWXJ","f":[["children","(main)","children","catalog",["catalog",{"children":["__PAGE__",{}]}],null,[null,null],true]],"S":false}';
+  const ps = parseCatalogExport(prefetch);
+  assert.equal(ps.length, 0);
+  const info = inspectExport(prefetch);
+  assert.equal(info.count, 0);
+});
+
 // ─── marginPctOf ───
 
 test("marginPctOf evita dividir por cero", () => {

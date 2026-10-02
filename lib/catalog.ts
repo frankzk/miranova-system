@@ -165,12 +165,13 @@ function findArray(input: unknown, depth = 0): unknown[] {
   return [];
 }
 
+// Candidatos alineados con lib/products.ts (vocabulario real de la API de Drop).
 const NAME_KEYS = ["name", "productName", "product_name", "title", "nombre", "displayName", "label"];
-const ID_KEYS = ["displayId", "shortId", "code", "reference", "sku", "productId", "product_id", "id", "_id"];
+const ID_KEYS = ["shortId", "displayId", "code", "publicId", "referenceId", "productCode", "reference", "sku", "productId", "product_id", "id", "_id"];
 const VENDOR_KEYS = ["vendorName", "vendor.name", "vendor", "proveedor", "supplierName", "supplier.name", "supplier", "provider", "providerName", "store.name", "storeName"];
-const STOCK_KEYS = ["totalStock", "stock", "total", "available", "availableStock", "inventory", "quantity", "existencias", "qty"];
-const COST_KEYS = ["vendorPrice", "providerPrice", "supplierPrice", "cost", "costPrice", "basePrice", "wholesalePrice", "precioProveedor", "prices.vendor", "price.vendor", "pricing.cost"];
-const SUGGESTED_KEYS = ["suggestedPrice", "sellerPrice", "recommendedPrice", "salePrice", "retailPrice", "pvp", "precioSugerido", "suggested", "prices.suggested", "price.suggested", "pricing.suggested"];
+const STOCK_KEYS = ["totalAvailable", "totalStock", "totalInventory", "stock", "total", "available", "availableStock", "inventory", "quantity", "existencias", "qty", "inventory.total", "stock.total"];
+const COST_KEYS = ["vendorPrice", "providerPrice", "supplierPrice", "cost", "costPrice", "basePrice", "wholesalePrice", "precioProveedor", "prices.vendor", "price.vendor", "pricing.vendorPrice", "pricing.cost", "price"];
+const SUGGESTED_KEYS = ["suggestedPrice", "sellerPrice", "recommendedPrice", "salePrice", "retailPrice", "pvp", "precioSugerido", "suggested", "prices.suggested", "price.suggested", "pricing.suggestedPrice", "pricing.suggested"];
 const CURRENCY_KEYS = ["currency", "currencyCode", "currencyName", "country.currencyName", "country.currencyId"];
 const IMAGE_KEYS = ["productImage", "image", "imageUrl", "image_url", "thumbnail", "img", "photo", "cover", "images.0"];
 
@@ -191,26 +192,80 @@ export function mapProduct(rec: Obj, fallbackCurrency = "CRC"): CatalogProduct {
   };
 }
 
+/** ¿El objeto parece un producto de catálogo (y no una orden)? */
+function looksLikeProduct(o: Obj): boolean {
+  if (getPath(o, "orderInfo") !== undefined || getPath(o, "productSnapshots") !== undefined) return false;
+  if (pickStr(o, NAME_KEYS) === null) return false;
+  return pickNum(o, COST_KEYS) !== null || pickNum(o, SUGGESTED_KEYS) !== null || pickNum(o, STOCK_KEYS) !== null;
+}
+
+/** Camina el valor y junta los objetos que parecen productos (para formas anidadas raras). */
+function deepCollect(value: unknown, depth = 0, out: Obj[] = []): Obj[] {
+  if (depth > 6 || value === null || typeof value !== "object") return out;
+  if (Array.isArray(value)) { for (const v of value) deepCollect(v, depth + 1, out); return out; }
+  if (looksLikeProduct(value as Obj)) out.push(value as Obj);
+  else for (const v of Object.values(value)) deepCollect(v, depth + 1, out);
+  return out;
+}
+
+/** De un valor ya parseado: el arreglo de productos (ruta rápida) o lo que encuentre caminando. */
+function collectFromValue(value: unknown): Obj[] {
+  const arr = findArray(value);
+  return (arr.length ? arr : deepCollect(value)).filter(isObj);
+}
+
+/** ¿Parece un payload RSC/"flight" de Next.js? (líneas tipo `0:{…}` / `1a:[…]`). */
+function looksLikeFlight(t: string): boolean {
+  return /^[0-9a-f]+:[[{]/m.test(t);
+}
+
+/** Extrae productos de un payload flight: parsea cada fila JSON y junta lo que parezca producto. */
+function collectFromFlight(text: string): Obj[] {
+  const out: Obj[] = [];
+  const seen = new Set<string>();
+  for (const line of text.split("\n")) {
+    const m = /^[0-9a-f]+:(.*)$/.exec(line.trim());
+    if (!m) continue;
+    const body = m[1].trim();
+    if (body[0] !== "{" && body[0] !== "[") continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { continue; }
+    for (const r of deepCollect(parsed)) {
+      const key = `${pickStr(r, ID_KEYS) ?? ""}|${pickStr(r, NAME_KEYS) ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
+/** Descubre los objetos crudos de producto en cualquier entrada; señala si hay que tratarla como CSV. */
+function rawObjects(input: unknown): { objs: Obj[]; csv?: string } {
+  if (typeof input === "string") {
+    const t = input.trim();
+    if (t === "") return { objs: [] };
+    if (t[0] === "{" || t[0] === "[") {
+      try { return { objs: collectFromValue(JSON.parse(t)) }; } catch { return { objs: [], csv: t }; }
+    }
+    if (looksLikeFlight(t)) return { objs: collectFromFlight(t) };
+    return { objs: [], csv: t };
+  }
+  return { objs: collectFromValue(input) };
+}
+
 /**
  * Parsea un export de catálogo. Acepta:
  *  - un valor ya parseado (arreglo o envoltura con `data`/`items`/…),
  *  - una cadena JSON,
+ *  - el payload RSC/"flight" de Next.js (lo que devuelve `app.soydrop.com/...?_rsc=`),
  *  - una cadena CSV (con encabezados en español o inglés).
  */
 export function parseCatalogExport(input: unknown, opts: { currency?: string } = {}): CatalogProduct[] {
   const currency = opts.currency ?? "CRC";
-  let value: unknown = input;
-  if (typeof input === "string") {
-    const t = input.trim();
-    if (t === "") return [];
-    if (t[0] === "{" || t[0] === "[") {
-      try { value = JSON.parse(t); } catch { return parseCsv(t, currency); }
-    } else {
-      return parseCsv(t, currency);
-    }
-  }
-  const arr = findArray(value);
-  return arr.filter(isObj).map((r) => mapProduct(r, currency));
+  const { objs, csv } = rawObjects(input);
+  if (csv !== undefined) return parseCsv(csv, currency);
+  return objs.map((r) => mapProduct(r, currency));
 }
 
 // ─── CSV (encabezados del listado de Drop) ───
@@ -419,15 +474,10 @@ export function inspectExport(input: unknown, opts: { currency?: string } = {}):
   rawKeys: string[];
   sample: { raw: Obj; mapped: CatalogProduct } | null;
 } {
-  let value: unknown = input;
-  if (typeof input === "string") {
-    const t = input.trim();
-    try { value = t[0] === "{" || t[0] === "[" ? JSON.parse(t) : value; } catch { /* csv */ }
-  }
-  const arr = findArray(value).filter(isObj);
-  const first = arr[0] ?? null;
+  const { objs } = rawObjects(input);
+  const first = objs[0] ?? null;
   return {
-    count: arr.length,
+    count: objs.length,
     rawKeys: first ? Object.keys(first) : [],
     sample: first ? { raw: first, mapped: mapProduct(first, opts.currency ?? "CRC") } : null,
   };
