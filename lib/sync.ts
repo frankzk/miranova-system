@@ -1,14 +1,14 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Session } from "./connectors";
-import { SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
+import { SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { extractProducts } from "./products";
 import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
-import { ingestPayload, saveProducts, type AccountCtx } from "./store";
+import { ingestPayload, saveCatalog, saveProducts, type AccountCtx } from "./store";
 
 const DAY = 86_400_000;
 const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
@@ -22,6 +22,7 @@ const MOVEMENT_PRODUCTS_PER_SYNC = 20; // productos por sincronización (los rev
 const MAX_MOVEMENT_PAGES = 20;
 const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ventana reciente
 const OPEN_REFRESH_MAX_DAYS = 120;
+const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 
 /** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
 const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
@@ -94,6 +95,9 @@ export type SyncResult = { ok: boolean; message: string; saved: number };
 export async function syncAccount(accountId: string, deadline = Date.now() + TIME_BUDGET_MS): Promise<SyncResult> {
   const acc = await getAccount(accountId);
   if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0 };
+
+  // Cuenta de dropshipper dedicada a espiar el catálogo: baja solo el catálogo, no órdenes.
+  if (acc.catalog_only) return syncCatalogAccount(acc, deadline);
 
   const c = connectorFor(acc.platform, acc.country, acc.timezone);
   const pageSize = c.pageSize ?? SOYDROP_PAGE_SIZE;
@@ -243,6 +247,78 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
     console.error(`sync ${acc.name}`, e);
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
     return { ok: false, message, saved };
+  }
+}
+
+/**
+ * Sincroniza una cuenta de dropshipper marcada `catalog_only`: inicia sesión,
+ * descubre la ruta del catálogo de dropshipping (una vez) y baja todas las
+ * páginas hacia `catalog_products`. No toca órdenes ni el catálogo propio.
+ */
+async function syncCatalogAccount(acc: Account, deadline: number): Promise<SyncResult> {
+  const c = connectorFor(acc.platform, acc.country, acc.timezone);
+  if (!c.discoverCatalogPath || !c.fetchCatalog) {
+    const message = "Esta plataforma todavía no trae el catálogo de dropshipping.";
+    await updateAccount(acc.id, { catalog_sync_msg: message, last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
+    return { ok: false, message, saved: 0 };
+  }
+
+  try {
+    let session = await loadSession(acc);
+    let relogged = false;
+    const withSession = async <T>(fn: (s: Session) => Promise<T>): Promise<T> => {
+      try {
+        return await fn(session);
+      } catch (e) {
+        if (!(e instanceof SessionExpired) || relogged) throw e;
+        relogged = true;
+        session = await freshSession((await getAccount(acc.id))!);
+        return fn(session);
+      }
+    };
+
+    let path = acc.catalog_path;
+    if (!path) {
+      const probe = await withSession(async (s) => {
+        const r = await c.discoverCatalogPath!(s);
+        if (!r.path && r.attempts.every((a) => a.status === 401 || a.status === 403)) throw new SessionExpired();
+        return r;
+      });
+      const fresh = (await getAccount(acc.id))!;
+      await updateAccount(acc.id, { catalog_path: probe.path, debug: { ...(fresh.debug ?? {}), catalog_probe: probe.attempts } });
+      if (!probe.path) {
+        throw new PlatformError(
+          "Inicié sesión, pero aún no encuentro dónde entrega la plataforma el catálogo de dropshipping. Ya quedó el diagnóstico guardado para ajustarlo.",
+        );
+      }
+      path = probe.path;
+    }
+
+    let total = 0;
+    for (let page = 1; page <= MAX_CATALOG_PAGES && Date.now() < deadline; page++) {
+      const res = await withSession((s) => c.fetchCatalog!(s, path!, page));
+      const found = extractProducts(res.payload).length;
+      if (found === 0) break;
+      total += await saveCatalog(acc.id, acc.currency, res.payload);
+      if (found < SOYDROP_CATALOG_PAGE_SIZE) break;
+    }
+
+    const message = `${total} productos de la competencia actualizados`;
+    await updateAccount(acc.id, {
+      catalog_sync_at: new Date().toISOString(),
+      catalog_sync_msg: message,
+      last_sync_at: new Date().toISOString(),
+      last_sync_ok: true,
+      last_sync_msg: message,
+    });
+    return { ok: true, message, saved: total };
+  } catch (e) {
+    const message = e instanceof PlatformError || e instanceof SessionExpired
+      ? e.message
+      : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
+    console.error(`catalog sync ${acc.name}`, e);
+    await updateAccount(acc.id, { catalog_sync_msg: message, last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
+    return { ok: false, message, saved: 0 };
   }
 }
 

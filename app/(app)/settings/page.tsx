@@ -212,6 +212,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </span>
               <input className="input" name="totp" type="password" autoComplete="off" placeholder="Ej. JBSW Y3DP EHPK 3PXP…" />
             </label>
+            <label className="field full" style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+              <input type="checkbox" name="catalog_only" style={{ marginTop: 3 }} />
+              <span>
+                Solo catálogo de competencia{" "}
+                <span className="hint">
+                  Márcalo si es una cuenta de <strong>dropshipper</strong>: en vez de órdenes, el sistema baja el catálogo
+                  de los demás proveedores para verlo en <strong>Productos → Competencia</strong>.
+                </span>
+              </span>
+            </label>
           </div>
           <div className="form-actions">
             <p>La contraseña y la clave 2FA se guardan cifradas (AES-256) y solo el servidor la usa para iniciar sesión. La primera sincronización puede tardar hasta un minuto.</p>
