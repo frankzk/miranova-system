@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  analyzeCatalog, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, toNum,
+  analyzeCatalog, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, pickVendor, toNum,
   type CatalogProduct,
 } from "./catalog.ts";
 
@@ -124,6 +124,16 @@ test("marginPctOf evita dividir por cero", () => {
   assert.equal(marginPctOf({ cost: 100, suggested: 250 } as CatalogProduct), 1.5);
   assert.equal(marginPctOf({ cost: 0, suggested: 20 } as CatalogProduct), null);
   assert.equal(marginPctOf({ cost: 100, suggested: null } as CatalogProduct), null);
+});
+
+// ─── pickVendor (lo usa el guardado del catálogo para sacar el proveedor del raw) ───
+
+test("pickVendor reconoce el proveedor anidado o plano", () => {
+  assert.equal(pickVendor({ vendor: { name: "Ecomfive Costa Rica" } }), "Ecomfive Costa Rica");
+  assert.equal(pickVendor({ vendorName: "Nova Supplier CR" }), "Nova Supplier CR");
+  assert.equal(pickVendor({ proveedor: "X" }), "X");
+  assert.equal(pickVendor({ nothing: 1 }), null);
+  assert.equal(pickVendor(null), null);
 });
 
 // ─── analyzeCatalog ───

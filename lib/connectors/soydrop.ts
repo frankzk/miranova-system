@@ -28,6 +28,22 @@ const ORDER_PATH_CANDIDATES = [
 const PRODUCTS_PAGE_SIZE = 100;
 const PRODUCT_PATH_CANDIDATES = ["/products/", "/products", "/vendor/products", "/vendors/products", "/products/vendor"];
 
+// Catálogo de dropshipping (otros proveedores), visto desde una cuenta de dropshipper.
+// La ruta exacta no es pública: se descubre probando candidatas con la sesión iniciada.
+const CATALOG_PAGE_SIZE = 100;
+const CATALOG_PATH_CANDIDATES = [
+  "/products/",
+  "/products",
+  "/dropshipping/products",
+  "/products/dropshipping",
+  "/catalog/products",
+  "/catalog/",
+  "/catalog",
+  "/dropshipping/catalog",
+  "/seller/products",
+  "/marketplace/products",
+];
+
 const BASE_HEADERS: Record<string, string> = {
   accept: "application/json, text/plain, */*",
   "content-type": "application/json",
@@ -208,6 +224,35 @@ export const soydrop: Connector = {
     return { url, payload: json };
   },
 
+  // Catálogo de dropshipping: la ruta se descubre con la sesión del dropshipper.
+  async discoverCatalogPath(session) {
+    const attempts: ProbeAttempt[] = [];
+    for (const path of CATALOG_PATH_CANDIDATES) {
+      try {
+        const res = await fetch(`${API}${path}?page=1&limit=${CATALOG_PAGE_SIZE}`, { headers: authHeaders(session), cache: "no-store" });
+        if (res.status === 401 || res.status === 403) throw new SessionExpired();
+        const { json, text } = await readJson(res);
+        const products = json ? extractProducts(json).length : 0;
+        attempts.push({ path, status: res.status, orders: products, sample: text.slice(0, 400) });
+        if (res.ok && products > 0) return { path, attempts };
+      } catch (e) {
+        if (e instanceof SessionExpired) throw e;
+        attempts.push({ path, status: -1, orders: 0, sample: String(e) });
+      }
+    }
+    return { path: null, attempts };
+  },
+
+  async fetchCatalog(session, path, page) {
+    const sep = path.includes("?") ? "&" : "?";
+    const url = `${API}${path}${sep}page=${page}&limit=${CATALOG_PAGE_SIZE}`;
+    const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
+    if (res.status === 401 || res.status === 403) throw new SessionExpired();
+    const { json, text } = await readJson(res);
+    if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
+    return { url, payload: json };
+  },
+
   // Movimientos de inventario de un producto: los mismos que muestra "Gestionar inventario".
   async fetchStockMovements(session, productId, page) {
     const url = `${API}/products/${encodeURIComponent(productId)}/stock-movements?page=${page}&limit=${STOCK_MOVEMENTS_PAGE_SIZE}`;
@@ -271,4 +316,5 @@ function collectNames(node: unknown, out: Record<string, string> = {}, depth = 0
 
 export const SOYDROP_PAGE_SIZE = PAGE_SIZE;
 export const SOYDROP_PRODUCTS_PAGE_SIZE = PRODUCTS_PAGE_SIZE;
+export const SOYDROP_CATALOG_PAGE_SIZE = CATALOG_PAGE_SIZE;
 export const STOCK_MOVEMENTS_PAGE_SIZE = 100;

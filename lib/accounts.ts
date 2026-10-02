@@ -21,6 +21,11 @@ export type Account = {
   products_path: string | null;
   products_sync_at: string | null;
   products_sync_msg: string | null;
+  // Cuenta de dropshipper usada solo para espiar el catálogo de la competencia.
+  catalog_only: boolean;
+  catalog_path: string | null;
+  catalog_sync_at: string | null;
+  catalog_sync_msg: string | null;
   enabled: boolean;
   last_sync_at: string | null;
   last_sync_ok: boolean | null;
@@ -39,7 +44,7 @@ export type AccountView = Omit<Account, "password_enc" | "session_enc" | "geo" |
 export async function listAccounts(): Promise<AccountView[]> {
   const { data, error } = await db()
     .from("accounts")
-    .select("id, name, platform, country, currency, timezone, login_email, platform_ref, platform_ref_name, orders_path, backfill_cursor, products_path, products_sync_at, products_sync_msg, totp_secret_enc, enabled, last_sync_at, last_sync_ok, last_sync_msg, debug, created_at, orders(count)")
+    .select("id, name, platform, country, currency, timezone, login_email, platform_ref, platform_ref_name, orders_path, backfill_cursor, products_path, products_sync_at, products_sync_msg, catalog_only, catalog_path, catalog_sync_at, catalog_sync_msg, totp_secret_enc, enabled, last_sync_at, last_sync_ok, last_sync_msg, debug, created_at, orders(count)")
     .order("created_at");
   if (error) throw error;
   return data.map(({ orders, totp_secret_enc, ...a }) => ({

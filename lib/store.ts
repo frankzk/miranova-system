@@ -1,6 +1,8 @@
 import "server-only";
 import { db } from "./supabase";
 import { extractOrders, normalizeOrder, type NormalizedOrder, type NormalizeOptions } from "./normalize";
+import { extractProducts } from "./products";
+import { pickVendor } from "./catalog";
 
 export type AccountCtx = { id: string; currency: string; timezone: string; geo?: Record<string, string> | null };
 
@@ -125,4 +127,33 @@ export async function saveProducts(
   const { error } = await db().from("products").upsert(rows, { onConflict: "account_id,external_id" });
   if (error) throw error;
   return products.length;
+}
+
+/**
+ * Guarda (o actualiza) el catálogo de la competencia de una cuenta de dropshipper.
+ * Reutiliza el extractor de productos y añade el proveedor que ofrece cada producto.
+ * `first_seen_at` no se incluye: queda al valor original en actualizaciones.
+ */
+export async function saveCatalog(accountId: string, currency: string, payload: unknown): Promise<number> {
+  const items = extractProducts(payload);
+  if (items.length === 0) return 0;
+  const now = new Date().toISOString();
+  const rows = items.map((p) => ({
+    account_id: accountId,
+    external_id: p.external_id,
+    code: p.code,
+    name: p.name,
+    vendor: pickVendor(p.raw),
+    cost: p.price,
+    suggested: p.suggested_price,
+    stock: p.stock,
+    image_url: p.image_url,
+    currency: p.currency ?? currency,
+    raw: p.raw,
+    last_seen_at: now,
+    updated_at: now,
+  }));
+  const { error } = await db().from("catalog_products").upsert(rows, { onConflict: "account_id,external_id" });
+  if (error) throw error;
+  return items.length;
 }

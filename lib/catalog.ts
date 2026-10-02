@@ -347,6 +347,11 @@ function median(sorted: number[]): number {
 export const marginPctOf = (p: CatalogProduct): number | null =>
   p.cost !== null && p.suggested !== null && p.cost > 0 ? (p.suggested - p.cost) / p.cost : null;
 
+/** Proveedor que ofrece un producto, buscado entre los nombres de campo posibles del payload crudo. */
+export function pickVendor(raw: unknown): string | null {
+  return isObj(raw) ? pickStr(raw, VENDOR_KEYS) : null;
+}
+
 function normName(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }

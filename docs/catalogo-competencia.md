@@ -1,15 +1,52 @@
 # Analizador de catálogo · inteligencia competitiva
 
-Herramienta para revisar el catálogo público de proveedores de **Drop**
-(`app.soydrop.com`) y ver qué vende la competencia: márgenes, rangos de precio,
-qué proveedor tiene más productos y, sobre todo, **el mismo producto ofrecido por
-varios proveedores** (para comparar quién lo surte más barato).
+Herramienta para revisar el catálogo de proveedores de **Drop**
+(`app.soydrop.com`) desde la vista de **dropshipper** y ver qué vende la
+competencia: márgenes, rangos de precio, qué proveedor tiene más productos y,
+sobre todo, **el mismo producto ofrecido por varios proveedores** (para comparar
+quién lo surte más barato).
 
-No consulta nada en línea ni automatiza la plataforma: trabaja sobre un **export
-manual** que haces tú desde el catálogo al que tu cuenta ya tiene acceso.
+Hay dos formas de usarlo:
 
-- Motor (puro, con pruebas): [`lib/catalog.ts`](../lib/catalog.ts)
+- **A — Automático (en el panel).** Una cuenta de dropshipper marcada como fuente
+  de catálogo se sincroniza sola cada 10 minutos y el análisis se ve en
+  **Productos → Competencia**. Ver §0.
+- **B — Manual (CLI).** Pegas un export del catálogo y corres un reporte en la
+  terminal. Ver §1–§3. Útil para una revisión rápida sin tocar la base.
+
+Piezas:
+- Motor de análisis (puro, con pruebas): [`lib/catalog.ts`](../lib/catalog.ts)
+- Conector (login + descubrir ruta + bajar catálogo): [`lib/connectors/soydrop.ts`](../lib/connectors/soydrop.ts)
+- Guardado + sincronización: [`lib/store.ts`](../lib/store.ts) · [`lib/sync.ts`](../lib/sync.ts)
+- Página del panel: `app/(app)/products/competencia/page.tsx`
 - CLI de reporte: [`scripts/analyze-catalog.ts`](../scripts/analyze-catalog.ts)
+
+## 0. Modo automático (recomendado)
+
+1. **Migración.** En Supabase → SQL Editor, ejecuta
+   `supabase/migrations/0025_catalog_spy.sql` (crea la tabla `catalog_products` y
+   las columnas `catalog_*` en `accounts`).
+2. **Despliega** la rama a Vercel.
+3. **Agrega la cuenta.** Panel → *Ajustes · Cuentas* → **Agregar cuenta** →
+   plataforma Drop, país, y el correo/contraseña de una cuenta de **dropshipper**
+   (no la de Miranova proveedor). Marca **“Solo catálogo de competencia”** y
+   guarda. La contraseña se cifra (AES-256) y solo la usa el servidor; nunca sale
+   del sistema.
+4. El sistema inicia sesión, **descubre** la ruta del catálogo probando
+   candidatas (igual que con las órdenes) y baja todas las páginas a
+   `catalog_products`. Se repite cada 10 minutos.
+5. Míralo en **Productos → Competencia**.
+
+> Si la primera sincronización dice que no encontró la ruta del catálogo, queda un
+> diagnóstico en *Ajustes → Diagnóstico* (`debug.catalog_probe`) con lo que
+> respondió cada ruta candidata. Con eso se ajustan las candidatas en
+> `CATALOG_PATH_CANDIDATES` (en `lib/connectors/soydrop.ts`).
+
+> **Nota sobre términos de servicio:** bajar el catálogo en automático es acceso
+> repetido a la API de Drop con una cuenta de dropshipper. Suele ir contra los ToS
+> de la plataforma y podría arriesgar esa cuenta; es una decisión del dueño. El
+> conector reutiliza el tamaño de página normal y no hace nada para evadir
+> detección.
 
 ## 1. Sacar el export manual
 

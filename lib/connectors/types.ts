@@ -31,6 +31,10 @@ export interface Connector {
   fetchProducts?(session: Session, path: string, page: number): Promise<OrdersPage>;
   /** Descarga una página de movimientos de inventario de un producto (más recientes primero). */
   fetchStockMovements?(session: Session, productId: string, page: number): Promise<OrdersPage>;
+  /** Busca la ruta del catálogo de dropshipping (productos de otros proveedores). */
+  discoverCatalogPath?(session: Session): Promise<{ path: string | null; attempts: ProbeAttempt[] }>;
+  /** Descarga una página del catálogo de dropshipping. */
+  fetchCatalog?(session: Session, path: string, page: number): Promise<OrdersPage>;
 }
 
 export class SessionExpired extends Error {

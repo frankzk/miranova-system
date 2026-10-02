@@ -46,6 +46,8 @@ export async function createAccount(form: FormData) {
   const p = PLATFORMS.find((x) => x.id === platform);
   if (!p || !country || !email || !password) back("Completa plataforma, país, correo y contraseña.", false);
   const totp = totpField(form);
+  // Cuenta de dropshipper dedicada a espiar el catálogo (no baja órdenes).
+  const catalogOnly = form.get("catalog_only") === "on";
 
   const name = field(form, "name") || `${p.id === "soydrop" ? "Drop" : "Dropi"} ${country.name}`;
 
@@ -72,8 +74,9 @@ export async function createAccount(form: FormData) {
       password_enc: encrypt(password),
       totp_secret_enc: totp ? encrypt(totp) : null,
       enabled: p.ready,
-      // tras lo reciente, cargar el historial hacia atrás en las siguientes sincronizaciones
-      backfill_cursor: new Date(Date.now() - 45 * 86_400_000).toISOString(),
+      catalog_only: catalogOnly,
+      // una cuenta de catálogo no baja historial de órdenes
+      backfill_cursor: catalogOnly ? null : new Date(Date.now() - 45 * 86_400_000).toISOString(),
     })
     .select("id")
     .single();

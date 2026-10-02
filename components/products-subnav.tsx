@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/products/performance", label: "Rendimiento" },
   { href: "/products/inventory", label: "Inventario" },
   { href: "/products/matrix", label: "Tienda × producto" },
+  { href: "/products/competencia", label: "Competencia" },
 ];
 
 /** Vistas de Productos: catálogo del proveedor, rendimiento en pedidos y matriz tienda × producto. */
