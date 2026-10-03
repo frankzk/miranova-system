@@ -61,7 +61,14 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
     const s = catalogQuery(cf, patch);
     return s ? `${PATH}?${s}` : PATH;
   };
-  const CLEAR = { q: undefined, f: undefined, pais: undefined, prov: undefined, stock: undefined, precio: undefined, cambio: undefined, sort: undefined };
+  const CLEAR = {
+    q: undefined, f: undefined, pais: undefined, prov: undefined, stock: undefined, smin: undefined, smax: undefined,
+    precio: undefined, cambio: undefined, sort: undefined,
+  };
+  const { stockMin: smin, stockMax: smax } = cf;
+  const rangeLabel = smin !== undefined && smax !== undefined
+    ? `${fmtInt(smin)} – ${fmtInt(smax)} u.`
+    : smin !== undefined ? `desde ${fmtInt(smin)} u.` : smax !== undefined ? `hasta ${fmtInt(smax)} u.` : null;
   // un chip por cada valor elegido; quitarlo deja los demás del mismo filtro
   const chips = <T extends string>(key: string, values: T[], label: (v: T) => string) =>
     values.map((v) => ({ id: `${key}:${v}`, label: label(v), href: href({ [key]: values.filter((x) => x !== v) }) }));
@@ -69,6 +76,7 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
     ...chips("pais", cf.countries, (v) => `País: ${countryOfCurrency(v)}`),
     ...chips("prov", cf.vendors, (v) => `Proveedor: ${v}`),
     ...chips("stock", cf.stocks, (v) => `Stock: ${STOCK_BANDS.find((b) => b.id === v)?.label ?? v}`),
+    ...(rangeLabel ? [{ id: "srange", label: `Stock: ${rangeLabel}`, href: href({ smin: undefined, smax: undefined }) }] : []),
     ...chips("precio", cf.prices, (v) => `Precio: ${PRICE_BANDS[v]}`),
     ...chips("cambio", cf.changes, (v) => CHANGE_KINDS[v]),
   ];
@@ -166,6 +174,18 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
                   options={facets.vendors.options} selected={cf.vendors} />
                 <MultiSelect name="stock" label="Stock" hint="existencia actual" all="Cualquier stock" allCount={facets.stocks.all}
                   options={facets.stocks.options} selected={cf.stocks} />
+                {/* key: al quitar el chip del rango, los campos se vacían */}
+                <div className="field" key={`range:${smin ?? ""}-${smax ?? ""}`}>
+                  <span id="stock-range-l">Stock entre<span className="hint">unidades exactas</span></span>
+                  <div className="stock-range" role="group" aria-labelledby="stock-range-l">
+                    <input className="input" type="number" name="smin" min={0} step={1} inputMode="numeric"
+                      placeholder="Desde" aria-label="Stock desde" defaultValue={smin} />
+                    <span aria-hidden>–</span>
+                    <input className="input" type="number" name="smax" min={0} step={1} inputMode="numeric"
+                      placeholder="Hasta" aria-label="Stock hasta" defaultValue={smax} />
+                    <span className="u">u.</span>
+                  </div>
+                </div>
                 <MultiSelect name="precio" label="Precio proveedor" hint="por tercios, dentro de cada país" all="Todos los precios"
                   allCount={facets.prices.all} options={facets.prices.options} selected={cf.prices} />
                 <MultiSelect name="cambio" label="Cambios en 30 días" all="Con y sin cambios" allCount={facets.changes.all}
