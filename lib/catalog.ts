@@ -352,6 +352,58 @@ export function pickVendor(raw: unknown): string | null {
   return isObj(raw) ? pickStr(raw, VENDOR_KEYS) : null;
 }
 
+// ─── Cambios en el tiempo (precio / stock) ───
+
+/** Una foto del producto comparada con la anterior (de la función SQL catalog_changes). */
+export type CatalogChange = {
+  name: string;
+  vendor: string | null;
+  code: string | null;
+  currency: string;
+  takenAt: string;
+  prevCost: number | null;
+  cost: number | null;
+  prevSuggested: number | null;
+  suggested: number | null;
+  prevStock: number | null;
+  stock: number | null;
+};
+
+export type ChangeTag = {
+  kind: "price_down" | "price_up" | "cost_down" | "cost_up" | "stockout" | "restock" | "stock_down" | "stock_up";
+  /** Dirección para colorear: baja / sube / aviso / neutro. */
+  tone: "down" | "up" | "warning" | "neutral";
+  label: string;
+};
+
+const relPct = (prev: number, cur: number): number | null => (prev !== 0 ? Math.round(((cur - prev) / Math.abs(prev)) * 100) : null);
+const signed = (n: number): string => (n > 0 ? `+${n}` : `${n}`);
+
+/** Qué cambió entre la foto anterior y la nueva: re-precio, cambio de costo, quiebre o reabasto. */
+export function changeTags(c: CatalogChange): ChangeTag[] {
+  const tags: ChangeTag[] = [];
+
+  if (c.prevSuggested !== null && c.suggested !== null && c.suggested !== c.prevSuggested) {
+    const down = c.suggested < c.prevSuggested;
+    const pct = relPct(c.prevSuggested, c.suggested);
+    tags.push({ kind: down ? "price_down" : "price_up", tone: down ? "down" : "up", label: `Precio ${pct !== null ? `${signed(pct)}%` : down ? "baja" : "sube"}` });
+  }
+
+  if (c.prevCost !== null && c.cost !== null && c.cost !== c.prevCost) {
+    const down = c.cost < c.prevCost;
+    const pct = relPct(c.prevCost, c.cost);
+    tags.push({ kind: down ? "cost_down" : "cost_up", tone: down ? "down" : "up", label: `Costo ${pct !== null ? `${signed(pct)}%` : down ? "baja" : "sube"}` });
+  }
+
+  if (c.prevStock !== null && c.stock !== null && c.stock !== c.prevStock) {
+    if (c.prevStock > 0 && c.stock === 0) tags.push({ kind: "stockout", tone: "warning", label: "Sin stock" });
+    else if (c.prevStock === 0 && c.stock > 0) tags.push({ kind: "restock", tone: "up", label: "Reabastecido" });
+    else { const down = c.stock < c.prevStock; tags.push({ kind: down ? "stock_down" : "stock_up", tone: "neutral", label: `Stock ${signed(c.stock - c.prevStock)}` }); }
+  }
+
+  return tags;
+}
+
 function normName(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }

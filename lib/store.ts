@@ -129,15 +129,40 @@ export async function saveProducts(
   return products.length;
 }
 
+const numOrNull = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+
 /**
  * Guarda (o actualiza) el catálogo de la competencia de una cuenta de dropshipper.
  * Reutiliza el extractor de productos y añade el proveedor que ofrece cada producto.
  * `first_seen_at` no se incluye: queda al valor original en actualizaciones.
+ * Además registra en `catalog_history` un renglón cuando un producto es nuevo o le
+ * cambió el costo, el sugerido o el stock (para rastrear re-precios y quiebres).
  */
 export async function saveCatalog(accountId: string, currency: string, payload: unknown): Promise<number> {
   const items = extractProducts(payload);
   if (items.length === 0) return 0;
   const now = new Date().toISOString();
+
+  // Valores anteriores (para registrar en el historial solo lo que cambió).
+  const extIds = items.map((p) => p.external_id);
+  const before = new Map<string, { cost: number | null; suggested: number | null; stock: number | null }>();
+  for (let i = 0; i < extIds.length; i += 500) {
+    const { data, error } = await db()
+      .from("catalog_products")
+      .select("external_id, cost, suggested, stock")
+      .eq("account_id", accountId)
+      .in("external_id", extIds.slice(i, i + 500));
+    if (error) throw error;
+    for (const r of data) before.set(r.external_id as string, { cost: numOrNull(r.cost), suggested: numOrNull(r.suggested), stock: numOrNull(r.stock) });
+  }
+
+  // Si la cuenta aún no tiene historial, esta corrida siembra la línea base de todo
+  // el catálogo (así el primer cambio futuro ya tiene con qué compararse).
+  const { count: histCount, error: hcErr } = await db()
+    .from("catalog_history").select("*", { count: "exact", head: true }).eq("account_id", accountId);
+  if (hcErr) throw hcErr;
+  const seeding = (histCount ?? 0) === 0;
+
   const rows = items.map((p) => ({
     account_id: accountId,
     external_id: p.external_id,
@@ -153,7 +178,24 @@ export async function saveCatalog(accountId: string, currency: string, payload: 
     last_seen_at: now,
     updated_at: now,
   }));
-  const { error } = await db().from("catalog_products").upsert(rows, { onConflict: "account_id,external_id" });
+  const { data: saved, error } = await db()
+    .from("catalog_products")
+    .upsert(rows, { onConflict: "account_id,external_id" })
+    .select("id, external_id");
   if (error) throw error;
+  const idByExt = new Map(saved.map((r) => [r.external_id as string, r.id as string]));
+
+  // Historial: producto nuevo (línea base) o cambio de costo / sugerido / stock.
+  const hist = items.flatMap((p) => {
+    const id = idByExt.get(p.external_id);
+    if (!id) return [];
+    const prev = before.get(p.external_id);
+    const changed = !prev || prev.cost !== p.price || prev.suggested !== p.suggested_price || prev.stock !== p.stock;
+    return changed ? [{ catalog_product_id: id, account_id: accountId, cost: p.price, suggested: p.suggested_price, stock: p.stock }] : [];
+  });
+  if (hist.length) {
+    const { error: hErr } = await db().from("catalog_history").insert(hist);
+    if (hErr) throw hErr;
+  }
   return items.length;
 }

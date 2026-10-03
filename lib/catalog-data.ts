@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import type { CatalogProduct } from "./catalog";
+import type { CatalogChange, CatalogProduct } from "./catalog";
 
 /** Cuentas de dropshipper marcadas como fuente del catálogo de la competencia. */
 export async function catalogAccounts(): Promise<
@@ -43,4 +43,27 @@ export async function listCatalog(accountId: string | null, limit = 8000): Promi
     if (data.length < pageSize) break;
   }
   return out;
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+
+/** Cambios de precio/stock del catálogo en los últimos `days` días (más recientes primero). */
+export async function listCatalogChanges(accountId: string | null, days = 30): Promise<CatalogChange[]> {
+  const { data, error } = await db().rpc("catalog_changes", { p_account: accountId, p_days: days });
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    name: text(r.name) ?? "Producto",
+    vendor: text(r.vendor),
+    code: text(r.code),
+    currency: text(r.currency) ?? "CRC",
+    takenAt: text(r.taken_at) ?? "",
+    prevCost: num(r.prev_cost),
+    cost: num(r.cost),
+    prevSuggested: num(r.prev_suggested),
+    suggested: num(r.suggested),
+    prevStock: num(r.prev_stock),
+    stock: num(r.stock),
+  }));
 }
