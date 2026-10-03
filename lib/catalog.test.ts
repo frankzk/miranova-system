@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  analyzeCatalog, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, pickVendor, toNum,
-  type CatalogProduct,
+  analyzeCatalog, changeTags, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, pickVendor, toNum,
+  type CatalogChange, type CatalogProduct,
 } from "./catalog.ts";
+
+const change = (c: Partial<CatalogChange>): CatalogChange => ({
+  name: "X", vendor: null, code: null, currency: "CRC", takenAt: "2026-10-03T00:00:00Z",
+  prevCost: null, cost: null, prevSuggested: null, suggested: null, prevStock: null, stock: null, ...c,
+});
 
 // ─── toNum: limpieza de números sucios ───
 
@@ -127,6 +132,35 @@ test("marginPctOf evita dividir por cero", () => {
 });
 
 // ─── pickVendor (lo usa el guardado del catálogo para sacar el proveedor del raw) ───
+
+// ─── changeTags: cambios de precio/stock ───
+
+test("changeTags: baja de precio sugerido con porcentaje", () => {
+  const t = changeTags(change({ prevSuggested: 10000, suggested: 8000 }));
+  assert.equal(t.length, 1);
+  assert.equal(t[0].kind, "price_down");
+  assert.equal(t[0].tone, "down");
+  assert.equal(t[0].label, "Precio -20%");
+});
+
+test("changeTags: subida de precio", () => {
+  const t = changeTags(change({ prevSuggested: 8000, suggested: 10000 }));
+  assert.equal(t[0].kind, "price_up");
+  assert.equal(t[0].label, "Precio +25%");
+});
+
+test("changeTags: quiebre y reabasto de stock", () => {
+  assert.equal(changeTags(change({ prevStock: 50, stock: 0 }))[0].kind, "stockout");
+  assert.equal(changeTags(change({ prevStock: 0, stock: 30 }))[0].kind, "restock");
+  assert.equal(changeTags(change({ prevStock: 50, stock: 20 }))[0].label, "Stock -30");
+});
+
+test("changeTags: combina costo y stock; sin cambios da vacío", () => {
+  const t = changeTags(change({ prevCost: 5000, cost: 4000, prevStock: 10, stock: 10 }));
+  assert.equal(t.length, 1);
+  assert.equal(t[0].kind, "cost_down");
+  assert.deepEqual(changeTags(change({ prevSuggested: 100, suggested: 100 })), []);
+});
 
 test("pickVendor reconoce el proveedor anidado o plano", () => {
   assert.equal(pickVendor({ vendor: { name: "Ecomfive Costa Rica" } }), "Ecomfive Costa Rica");

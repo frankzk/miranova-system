@@ -3,9 +3,9 @@ import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { fmtAgo, fmtInt, fmtMoney } from "@/lib/format";
-import { analyzeCatalog } from "@/lib/catalog";
-import { catalogAccounts, listCatalog } from "@/lib/catalog-data";
+import { fmtAgo, fmtInt, fmtMoney, fmtShort } from "@/lib/format";
+import { analyzeCatalog, changeTags, type CatalogChange, type ChangeTag } from "@/lib/catalog";
+import { catalogAccounts, listCatalog, listCatalogChanges } from "@/lib/catalog-data";
 
 export const metadata = { title: "Competencia" };
 export const dynamic = "force-dynamic";
@@ -13,11 +13,22 @@ export const dynamic = "force-dynamic";
 const pct = (x: number | null) => (x === null ? "—" : `${x >= 0 ? "+" : ""}${Math.round(x * 100)}%`);
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
+const TONE: Record<ChangeTag["tone"], string> = { down: "danger", up: "success", warning: "warning", neutral: "neutral" };
+
+/** Antes → ahora del campo que cambió (sugerido primero, luego stock, luego costo). */
+function detail(c: CatalogChange, cur: string): string {
+  if (c.prevSuggested !== null && c.suggested !== null && c.suggested !== c.prevSuggested) return `${fmtMoney(c.prevSuggested, cur)} → ${fmtMoney(c.suggested, cur)}`;
+  if (c.prevStock !== null && c.stock !== null && c.stock !== c.prevStock) return `${fmtInt(c.prevStock)} → ${fmtInt(c.stock)} u.`;
+  if (c.prevCost !== null && c.cost !== null && c.cost !== c.prevCost) return `costo ${fmtMoney(c.prevCost, cur)} → ${fmtMoney(c.cost, cur)}`;
+  return "—";
+}
+
 export default async function CompetenciaPage() {
   const user = await requirePermission("products");
   const canAccounts = can(user, "accounts");
   const sources = await catalogAccounts();
   const products = sources.length ? await listCatalog(null) : [];
+  const changes = sources.length ? await listCatalogChanges(null, 30) : [];
   const a = analyzeCatalog(products, { top: 15 });
   const cur = a.currency;
   const lastSync = sources.map((s) => s.catalog_sync_at).filter(Boolean).sort().pop() ?? null;
@@ -82,6 +93,47 @@ export default async function CompetenciaPage() {
               <span className="foot">sugerido {fmtMoney(a.suggested?.median ?? null, cur)}</span>
             </div>
           </section>
+
+          <h2>Cambios recientes · últimos 30 días</h2>
+          {changes.length === 0 ? (
+            <p className="sub" style={{ marginTop: -4 }}>
+              El rastreo arranca ahora. Cuando un proveedor cambie precio o stock entre sincronizaciones, el cambio aparece acá
+              (bajadas/subidas de precio, quiebres y reabastos).
+            </p>
+          ) : (
+            <div className="table-wrap">
+              <div className="table-scroll">
+                <table className="table stack">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th className="hide-md">Proveedor</th>
+                      <th>Cambio</th>
+                      <th className="hide-md">Detalle</th>
+                      <th>Cuándo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changes.slice(0, 50).map((c, i) => (
+                      <tr key={`${c.code ?? c.name}-${c.takenAt}-${i}`}>
+                        <td data-slot="id"><span className="strong clip" title={c.name}>{clip(c.name, 42)}</span></td>
+                        <td className="hide-md hide-sm">{c.vendor ?? "—"}</td>
+                        <td data-slot="status">
+                          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+                            {changeTags(c).map((t, j) => (
+                              <span key={j} className="pill" data-tone={TONE[t.tone]}>{t.label}</span>
+                            ))}
+                          </span>
+                        </td>
+                        <td className="hide-md hide-sm sub">{detail(c, cur)}</td>
+                        <td className="sub nowrap">{fmtShort(c.takenAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <h2>Mejor para pautar (costo bajo + buen margen)</h2>
           <div className="table-wrap">
