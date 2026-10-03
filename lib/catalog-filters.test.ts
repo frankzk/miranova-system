@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { CatalogChange, CatalogMovement } from "./catalog.ts";
 import {
   applyCatalogFilters, catalogContext, catalogFacets, catalogQuery, countryOfCurrency, parseCatalogFilters, priceBand,
-  sortCatalog, type CatalogFilters,
+  sortCatalog, stockBand, type CatalogFilters,
 } from "./catalog-filters.ts";
 
 const item = (o: Partial<CatalogMovement>): CatalogMovement => ({
@@ -14,7 +14,9 @@ const change = (o: Partial<CatalogChange>): CatalogChange => ({
   name: "Producto", vendor: "Prov", code: "A", currency: "HNL", takenAt: "2026-10-01T00:00:00Z",
   prevCost: null, cost: null, prevSuggested: null, suggested: null, prevStock: null, stock: null, ...o,
 });
-const F = (o: Partial<CatalogFilters> = {}): CatalogFilters => ({ q: "", tab: "", ...o });
+const F = (o: Partial<CatalogFilters> = {}): CatalogFilters => ({
+  q: "", tab: "", countries: [], vendors: [], stocks: [], prices: [], changes: [], ...o,
+});
 
 const items = [
   item({ id: "H1", name: "Drenaje linfático", vendor: "SUPLEM HN", cost: 206, stock: 876, unitsDown: 97, stockChanges: 2, lastMove: "2026-10-02" }),
@@ -32,17 +34,27 @@ const changes = [
 ];
 const ctx = catalogContext(items, changes);
 
-test("parseCatalogFilters descarta valores desconocidos", () => {
-  const f = parseCatalogFilters({ q: " gotas ", f: "moving", pais: "HNL", prov: "SUPLEM HN", precio: "low", cambio: "cost_down", sort: "cost_asc" });
-  assert.deepEqual(f, { q: "gotas", tab: "moving", country: "HNL", vendor: "SUPLEM HN", price: "low", change: "cost_down", sort: "cost_asc" });
-  const bad = parseCatalogFilters({ f: "nope", pais: "honduras", precio: "x", cambio: "price_up", sort: "drop" });
-  assert.deepEqual(bad, { q: "", tab: "", country: undefined, vendor: undefined, price: undefined, change: undefined, sort: undefined });
+test("parseCatalogFilters: listas repetidas, sin duplicados ni valores desconocidos", () => {
+  const f = parseCatalogFilters({
+    q: " gotas ", f: "moving", pais: ["HNL", "CRC"], prov: ["SUPLEM HN", "BAMBU", "SUPLEM HN"], stock: ["1-10", "mas-1000"],
+    precio: "low", cambio: ["cost_down", "restock"], sort: "cost_asc",
+  });
+  assert.deepEqual(f, {
+    q: "gotas", tab: "moving", countries: ["HNL", "CRC"], vendors: ["SUPLEM HN", "BAMBU"], stocks: ["1-10", "mas-1000"],
+    prices: ["low"], changes: ["cost_down", "restock"], sort: "cost_asc",
+  });
+  const bad = parseCatalogFilters({ f: "nope", pais: "honduras", stock: "1000+", precio: ["x", "high"], cambio: "price_up", sort: "drop" });
+  assert.deepEqual(bad, { q: "", tab: "", countries: [], vendors: [], stocks: [], prices: ["high"], changes: [], sort: undefined });
 });
 
-test("catalogQuery omite vacíos y aplica cambios", () => {
-  const f = F({ tab: "out", vendor: "BAMBU" });
-  assert.equal(catalogQuery(f), "f=out&prov=BAMBU");
-  assert.equal(catalogQuery(f, { prov: undefined, sort: "name_asc" }), "f=out&sort=name_asc");
+test("catalogQuery omite vacíos, repite las listas y aplica cambios", () => {
+  const f = F({ tab: "out", vendors: ["BAMBU", "SUPLEM HN"], stocks: ["0"] });
+  assert.equal(catalogQuery(f), "f=out&prov=BAMBU&prov=SUPLEM+HN&stock=0");
+  assert.equal(catalogQuery(f, { prov: ["SUPLEM HN"], stock: undefined, sort: "name_asc" }), "f=out&prov=SUPLEM+HN&sort=name_asc");
+  // ida y vuelta por la URL
+  const url = new URLSearchParams(catalogQuery(f));
+  const sp = Object.fromEntries([...new Set(url.keys())].map((k) => [k, url.getAll(k)]));
+  assert.deepEqual(parseCatalogFilters(sp), { ...f, sort: undefined });
 });
 
 test("countryOfCurrency: país único o la moneda si es ambigua", () => {
@@ -85,7 +97,7 @@ test("pestañas: movimiento, reabasto, stock bajo, agotados, quietos", () => {
 });
 
 test("conteos por faceta: cada filtro cuenta con los demás aplicados", () => {
-  const f = F({ country: "HNL", vendor: "SUPLEM HN" });
+  const f = F({ countries: ["HNL"], vendors: ["SUPLEM HN"] });
   const fx = catalogFacets(items, f, ctx);
   // pestañas: dentro de SUPLEM en HNL
   assert.equal(fx.tabs[""], 2);
@@ -100,23 +112,25 @@ test("conteos por faceta: cada filtro cuenta con los demás aplicados", () => {
 });
 
 test("el proveedor elegido sigue en la lista aunque quede en 0", () => {
-  const fx = catalogFacets(items, F({ country: "CRC", vendor: "BAMBU" }), ctx);
+  const fx = catalogFacets(items, F({ countries: ["CRC"], vendors: ["BAMBU"] }), ctx);
   assert.deepEqual(fx.vendors.options.find((o) => o.value === "BAMBU"), { value: "BAMBU", label: "BAMBU", count: 0 });
 });
 
 test("con una sola moneda, los tercios de precio dicen su rango", () => {
-  const hn = catalogFacets(items, F({ country: "HNL" }), ctx);
+  const hn = catalogFacets(items, F({ countries: ["HNL"] }), ctx);
   assert.equal(hn.prices.options[0].label, "Más baratos · hasta L 187.00");
   assert.equal(hn.prices.options[1].label, "Precio medio · L 187.00 – L 206.00");
   assert.equal(hn.prices.options[2].label, "Más caros · más de L 206.00");
   const mixed = catalogFacets(items, F(), ctx);
   assert.equal(mixed.prices.options[0].label, "Más baratos");
+  assert.equal(catalogFacets(items, F({ countries: ["HNL", "CRC"] }), ctx).prices.options[0].label, "Más baratos");
 });
 
 test("filtro de cambios cuenta productos, no eventos", () => {
   const fx = catalogFacets(items, F(), ctx);
   assert.deepEqual(fx.changes.options.map((o) => [o.value, o.count]), [["cost_down", 1], ["cost_up", 0], ["stockout", 1], ["restock", 1]]);
-  assert.deepEqual(applyCatalogFilters(items, F({ change: "cost_down" }), ctx).map((m) => m.id), ["H4"]);
+  assert.deepEqual(applyCatalogFilters(items, F({ changes: ["cost_down"] }), ctx).map((m) => m.id), ["H4"]);
+  assert.deepEqual(applyCatalogFilters(items, F({ changes: ["cost_down", "stockout"] }), ctx).map((m) => m.id).sort(), ["H2", "H4"]);
 });
 
 test("orden: por defecto lo que más se mueve; precio agrupado por moneda y sin dato al final", () => {
@@ -126,4 +140,34 @@ test("orden: por defecto lo que más se mueve; precio agrupado por moneda y sin 
   assert.deepEqual(sortCatalog(items, "stock_asc").map((m) => m.id), ["H2", "H4", "C1", "H1", "H3", "C2"]);
   assert.deepEqual(sortCatalog(items, "recent").map((m) => m.id).slice(0, 3), ["H2", "H1", "H4"]);
   assert.equal(sortCatalog(items, "restock")[0].id, "H4");
+});
+
+test("rangos de stock: bordes incluidos, sin dato fuera de todos", () => {
+  const at = (stock: number | null) => stockBand(item({ stock }));
+  assert.equal(at(0), "0");
+  assert.equal(at(1), "1-10");
+  assert.equal(at(10), "1-10");
+  assert.equal(at(11), "11-50");
+  assert.equal(at(200), "51-200");
+  assert.equal(at(1000), "201-1000");
+  assert.equal(at(1001), "mas-1000");
+  assert.equal(at(null), null);
+  const fx = catalogFacets(items, F(), ctx);
+  assert.deepEqual(fx.stocks.options.map((o) => [o.value, o.count]), [
+    ["0", 1], ["1-10", 1], ["11-50", 1], ["51-200", 0], ["201-1000", 1], ["mas-1000", 1],
+  ]);
+  // la Faja (stock sin dato) cuenta en "todos" pero en ningún rango
+  assert.equal(fx.stocks.all - fx.stocks.options.reduce((t, o) => t + o.count, 0), 1);
+});
+
+test("selección múltiple: se suma dentro del filtro y se cruza entre filtros", () => {
+  const ids = (f: Partial<CatalogFilters>) => applyCatalogFilters(items, F(f), ctx).map((m) => m.id).sort();
+  assert.deepEqual(ids({ vendors: ["BAMBU", "Bionatural"] }), ["C1", "C2", "H4"]);
+  assert.deepEqual(ids({ vendors: ["BAMBU", "Bionatural"], countries: ["CRC"] }), ["C1", "C2"]);
+  assert.deepEqual(ids({ stocks: ["0", "1-10"] }), ["H2", "H4"]);
+  assert.deepEqual(ids({ stocks: ["0", "1-10"], vendors: ["BAMBU"] }), ["H4"]);
+  // con un proveedor marcado, los demás siguen contando lo que sumarían
+  const fx = catalogFacets(items, F({ vendors: ["BAMBU"] }), ctx);
+  assert.equal(fx.vendors.options.find((o) => o.value === "SUPLEM HN")?.count, 2);
+  assert.equal(fx.tabs[""], 1);
 });

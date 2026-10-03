@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AutoSelect, GetForm } from "@/components/client";
-import { FilterSelect } from "@/components/filter-select";
+import { MultiSelect } from "@/components/multi-select";
 import { IconArrowRight, IconClose, IconFilter, IconSearch } from "@/components/icons";
 import { Masonry } from "@/components/masonry";
 import { ProductsSubnav } from "@/components/products-subnav";
@@ -11,7 +11,7 @@ import { fmtAgo, fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { analyzeCatalog, buildSparkline, changeTags, type CatalogChange, type CatalogMovement, type ChangeTag } from "@/lib/catalog";
 import {
   applyCatalogFilters, CAT_DEFAULT_SORT, CAT_SORTS, CAT_TABS, catalogContext, catalogFacets, catalogQuery, CHANGE_KINDS,
-  countryOfCurrency, parseCatalogFilters, PRICE_BANDS, type CatalogSort,
+  countryOfCurrency, parseCatalogFilters, PRICE_BANDS, STOCK_BANDS, type CatalogSort,
 } from "@/lib/catalog-filters";
 import { catalogAccounts, listCatalogChanges, listCatalogMovement, listCatalogSeries } from "@/lib/catalog-data";
 import "./competencia.css";
@@ -57,21 +57,24 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
   const ctx = catalogContext(movement, changes);
   const rows = applyCatalogFilters(movement, cf, ctx);
   const facets = catalogFacets(movement, cf, ctx);
-  const href = (patch: Record<string, string | undefined>) => {
+  const href = (patch: Record<string, string | string[] | undefined>) => {
     const s = catalogQuery(cf, patch);
     return s ? `${PATH}?${s}` : PATH;
   };
-  const CLEAR = { q: undefined, f: undefined, pais: undefined, prov: undefined, precio: undefined, cambio: undefined, sort: undefined };
+  const CLEAR = { q: undefined, f: undefined, pais: undefined, prov: undefined, stock: undefined, precio: undefined, cambio: undefined, sort: undefined };
+  // un chip por cada valor elegido; quitarlo deja los demás del mismo filtro
+  const chips = <T extends string>(key: string, values: T[], label: (v: T) => string) =>
+    values.map((v) => ({ id: `${key}:${v}`, label: label(v), href: href({ [key]: values.filter((x) => x !== v) }) }));
   const applied = [
-    cf.country && { key: "pais", label: `País: ${countryOfCurrency(cf.country)}` },
-    cf.vendor && { key: "prov", label: `Proveedor: ${cf.vendor}` },
-    cf.price && { key: "precio", label: `Precio: ${PRICE_BANDS[cf.price]}` },
-    cf.change && { key: "cambio", label: CHANGE_KINDS[cf.change] },
-  ].filter(Boolean) as { key: string; label: string }[];
+    ...chips("pais", cf.countries, (v) => `País: ${countryOfCurrency(v)}`),
+    ...chips("prov", cf.vendors, (v) => `Proveedor: ${v}`),
+    ...chips("stock", cf.stocks, (v) => `Stock: ${STOCK_BANDS.find((b) => b.id === v)?.label ?? v}`),
+    ...chips("precio", cf.prices, (v) => `Precio: ${PRICE_BANDS[v]}`),
+    ...chips("cambio", cf.changes, (v) => CHANGE_KINDS[v]),
+  ];
   const filtered = Boolean(cf.q || cf.tab || cf.sort || applied.length);
-  const showCountry = facets.countries.options.length > 1 || Boolean(cf.country);
+  const showCountry = facets.countries.options.length > 1 || cf.countries.length > 0;
   const byCurrency = cf.sort?.startsWith("cost") && new Set(rows.map((m) => m.currency)).size > 1;
-  const withCount = (label: string, n: number) => `${label} (${fmtInt(n)})`;
 
   return (
     <div className="page">
@@ -156,15 +159,21 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
               </summary>
               <div className="more-panel">
                 {showCountry && (
-                  <FilterSelect name="pais" label="País del proveedor" value={cf.country}
-                    all={withCount("Todos los países", facets.countries.all)} options={facets.countries.options} />
+                  <MultiSelect name="pais" label="País del proveedor" all="Todos los países" allCount={facets.countries.all}
+                    options={facets.countries.options} selected={cf.countries} />
                 )}
-                <FilterSelect name="prov" label="Proveedor" value={cf.vendor}
-                  all={withCount("Todos los proveedores", facets.vendors.all)} options={facets.vendors.options} />
-                <FilterSelect name="precio" label="Precio proveedor" hint="por tercios, dentro de cada país" value={cf.price}
-                  all={withCount("Todos los precios", facets.prices.all)} options={facets.prices.options} />
-                <FilterSelect name="cambio" label="Cambios en 30 días" value={cf.change}
-                  all={withCount("Con y sin cambios", facets.changes.all)} options={facets.changes.options} />
+                <MultiSelect name="prov" label="Proveedor" all="Todos los proveedores" allCount={facets.vendors.all}
+                  options={facets.vendors.options} selected={cf.vendors} />
+                <MultiSelect name="stock" label="Stock" hint="existencia actual" all="Cualquier stock" allCount={facets.stocks.all}
+                  options={facets.stocks.options} selected={cf.stocks} />
+                <MultiSelect name="precio" label="Precio proveedor" hint="por tercios, dentro de cada país" all="Todos los precios"
+                  allCount={facets.prices.all} options={facets.prices.options} selected={cf.prices} />
+                <MultiSelect name="cambio" label="Cambios en 30 días" all="Con y sin cambios" allCount={facets.changes.all}
+                  options={facets.changes.options} selected={cf.changes} />
+                <div className="more-foot">
+                  <span>Puedes marcar varias por filtro</span>
+                  <button className="btn btn-primary btn-sm" type="submit">Aplicar</button>
+                </div>
               </div>
             </details>
             {filtered && <Link className="btn btn-ghost" href={href(CLEAR)}>Limpiar</Link>}
@@ -183,7 +192,7 @@ export default async function CompetenciaPage({ searchParams }: { searchParams: 
           {applied.length > 0 && (
             <div className="applied" aria-label="Filtros aplicados">
               {applied.map((x) => (
-                <Link key={x.key} href={href({ [x.key]: undefined })} aria-label={`Quitar ${x.label}`}>
+                <Link key={x.id} href={x.href} aria-label={`Quitar ${x.label}`}>
                   {x.label} <IconClose />
                 </Link>
               ))}
