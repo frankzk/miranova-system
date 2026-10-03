@@ -31,6 +31,17 @@ export const CAT_SORTS = {
 } as const;
 export type CatalogSort = keyof typeof CAT_SORTS;
 
+/** Rangos de stock actual (unidades: no dependen de la moneda). */
+export const STOCK_BANDS = [
+  { id: "0", label: "Agotados · 0 u.", min: 0, max: 0 },
+  { id: "1-10", label: "1 – 10 u.", min: 1, max: 10 },
+  { id: "11-50", label: "11 – 50 u.", min: 11, max: 50 },
+  { id: "51-200", label: "51 – 200 u.", min: 51, max: 200 },
+  { id: "201-1000", label: "201 – 1,000 u.", min: 201, max: 1000 },
+  { id: "mas-1000", label: "Más de 1,000 u.", min: 1001, max: Infinity },
+] as const;
+export type StockBand = (typeof STOCK_BANDS)[number]["id"];
+
 /** Tercios del precio proveedor, calculados dentro de cada moneda. */
 export const PRICE_BANDS = { low: "Más baratos", mid: "Precio medio", high: "Más caros" } as const;
 export type PriceBand = keyof typeof PRICE_BANDS;
@@ -44,16 +55,19 @@ export const CHANGE_KINDS = {
 } as const;
 export type ChangeKind = keyof typeof CHANGE_KINDS;
 
+/** Los filtros de lista son de selección múltiple: dentro de uno se suman, entre ellos se cruzan. */
 export type CatalogFilters = {
   q: string;
   tab: CatalogTab;
-  /** Moneda del proveedor (CRC, HNL…): en Drop equivale al país del que vende. */
-  country?: string;
-  vendor?: string;
-  price?: PriceBand;
-  change?: ChangeKind;
+  /** Monedas del proveedor (CRC, HNL…): en Drop equivale al país del que vende. */
+  countries: string[];
+  vendors: string[];
+  stocks: StockBand[];
+  prices: PriceBand[];
+  changes: ChangeKind[];
   sort?: CatalogSort;
 };
+export type QueryPatch = Record<string, string | string[] | undefined>;
 
 export type FacetOption = { value: string; label: string; count: number };
 /** `all`: cuántos quedan sin este filtro (con los demás aplicados). */
@@ -68,29 +82,34 @@ export function parseCatalogFilters(sp: Record<string, string | string[] | undef
     const s = (Array.isArray(v) ? v[0] : v)?.trim();
     return s ? s : undefined;
   };
+  // varios valores del mismo filtro llegan repetidos: ?prov=A&prov=B
+  const many = (k: string) => {
+    const v = sp[k];
+    const list = (Array.isArray(v) ? v : v ? [v] : []).map((s) => s.trim()).filter(Boolean);
+    return [...new Set(list)];
+  };
   const tab = one("f") ?? "";
-  const country = one("pais");
-  const price = one("precio");
-  const change = one("cambio");
   const sort = one("sort");
   return {
     q: one("q") ?? "",
     tab: CAT_TABS.some((t) => t.id === tab) ? (tab as CatalogTab) : "",
-    country: country && /^[A-Z]{3}$/.test(country) ? country : undefined,
-    vendor: one("prov"),
-    price: price && price in PRICE_BANDS ? (price as PriceBand) : undefined,
-    change: change && change in CHANGE_KINDS ? (change as ChangeKind) : undefined,
+    countries: many("pais").filter((c) => /^[A-Z]{3}$/.test(c)),
+    vendors: many("prov"),
+    stocks: many("stock").filter((s): s is StockBand => STOCK_BANDS.some((b) => b.id === s)),
+    prices: many("precio").filter((p): p is PriceBand => p in PRICE_BANDS),
+    changes: many("cambio").filter((c): c is ChangeKind => c in CHANGE_KINDS),
     sort: sort && sort in CAT_SORTS ? (sort as CatalogSort) : undefined,
   };
 }
 
-/** Query string con los filtros actuales + cambios (vacíos se omiten). */
-export function catalogQuery(f: CatalogFilters, patch: Record<string, string | undefined> = {}): string {
-  const merged: Record<string, string | undefined> = {
-    q: f.q, f: f.tab, pais: f.country, prov: f.vendor, precio: f.price, cambio: f.change, sort: f.sort, ...patch,
+/** Query string con los filtros actuales + cambios (vacíos se omiten; las listas van repetidas). */
+export function catalogQuery(f: CatalogFilters, patch: QueryPatch = {}): string {
+  const merged: QueryPatch = {
+    q: f.q, f: f.tab, pais: f.countries, prov: f.vendors, stock: f.stocks, precio: f.prices, cambio: f.changes, sort: f.sort,
+    ...patch,
   };
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries(merged)) for (const x of Array.isArray(v) ? v : [v]) if (x) p.append(k, x);
   return p.toString();
 }
 
@@ -135,6 +154,12 @@ export function priceBand(m: CatalogMovement, ctx: CatalogContext): PriceBand | 
   return m.cost <= cut[0] ? "low" : m.cost <= cut[1] ? "mid" : "high";
 }
 
+export function stockBand(m: CatalogMovement): StockBand | null {
+  const s = m.stock;
+  if (s === null) return null;
+  return STOCK_BANDS.find((b) => s >= b.min && s <= b.max)?.id ?? null;
+}
+
 export function inCatalogTab(m: CatalogMovement, tab: CatalogTab): boolean {
   switch (tab) {
     case "moving": return m.unitsDown > 0;
@@ -148,16 +173,26 @@ export function inCatalogTab(m: CatalogMovement, tab: CatalogTab): boolean {
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-type FacetKey = "tab" | "country" | "vendor" | "price" | "change";
+type FacetKey = "tab" | "country" | "vendor" | "stock" | "price" | "change";
 
 /** ¿Pasa los filtros? `skip` deja fuera una faceta (para contar sus opciones). */
 function passes(m: CatalogMovement, f: CatalogFilters, ctx: CatalogContext, q: string, skip?: FacetKey): boolean {
   if (q && ![m.name, m.vendor, m.id].some((v) => v && fold(v).includes(q))) return false;
   if (skip !== "tab" && !inCatalogTab(m, f.tab)) return false;
-  if (skip !== "country" && f.country && m.currency !== f.country) return false;
-  if (skip !== "vendor" && f.vendor && (m.vendor ?? "") !== f.vendor) return false;
-  if (skip !== "price" && f.price && priceBand(m, ctx) !== f.price) return false;
-  if (skip !== "change" && f.change && !(m.id && ctx.changes.get(m.id)?.has(f.change))) return false;
+  if (skip !== "country" && f.countries.length && !f.countries.includes(m.currency)) return false;
+  if (skip !== "vendor" && f.vendors.length && !f.vendors.includes(m.vendor ?? "")) return false;
+  if (skip !== "stock" && f.stocks.length) {
+    const b = stockBand(m);
+    if (!b || !f.stocks.includes(b)) return false;
+  }
+  if (skip !== "price" && f.prices.length) {
+    const b = priceBand(m, ctx);
+    if (!b || !f.prices.includes(b)) return false;
+  }
+  if (skip !== "change" && f.changes.length) {
+    const kinds = m.id ? ctx.changes.get(m.id) : undefined;
+    if (!kinds || !f.changes.some((k) => kinds.has(k))) return false;
+  }
   return true;
 }
 
@@ -204,6 +239,7 @@ export type CatalogFacets = {
   tabs: Record<string, number>;
   countries: Facet;
   vendors: Facet;
+  stocks: Facet;
   prices: Facet;
   changes: Facet;
 };
@@ -224,8 +260,14 @@ export function catalogFacets(items: CatalogMovement[], f: CatalogFilters, ctx: 
   const tabPool = pool("tab");
   const tabs = Object.fromEntries(CAT_TABS.map((t) => [t.id, tabPool.filter((m) => inCatalogTab(m, t.id)).length]));
 
+  // lo elegido sigue en la lista aunque con los demás filtros quede en 0
+  const keep = (n: Map<string, number>, chosen: string[]) => {
+    for (const v of chosen) if (!n.has(v)) n.set(v, 0);
+    return n;
+  };
+
   const countryPool = pool("country");
-  const byCountry = tally(countryPool, (m) => m.currency);
+  const byCountry = keep(tally(countryPool, (m) => m.currency), f.countries);
   const countries: Facet = {
     all: countryPool.length,
     options: [...byCountry]
@@ -233,10 +275,9 @@ export function catalogFacets(items: CatalogMovement[], f: CatalogFilters, ctx: 
       .map(([cur, count]) => ({ value: cur, label: countryOfCurrency(cur), count })),
   };
 
-  // proveedores: los que tienen algo con los filtros actuales (y el elegido, aunque quede en 0)
+  // proveedores: los que tienen algo con los filtros actuales
   const vendorPool = pool("vendor");
-  const byVendor = tally(vendorPool, (m) => m.vendor);
-  if (f.vendor && !byVendor.has(f.vendor)) byVendor.set(f.vendor, 0);
+  const byVendor = keep(tally(vendorPool, (m) => m.vendor), f.vendors);
   const vendors: Facet = {
     all: vendorPool.length,
     options: [...byVendor]
@@ -244,11 +285,18 @@ export function catalogFacets(items: CatalogMovement[], f: CatalogFilters, ctx: 
       .map(([v, count]) => ({ value: v, label: v, count })),
   };
 
+  const stockPool = pool("stock");
+  const byStock = tally(stockPool, stockBand);
+  const stocks: Facet = {
+    all: stockPool.length,
+    options: STOCK_BANDS.map((b) => ({ value: b.id, label: b.label, count: byStock.get(b.id) ?? 0 })),
+  };
+
   // con una sola moneda a la vista, cada tercio dice su rango de precio
   const pricePool = pool("price");
   const byBand = tally(pricePool, (m) => priceBand(m, ctx));
   const curs = new Set(pricePool.map((m) => m.currency));
-  const only = curs.size === 1 ? [...curs][0] : f.country;
+  const only = curs.size === 1 ? [...curs][0] : f.countries.length === 1 ? f.countries[0] : undefined;
   const cut = only ? ctx.cuts.get(only) : undefined;
   const range: Record<PriceBand, string> | null = cut && only
     ? {
@@ -276,5 +324,5 @@ export function catalogFacets(items: CatalogMovement[], f: CatalogFilters, ctx: 
     })),
   };
 
-  return { tabs, countries, vendors, prices, changes };
+  return { tabs, countries, vendors, stocks, prices, changes };
 }
