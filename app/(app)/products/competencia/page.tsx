@@ -4,8 +4,9 @@ import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { fmtAgo, fmtInt, fmtMoney, fmtShort } from "@/lib/format";
-import { analyzeCatalog, changeTags, type CatalogChange, type ChangeTag } from "@/lib/catalog";
+import { analyzeCatalog, changeTags, marginPctOf, type CatalogChange, type CatalogProduct, type ChangeTag } from "@/lib/catalog";
 import { catalogAccounts, listCatalog, listCatalogChanges } from "@/lib/catalog-data";
+import "./competencia.css";
 
 export const metadata = { title: "Competencia" };
 export const dynamic = "force-dynamic";
@@ -33,6 +34,13 @@ export default async function CompetenciaPage() {
   const cur = a.currency;
   const lastSync = sources.map((s) => s.catalog_sync_at).filter(Boolean).sort().pop() ?? null;
   const syncError = canAccounts ? sources.find((s) => s.catalog_sync_msg && !s.catalog_sync_msg.includes("actualizados")) : undefined;
+
+  // Catálogo ordenado por margen (lo más interesante primero) + mapas por código.
+  const grid = [...products].sort((x, y) => (marginPctOf(y) ?? -1) - (marginPctOf(x) ?? -1));
+  const changeByCode = new Map<string, CatalogChange>();
+  for (const c of changes) if (c.code && !changeByCode.has(c.code)) changeByCode.set(c.code, c);
+  const imgByCode = new Map<string, string | null>();
+  for (const p of products) if (p.id && !imgByCode.has(p.id)) imgByCode.set(p.id, p.image);
 
   return (
     <div className="page">
@@ -80,7 +88,7 @@ export default async function CompetenciaPage() {
             <div className="metric">
               <span className="label">Proveedores</span>
               <span className="value">{fmtInt(a.summary.vendors)}</span>
-              <span className="foot">{fmtInt(a.duplicates.length)} productos en más de uno</span>
+              <span className="foot">{fmtInt(changes.length)} cambios en 30 días</span>
             </div>
             <div className="metric">
               <span className="label">Margen mediano</span>
@@ -93,6 +101,40 @@ export default async function CompetenciaPage() {
               <span className="foot">sugerido {fmtMoney(a.suggested?.median ?? null, cur)}</span>
             </div>
           </section>
+
+          <h2>Catálogo · de mayor a menor margen</h2>
+          <div className="cat-grid">
+            {grid.map((p, i) => {
+              const mp = marginPctOf(p);
+              const ch = p.id ? changeByCode.get(p.id) : undefined;
+              const tags = ch ? changeTags(ch).slice(0, 2) : [];
+              return (
+                <article className="cat-card" key={`${p.id ?? p.name}-${i}`}>
+                  <figure className="cat-fig">
+                    {p.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image} alt={p.name} loading="lazy" />
+                    ) : (
+                      <div className="cat-fig--empty">{p.name.slice(0, 1).toUpperCase()}</div>
+                    )}
+                    {tags.length > 0 && (
+                      <div className="cat-badges">
+                        {tags.map((t, j) => <span key={j} className="pill" data-tone={TONE[t.tone]}>{t.label}</span>)}
+                      </div>
+                    )}
+                  </figure>
+                  <div className="cat-body">
+                    <div className="cat-name" title={p.name}>{p.name}</div>
+                    <div className="cat-vendor" title={p.vendor ?? ""}>{p.vendor ?? "—"}</div>
+                    <div className="cat-foot">
+                      <span className="cat-price">{fmtMoney(p.cost, cur)} → <b>{fmtMoney(p.suggested, cur)}</b></span>
+                      <span className="cat-margin" data-flat={mp === null}>{pct(mp)}</span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
 
           <h2>Cambios recientes · últimos 30 días</h2>
           {changes.length === 0 ? (
@@ -114,54 +156,37 @@ export default async function CompetenciaPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {changes.slice(0, 50).map((c, i) => (
-                      <tr key={`${c.code ?? c.name}-${c.takenAt}-${i}`}>
-                        <td data-slot="id"><span className="strong clip" title={c.name}>{clip(c.name, 42)}</span></td>
-                        <td className="hide-md hide-sm">{c.vendor ?? "—"}</td>
-                        <td data-slot="status">
-                          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-                            {changeTags(c).map((t, j) => (
-                              <span key={j} className="pill" data-tone={TONE[t.tone]}>{t.label}</span>
-                            ))}
-                          </span>
-                        </td>
-                        <td className="hide-md hide-sm sub">{detail(c, cur)}</td>
-                        <td className="sub nowrap">{fmtShort(c.takenAt)}</td>
-                      </tr>
-                    ))}
+                    {changes.slice(0, 60).map((c, i) => {
+                      const thumb = c.code ? imgByCode.get(c.code) ?? null : null;
+                      return (
+                        <tr key={`${c.code ?? c.name}-${c.takenAt}-${i}`}>
+                          <td data-slot="id">
+                            <div className="cat-row-prod">
+                              {thumb && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img className="cat-thumb" src={thumb} alt="" loading="lazy" />
+                              )}
+                              <span className="strong clip" title={c.name}>{clip(c.name, 40)}</span>
+                            </div>
+                          </td>
+                          <td className="hide-md hide-sm">{c.vendor ?? "—"}</td>
+                          <td data-slot="status">
+                            <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+                              {changeTags(c).map((t, j) => (
+                                <span key={j} className="pill" data-tone={TONE[t.tone]}>{t.label}</span>
+                              ))}
+                            </span>
+                          </td>
+                          <td className="hide-md hide-sm sub">{detail(c, cur)}</td>
+                          <td className="sub nowrap">{fmtShort(c.takenAt)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
-
-          <h2>Mejor para pautar (costo bajo + buen margen)</h2>
-          <div className="table-wrap">
-            <div className="table-scroll">
-              <table className="table stack">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th className="hide-md">Proveedor</th>
-                    <th className="r">Costo</th>
-                    <th className="r">Sugerido</th>
-                    <th className="r">Margen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {a.bestEntry.map((p, i) => (
-                    <tr key={`${p.id}-${i}`}>
-                      <td data-slot="id"><span className="strong clip" title={p.name}>{clip(p.name, 48)}</span></td>
-                      <td className="hide-md hide-sm">{p.vendor ?? "—"}</td>
-                      <td data-slot="total" className="num">{fmtMoney(p.cost, cur)}</td>
-                      <td data-slot="customer" className="num">{fmtMoney(p.suggested, cur)}</td>
-                      <td className="num strong">{pct(p.marginPct)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
 
           <h2>Por proveedor</h2>
           <div className="table-wrap">
