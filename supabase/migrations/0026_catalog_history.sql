@@ -97,3 +97,28 @@ $$;
 
 revoke all on function public.catalog_movement(uuid, int) from public, anon, authenticated;
 grant execute on function public.catalog_movement(uuid, int) to service_role;
+
+-- Serie de stock por producto (orden cronológico) para la mini-gráfica de tendencia
+-- que se revela al pasar el mouse sobre la tarjeta. Solo productos con 2+ fotos de
+-- historial en la ventana. Devuelve un objeto jsonb { code: [stock, ...] }.
+create or replace function public.catalog_stock_series(p_account uuid, p_days int default 30)
+returns jsonb language sql stable as $$
+  with pts as (
+    select cp.code, h.taken_at, h.stock
+    from public.catalog_history h
+    join public.catalog_products cp on cp.id = h.catalog_product_id
+    where (p_account is null or h.account_id = p_account)
+      and h.taken_at >= now() - (p_days * interval '1 day')
+      and cp.code is not null and h.stock is not null
+  ),
+  keep as (select code from pts group by code having count(*) >= 2)
+  select coalesce(jsonb_object_agg(code, series), '{}'::jsonb)
+  from (
+    select p.code, jsonb_agg(p.stock order by p.taken_at) as series
+    from pts p join keep k on k.code = p.code
+    group by p.code
+  ) s
+$$;
+
+revoke all on function public.catalog_stock_series(uuid, int) from public, anon, authenticated;
+grant execute on function public.catalog_stock_series(uuid, int) to service_role;

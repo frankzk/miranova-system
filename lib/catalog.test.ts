@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  analyzeCatalog, changeTags, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, pickVendor, toNum,
+  analyzeCatalog, buildSparkline, changeTags, inspectExport, mapProduct, marginPctOf, parseCatalogExport, parseCsv, pickVendor, toNum,
   type CatalogChange, type CatalogProduct,
 } from "./catalog.ts";
 
@@ -160,6 +160,31 @@ test("changeTags: combina costo y stock; sin cambios da vacío", () => {
   assert.equal(t.length, 1);
   assert.equal(t[0].kind, "cost_down");
   assert.deepEqual(changeTags(change({ prevSuggested: 100, suggested: 100 })), []);
+});
+
+// ─── buildSparkline ───
+
+test("buildSparkline: stock que baja dibuja de arriba-izq a abajo-der", () => {
+  const s = buildSparkline([10, 0], 100, 40, 0);
+  assert.ok(s);
+  assert.equal(s!.first, 10);
+  assert.equal(s!.lastVal, 0);
+  assert.equal(s!.min, 0);
+  assert.equal(s!.max, 10);
+  assert.equal(s!.line, "M0.0 0.0 L100.0 40.0"); // 10→y0 (arriba), 0→y40 (abajo)
+  assert.equal(s!.last.x, 100);
+  assert.equal(s!.last.y, 40);
+});
+
+test("buildSparkline: serie plana queda a media altura y no truena", () => {
+  const s = buildSparkline([50, 50, 50], 100, 40, 0);
+  assert.ok(s);
+  assert.ok(s!.line.includes("20")); // span=1 → centrado
+});
+
+test("buildSparkline: menos de 2 puntos devuelve null", () => {
+  assert.equal(buildSparkline([5]), null);
+  assert.equal(buildSparkline([]), null);
 });
 
 test("pickVendor reconoce el proveedor anidado o plano", () => {
