@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import type { CatalogChange, CatalogProduct } from "./catalog";
+import type { CatalogChange, CatalogMovement, CatalogProduct } from "./catalog";
 
 /** Cuentas de dropshipper marcadas como fuente del catálogo de la competencia. */
 export async function catalogAccounts(): Promise<
@@ -47,6 +47,27 @@ export async function listCatalog(accountId: string | null, limit = 8000): Promi
 
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
 const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+
+/** Catálogo con el movimiento de stock de los últimos `days` días (lo más movido primero). */
+export async function listCatalogMovement(accountId: string | null, days = 30): Promise<CatalogMovement[]> {
+  const { data, error } = await db().rpc("catalog_movement", { p_account: accountId, p_days: days });
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: text(r.code),
+    name: text(r.name) ?? "Producto",
+    vendor: text(r.vendor),
+    stock: num(r.stock),
+    cost: num(r.cost),
+    suggested: num(r.suggested),
+    currency: text(r.currency) ?? "CRC",
+    image: text(r.image_url),
+    unitsDown: num(r.units_down) ?? 0,
+    unitsUp: num(r.units_up) ?? 0,
+    stockChanges: num(r.stock_changes) ?? 0,
+    lastMove: text(r.last_move),
+  }));
+}
 
 /** Cambios de precio/stock del catálogo en los últimos `days` días (más recientes primero). */
 export async function listCatalogChanges(accountId: string | null, days = 30): Promise<CatalogChange[]> {

@@ -29,6 +29,7 @@ export type Stats = { min: number; median: number; max: number; avg: number };
 
 export type VendorStat = {
   vendor: string;
+  currency: string;
   products: number;
   /** Productos con costo y sugerido (para medir margen). */
   withPrices: number;
@@ -47,6 +48,7 @@ export type ScoredProduct = CatalogProduct & {
 export type DuplicateGroup = {
   /** Nombre representativo (el más frecuente del grupo). */
   name: string;
+  currency: string;
   offers: number;
   vendors: string[];
   costRange: [number, number] | null;
@@ -376,6 +378,16 @@ export type ChangeTag = {
   label: string;
 };
 
+/** Producto del catálogo con su movimiento de stock en una ventana de días. */
+export type CatalogMovement = CatalogProduct & {
+  /** Unidades que salieron de stock (lo que la competencia movió/vendió). */
+  unitsDown: number;
+  /** Unidades que entraron (reabastos). */
+  unitsUp: number;
+  stockChanges: number;
+  lastMove: string | null;
+};
+
 const relPct = (prev: number, cur: number): number | null => (prev !== 0 ? Math.round(((cur - prev) / Math.abs(prev)) * 100) : null);
 const signed = (n: number): string => (n > 0 ? `+${n}` : `${n}`);
 
@@ -447,6 +459,7 @@ export function analyzeCatalog(products: CatalogProduct[], opts: { top?: number 
     const mStats = stats(margins);
     return {
       vendor,
+      currency: ps.find((p) => p.currency)?.currency ?? currency,
       products: ps.length,
       withPrices: margins.length,
       medianMarginPct: mStats?.median ?? null,
@@ -473,11 +486,13 @@ export function analyzeCatalog(products: CatalogProduct[], opts: { top?: number 
   });
 
   // Duplicados (mismo producto, varios proveedores)
+  // Se agrupa por nombre + moneda: comparar precios de distinta moneda no tiene sentido.
   const groups = new Map<string, CatalogProduct[]>();
   for (const p of products) {
     const k = normName(p.name);
     if (!k) continue;
-    (groups.get(k) ?? groups.set(k, []).get(k)!).push(p);
+    const key = `${k}\u0000${p.currency}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(p);
   }
   const duplicates: DuplicateGroup[] = [...groups.values()]
     .filter((ps) => ps.length > 1)
@@ -487,6 +502,7 @@ export function analyzeCatalog(products: CatalogProduct[], opts: { top?: number 
       const cheapest = costed.length ? costed.reduce((a, b) => (b.cost < a.cost ? b : a)) : null;
       return {
         name: mostCommonName(ps),
+        currency: ps[0].currency,
         offers: ps.length,
         vendors: [...new Set(ps.map((p) => p.vendor).filter((v): v is string => !!v))],
         costRange: costs.length ? [Math.min(...costs), Math.max(...costs)] as [number, number] : null,

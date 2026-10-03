@@ -58,3 +58,42 @@ $$;
 
 revoke all on function public.catalog_changes(uuid, int) from public, anon, authenticated;
 grant execute on function public.catalog_changes(uuid, int) to service_role;
+
+-- Movimiento de stock por producto en una ventana: unidades que bajaron (lo que la
+-- competencia movió), unidades que subieron (reabastos) y cuándo fue el último cambio.
+create or replace function public.catalog_movement(p_account uuid, p_days int default 30)
+returns jsonb language sql stable as $$
+  with hist as (
+    select h.catalog_product_id, h.account_id, h.taken_at, h.stock,
+           lag(h.stock) over (partition by h.catalog_product_id order by h.taken_at) as prev_stock
+    from public.catalog_history h
+    where (p_account is null or h.account_id = p_account)
+  ),
+  win as (
+    select * from hist
+    where taken_at >= now() - (p_days * interval '1 day') and prev_stock is not null
+  ),
+  agg as (
+    select catalog_product_id,
+      coalesce(sum(greatest(prev_stock - stock, 0)), 0) as units_down,
+      coalesce(sum(greatest(stock - prev_stock, 0)), 0) as units_up,
+      count(*) filter (where stock is distinct from prev_stock) as stock_changes,
+      max(taken_at) filter (where stock is distinct from prev_stock) as last_move
+    from win group by catalog_product_id
+  )
+  select coalesce(jsonb_agg(to_jsonb(x) order by x.units_down desc, x.stock_changes desc, x.name), '[]'::jsonb)
+  from (
+    select cp.code, cp.name, cp.vendor, cp.currency, cp.image_url,
+           cp.cost, cp.suggested, cp.stock,
+           coalesce(a.units_down, 0) as units_down,
+           coalesce(a.units_up, 0) as units_up,
+           coalesce(a.stock_changes, 0) as stock_changes,
+           a.last_move
+    from public.catalog_products cp
+    left join agg a on a.catalog_product_id = cp.id
+    where (p_account is null or cp.account_id = p_account)
+  ) x
+$$;
+
+revoke all on function public.catalog_movement(uuid, int) from public, anon, authenticated;
+grant execute on function public.catalog_movement(uuid, int) to service_role;
