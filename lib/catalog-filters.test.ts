@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { CatalogChange, CatalogMovement } from "./catalog.ts";
 import {
   applyCatalogFilters, catalogContext, catalogFacets, catalogQuery, countryOfCurrency, parseCatalogFilters, priceBand,
-  sortCatalog, stockBand, type CatalogFilters,
+  inStockRange, sortCatalog, stockBand, type CatalogFilters,
 } from "./catalog-filters.ts";
 
 const item = (o: Partial<CatalogMovement>): CatalogMovement => ({
@@ -15,7 +15,7 @@ const change = (o: Partial<CatalogChange>): CatalogChange => ({
   prevCost: null, cost: null, prevSuggested: null, suggested: null, prevStock: null, stock: null, ...o,
 });
 const F = (o: Partial<CatalogFilters> = {}): CatalogFilters => ({
-  q: "", tab: "", countries: [], vendors: [], stocks: [], prices: [], changes: [], ...o,
+  q: "", tab: "", countries: [], vendors: [], stocks: [], stockMin: undefined, stockMax: undefined, prices: [], changes: [], ...o,
 });
 
 const items = [
@@ -41,16 +41,21 @@ test("parseCatalogFilters: listas repetidas, sin duplicados ni valores desconoci
   });
   assert.deepEqual(f, {
     q: "gotas", tab: "moving", countries: ["HNL", "CRC"], vendors: ["SUPLEM HN", "BAMBU"], stocks: ["1-10", "mas-1000"],
-    prices: ["low"], changes: ["cost_down", "restock"], sort: "cost_asc",
+    stockMin: undefined, stockMax: undefined, prices: ["low"], changes: ["cost_down", "restock"], sort: "cost_asc",
   });
   const bad = parseCatalogFilters({ f: "nope", pais: "honduras", stock: "1000+", precio: ["x", "high"], cambio: "price_up", sort: "drop" });
-  assert.deepEqual(bad, { q: "", tab: "", countries: [], vendors: [], stocks: [], prices: ["high"], changes: [], sort: undefined });
+  assert.deepEqual(bad, {
+    q: "", tab: "", countries: [], vendors: [], stocks: [], stockMin: undefined, stockMax: undefined, prices: ["high"], changes: [], sort: undefined,
+  });
 });
 
 test("catalogQuery omite vacíos, repite las listas y aplica cambios", () => {
-  const f = F({ tab: "out", vendors: ["BAMBU", "SUPLEM HN"], stocks: ["0"] });
-  assert.equal(catalogQuery(f), "f=out&prov=BAMBU&prov=SUPLEM+HN&stock=0");
-  assert.equal(catalogQuery(f, { prov: ["SUPLEM HN"], stock: undefined, sort: "name_asc" }), "f=out&prov=SUPLEM+HN&sort=name_asc");
+  const f = F({ tab: "out", vendors: ["BAMBU", "SUPLEM HN"], stocks: ["0"], stockMin: 0, stockMax: 300 });
+  assert.equal(catalogQuery(f), "f=out&prov=BAMBU&prov=SUPLEM+HN&stock=0&smin=0&smax=300");
+  assert.equal(
+    catalogQuery(f, { prov: ["SUPLEM HN"], stock: undefined, smin: undefined, smax: undefined, sort: "name_asc" }),
+    "f=out&prov=SUPLEM+HN&sort=name_asc",
+  );
   // ida y vuelta por la URL
   const url = new URLSearchParams(catalogQuery(f));
   const sp = Object.fromEntries([...new Set(url.keys())].map((k) => [k, url.getAll(k)]));
@@ -170,4 +175,39 @@ test("selección múltiple: se suma dentro del filtro y se cruza entre filtros",
   const fx = catalogFacets(items, F({ vendors: ["BAMBU"] }), ctx);
   assert.equal(fx.vendors.options.find((o) => o.value === "SUPLEM HN")?.count, 2);
   assert.equal(fx.tabs[""], 1);
+});
+
+test("rango de stock escrito: enteros, acepta comas e invierte si vienen al revés", () => {
+  const r = (sp: Record<string, string>) => {
+    const f = parseCatalogFilters(sp);
+    return [f.stockMin, f.stockMax];
+  };
+  assert.deepEqual(r({ smin: "50", smax: "1,000" }), [50, 1000]);
+  assert.deepEqual(r({ smin: "300", smax: "50" }), [50, 300]);
+  assert.deepEqual(r({ smin: "0" }), [0, undefined]);
+  assert.deepEqual(r({ smin: "-5", smax: "abc" }), [undefined, undefined]);
+  assert.deepEqual(r({ smax: "12.5" }), [undefined, undefined]);
+});
+
+test("rango de stock escrito: filtra con bordes incluidos y deja fuera el stock sin dato", () => {
+  assert.equal(inStockRange(item({ stock: 50 }), 50, 300), true);
+  assert.equal(inStockRange(item({ stock: 300 }), 50, 300), true);
+  assert.equal(inStockRange(item({ stock: 301 }), 50, 300), false);
+  assert.equal(inStockRange(item({ stock: null }), undefined, 300), false);
+  assert.equal(inStockRange(item({ stock: null })), true);
+  const ids = (f: Partial<CatalogFilters>) => applyCatalogFilters(items, F(f), ctx).map((m) => m.id).sort();
+  assert.deepEqual(ids({ stockMin: 5, stockMax: 900 }), ["C1", "H1", "H4"]);
+  assert.deepEqual(ids({ stockMin: 1000 }), ["H3"]);
+  assert.deepEqual(ids({ stockMax: 0 }), ["H2"]);
+  // se cruza con los rangos fijos: (1–10 u. o 11–50 u.) y desde 11 → solo la cámara de 12 u.
+  assert.deepEqual(ids({ stocks: ["1-10", "11-50"], stockMin: 11 }), ["C1"]);
+});
+
+test("rango de stock escrito: los conteos de los rangos fijos ya lo respetan", () => {
+  const fx = catalogFacets(items, F({ stockMin: 5, stockMax: 900 }), ctx);
+  assert.deepEqual(fx.stocks.options.map((o) => [o.value, o.count]), [
+    ["0", 0], ["1-10", 1], ["11-50", 1], ["51-200", 0], ["201-1000", 1], ["mas-1000", 0],
+  ]);
+  assert.equal(fx.stocks.all, 3);
+  assert.equal(fx.tabs[""], 3);
 });

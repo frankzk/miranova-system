@@ -17,6 +17,11 @@
 /* Barra de filtros: el orden va a la derecha, como en una tienda. */
 .cat-sort { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-sm); color: var(--ink-3); }
 .cat-count { margin: -4px 0 12px; font-size: var(--t-sm); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+/* Rango exacto de stock: desde – hasta u. */
+.stock-range { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--t-sm); }
+.stock-range .input { flex: 1 1 0; min-width: 0; font-variant-numeric: tabular-nums; }
+.stock-range .u { flex: none; }
+
 /* Los filtros de selección múltiple se aplican juntos, con este botón. */
 .more-foot {
   display: flex;

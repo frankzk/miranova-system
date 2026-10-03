@@ -63,6 +63,9 @@ export type CatalogFilters = {
   countries: string[];
   vendors: string[];
   stocks: StockBand[];
+  /** Rango exacto de stock escrito a mano (unidades, ambos incluidos). */
+  stockMin?: number;
+  stockMax?: number;
   prices: PriceBand[];
   changes: ChangeKind[];
   sort?: CatalogSort;
@@ -88,14 +91,24 @@ export function parseCatalogFilters(sp: Record<string, string | string[] | undef
     const list = (Array.isArray(v) ? v : v ? [v] : []).map((s) => s.trim()).filter(Boolean);
     return [...new Set(list)];
   };
+  // enteros ≥ 0 (acepta "1,000"); lo demás se ignora
+  const units = (k: string) => {
+    const s = one(k)?.replace(/[,\s]/g, "");
+    return s && /^\d+$/.test(s) ? Number(s) : undefined;
+  };
   const tab = one("f") ?? "";
   const sort = one("sort");
+  let stockMin = units("smin");
+  let stockMax = units("smax");
+  if (stockMin !== undefined && stockMax !== undefined && stockMin > stockMax) [stockMin, stockMax] = [stockMax, stockMin];
   return {
     q: one("q") ?? "",
     tab: CAT_TABS.some((t) => t.id === tab) ? (tab as CatalogTab) : "",
     countries: many("pais").filter((c) => /^[A-Z]{3}$/.test(c)),
     vendors: many("prov"),
     stocks: many("stock").filter((s): s is StockBand => STOCK_BANDS.some((b) => b.id === s)),
+    stockMin,
+    stockMax,
     prices: many("precio").filter((p): p is PriceBand => p in PRICE_BANDS),
     changes: many("cambio").filter((c): c is ChangeKind => c in CHANGE_KINDS),
     sort: sort && sort in CAT_SORTS ? (sort as CatalogSort) : undefined,
@@ -105,7 +118,8 @@ export function parseCatalogFilters(sp: Record<string, string | string[] | undef
 /** Query string con los filtros actuales + cambios (vacíos se omiten; las listas van repetidas). */
 export function catalogQuery(f: CatalogFilters, patch: QueryPatch = {}): string {
   const merged: QueryPatch = {
-    q: f.q, f: f.tab, pais: f.countries, prov: f.vendors, stock: f.stocks, precio: f.prices, cambio: f.changes, sort: f.sort,
+    q: f.q, f: f.tab, pais: f.countries, prov: f.vendors, stock: f.stocks,
+    smin: f.stockMin?.toString(), smax: f.stockMax?.toString(), precio: f.prices, cambio: f.changes, sort: f.sort,
     ...patch,
   };
   const p = new URLSearchParams();
@@ -173,7 +187,15 @@ export function inCatalogTab(m: CatalogMovement, tab: CatalogTab): boolean {
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-type FacetKey = "tab" | "country" | "vendor" | "stock" | "price" | "change";
+/** ¿Está dentro del rango escrito a mano? Sin rango, todo pasa; con rango, el stock sin dato no. */
+export function inStockRange(m: CatalogMovement, min?: number, max?: number): boolean {
+  if (min === undefined && max === undefined) return true;
+  if (m.stock === null) return false;
+  return (min === undefined || m.stock >= min) && (max === undefined || m.stock <= max);
+}
+
+// el rango escrito es su propio filtro: los conteos de los rangos fijos ya lo respetan
+type FacetKey = "tab" | "country" | "vendor" | "stock" | "range" | "price" | "change";
 
 /** ¿Pasa los filtros? `skip` deja fuera una faceta (para contar sus opciones). */
 function passes(m: CatalogMovement, f: CatalogFilters, ctx: CatalogContext, q: string, skip?: FacetKey): boolean {
@@ -185,6 +207,7 @@ function passes(m: CatalogMovement, f: CatalogFilters, ctx: CatalogContext, q: s
     const b = stockBand(m);
     if (!b || !f.stocks.includes(b)) return false;
   }
+  if (skip !== "range" && !inStockRange(m, f.stockMin, f.stockMax)) return false;
   if (skip !== "price" && f.prices.length) {
     const b = priceBand(m, ctx);
     if (!b || !f.prices.includes(b)) return false;
