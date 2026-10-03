@@ -4,8 +4,8 @@ import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { fmtAgo, fmtInt, fmtMoney, fmtShort } from "@/lib/format";
-import { analyzeCatalog, changeTags, type CatalogChange, type ChangeTag } from "@/lib/catalog";
-import { catalogAccounts, listCatalogChanges, listCatalogMovement } from "@/lib/catalog-data";
+import { analyzeCatalog, buildSparkline, changeTags, type CatalogChange, type ChangeTag } from "@/lib/catalog";
+import { catalogAccounts, listCatalogChanges, listCatalogMovement, listCatalogSeries } from "@/lib/catalog-data";
 import "./competencia.css";
 
 export const metadata = { title: "Competencia" };
@@ -29,6 +29,7 @@ export default async function CompetenciaPage() {
   const sources = await catalogAccounts();
   const movement = sources.length ? await listCatalogMovement(null, 30) : [];
   const changes = sources.length ? await listCatalogChanges(null, 30) : [];
+  const series = sources.length ? await listCatalogSeries(null, 30) : new Map<string, number[]>();
   const a = analyzeCatalog(movement, { top: 15 });
   const lastSync = sources.map((s) => s.catalog_sync_at).filter(Boolean).sort().pop() ?? null;
   const syncError = canAccounts ? sources.find((s) => s.catalog_sync_msg && !s.catalog_sync_msg.includes("actualizados")) : undefined;
@@ -106,9 +107,10 @@ export default async function CompetenciaPage() {
             {movement.map((m, i) => {
               const ch = m.id ? changeByCode.get(m.id) : undefined;
               const tags = ch ? changeTags(ch).filter((t) => !t.kind.startsWith("price")).slice(0, 2) : [];
+              const spark = m.id ? buildSparkline(series.get(m.id) ?? []) : null;
               return (
                 <article className="cat-card" key={`${m.id ?? m.name}-${i}`}>
-                  <figure className="cat-fig">
+                  <figure className="cat-fig" data-trend={spark ? "true" : undefined}>
                     {m.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.image} alt={m.name} loading="lazy" />
@@ -118,6 +120,29 @@ export default async function CompetenciaPage() {
                     {tags.length > 0 && (
                       <div className="cat-badges">
                         {tags.map((t, j) => <span key={j} className="pill" data-tone={TONE[t.tone]}>{t.label}</span>)}
+                      </div>
+                    )}
+                    {spark && (
+                      <div className="cat-trend" aria-hidden>
+                        <span className="cat-trend-head">Stock · 30 días</span>
+                        <svg
+                          className="cat-spark"
+                          viewBox={`0 0 ${spark.w} ${spark.h}`}
+                          preserveAspectRatio="none"
+                          role="img"
+                          aria-label="Tendencia de stock"
+                        >
+                          <path className="cat-spark-area" d={spark.area} />
+                          <path className="cat-spark-line" d={spark.line} />
+                        </svg>
+                        <span className="cat-trend-foot">
+                          <span className="cat-trend-range">{fmtInt(spark.first)} → {fmtInt(spark.lastVal)} u.</span>
+                          {m.unitsDown > 0 ? (
+                            <span className="pill" data-tone="info">−{fmtInt(m.unitsDown)} u.</span>
+                          ) : m.unitsUp > 0 ? (
+                            <span className="pill" data-tone="neutral">+{fmtInt(m.unitsUp)} u.</span>
+                          ) : null}
+                        </span>
                       </div>
                     )}
                   </figure>

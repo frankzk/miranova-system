@@ -416,6 +416,39 @@ export function changeTags(c: CatalogChange): ChangeTag[] {
   return tags;
 }
 
+// ─── Sparkline: línea de la tendencia de stock (SVG, puro) ───
+
+export type Spark = {
+  line: string;
+  area: string;
+  last: { x: number; y: number };
+  first: number;
+  lastVal: number;
+  min: number;
+  max: number;
+  w: number;
+  h: number;
+};
+
+/** Construye los paths SVG de una mini-gráfica de línea a partir de una serie de valores. */
+export function buildSparkline(values: number[], w = 200, h = 72, pad = 6): Spark | null {
+  const v = values.filter((n) => Number.isFinite(n));
+  if (v.length < 2) return null;
+  const min = Math.min(...v);
+  const max = Math.max(...v);
+  const span = max - min;
+  const n = v.length;
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / (n - 1);
+  // Serie plana (sin rango): la línea va a media altura, no pegada al piso (parecería cero).
+  const y = (val: number) => (span === 0 ? h / 2 : h - pad - ((val - min) / span) * (h - 2 * pad));
+  const pts = v.map((val, i) => [x(i), y(val)] as const);
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const base = (h - pad).toFixed(1);
+  const area = `${line} L${pts[n - 1][0].toFixed(1)} ${base} L${pts[0][0].toFixed(1)} ${base} Z`;
+  const lastP = pts[n - 1];
+  return { line, area, last: { x: lastP[0], y: lastP[1] }, first: v[0], lastVal: v[n - 1], min, max, w, h };
+}
+
 function normName(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }

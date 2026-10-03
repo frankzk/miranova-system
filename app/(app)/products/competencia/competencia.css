@@ -105,6 +105,67 @@
 .cat-stock { font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .cat-flat { font-size: var(--t-xs); color: var(--ink-4); }
 
+/* Tendencia de stock (30 días): se revela sobre la foto al pasar el mouse.
+   Va contenida dentro de la tarjeta para no recortarse con las columnas. */
+.cat-trend {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-surface);
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out);
+}
+.cat-card:hover .cat-trend,
+.cat-card:focus-within .cat-trend {
+  opacity: 1;
+}
+/* Sin hover (táctil / teclado), no escondemos nada que no se pueda recuperar:
+   la gráfica es un extra sobre la foto, el dato duro vive en el cuerpo. */
+@media (hover: none) {
+  .cat-trend { display: none; }
+}
+
+.cat-trend-head {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+.cat-spark {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  overflow: visible;
+}
+.cat-spark-area { fill: var(--accent-soft); stroke: none; }
+.cat-spark-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.cat-trend-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cat-trend-range {
+  font-size: var(--t-xs);
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Miniatura cuadrada para las filas de "Cambios recientes". */
 .cat-thumb {
   width: 34px;

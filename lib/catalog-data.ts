@@ -69,6 +69,18 @@ export async function listCatalogMovement(accountId: string | null, days = 30): 
   }));
 }
 
+/** Serie de stock por código de producto (solo los que tienen 2+ fotos) para la mini-gráfica. */
+export async function listCatalogSeries(accountId: string | null, days = 30): Promise<Map<string, number[]>> {
+  const { data, error } = await db().rpc("catalog_stock_series", { p_account: accountId, p_days: days });
+  if (error) throw error;
+  const obj = (data ?? {}) as Record<string, unknown>;
+  const map = new Map<string, number[]>();
+  for (const [code, arr] of Object.entries(obj)) {
+    if (Array.isArray(arr)) map.set(code, arr.map((x) => Number(x)).filter((x) => Number.isFinite(x)));
+  }
+  return map;
+}
+
 /** Cambios de precio/stock del catálogo en los últimos `days` días (más recientes primero). */
 export async function listCatalogChanges(accountId: string | null, days = 30): Promise<CatalogChange[]> {
   const { data, error } = await db().rpc("catalog_changes", { p_account: accountId, p_days: days });
