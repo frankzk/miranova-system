@@ -1,15 +1,24 @@
 /* Catálogo de la competencia: cuadrícula tipo mampostería (Pinterest) con foto real,
    dentro del mundo sobrio de Miranova (blanco, líneas de 1px, un solo acento). */
 
+/* Antes del JS: cuadrícula en orden de lectura (fila por fila). Con JS (components/masonry.tsx)
+   cada tarjeta sube a pegarse a la de arriba, sin cambiar de columna ni de orden. */
 .cat-grid {
-  column-width: 216px;
-  column-gap: 16px;
-  margin-top: 4px;
+  --masonry-min: 216px;
+  --masonry-gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--masonry-min), 1fr));
+  gap: var(--masonry-gap);
+  align-items: start;
 }
+.cat-grid[data-masonry] { display: block; position: relative; }
+.cat-grid[data-masonry] > * { position: absolute; }
+
+/* Barra de filtros: el orden va a la derecha, como en una tienda. */
+.cat-sort { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-sm); color: var(--ink-3); }
+.cat-count { margin: -4px 0 12px; font-size: var(--t-sm); color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 .cat-card {
-  break-inside: avoid;
-  margin: 0 0 16px;
   background: var(--bg-surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -180,6 +189,5 @@
 .cat-row-prod .strong { min-width: 0; }
 
 @media (max-width: 520px) {
-  .cat-grid { column-width: 150px; column-gap: 12px; }
-  .cat-card { margin-bottom: 12px; }
+  .cat-grid { --masonry-min: 150px; --masonry-gap: 12px; }
 }
