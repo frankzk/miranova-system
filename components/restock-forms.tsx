@@ -79,3 +79,14 @@ export function LeadTimeForm({
     </form>
   );
 }
+
+/** "Enviar resumen ahora": manda el correo diario en el momento, para probarlo. */
+export function SendDigestForm({ action }: { action: Action }) {
+  const [state, run] = useActionState(action, null);
+  return (
+    <form action={run} className="rs-digest">
+      <SubmitButton className="btn" pending="Enviando…">Enviar resumen ahora</SubmitButton>
+      <Msg state={state} />
+    </form>
+  );
+}

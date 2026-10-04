@@ -55,3 +55,5 @@
 .inv-cards dt { color: var(--ink-3); }
 .inv-cards dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
 .drawer .kv .spark { width: 100%; max-width: 280px; height: 28px; }
+.rs-digest { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rs-digest .rs-msg { max-width: 360px; text-align: right; }

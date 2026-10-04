@@ -79,6 +79,18 @@ export const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T0
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
 const utcToday = () => new Date().toISOString().slice(0, 10);
 
+/** "jue, 9 oct" (fecha YYYY-MM-DD). */
+export const shortDate = (day: string) =>
+  new Intl.DateTimeFormat("es", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${day.slice(0, 10)}T12:00:00Z`));
+
+/** "hoy", "mañana" o "jue, 9 oct" (fecha YYYY-MM-DD respecto de `today`). */
+export function dayLabel(day: string, today: string): string {
+  const n = daysBetween(today, day);
+  if (n <= 0) return "hoy";
+  if (n === 1) return "mañana";
+  return shortDate(day);
+}
+
 /** Salida neta por día (salidas − devoluciones, promedio de 14 días). */
 export const perDay = (r: Pick<InventoryRow, "out14" | "ret14">) => Math.max(0, r.out14 - r.ret14) / 14;
 
