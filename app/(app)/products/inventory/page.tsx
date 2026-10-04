@@ -3,18 +3,18 @@ import { AccountChips } from "@/components/account-chips";
 import { Drawer, DrawerClose } from "@/components/client";
 import { IconBox } from "@/components/icons";
 import { ProductsSubnav } from "@/components/products-subnav";
-import { CancelRestockForm, LeadTimeForm, RestockOrderForm } from "@/components/restock-forms";
+import { CancelRestockForm, LeadTimeForm, RestockOrderForm, SendDigestForm } from "@/components/restock-forms";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtShort, todayHN } from "@/lib/format";
 import {
-  addDays, daysBetween, INVENTORY_RULES, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL, reorderPlan, returnRate,
+  addDays, dayLabel, INVENTORY_RULES, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL, reorderPlan, returnRate,
   urgency, type InventoryRow, type ReorderLevel, type ReorderPlan,
 } from "@/lib/inventory";
 import { inventoryStatus, inventorySupply } from "@/lib/inventory-data";
 import { getScope } from "@/lib/scope";
-import { cancelRestockOrder, placeRestockOrder, saveLeadTime } from "./actions";
+import { cancelRestockOrder, placeRestockOrder, saveLeadTime, sendDigestNow } from "./actions";
 import "./inventory.css";
 
 export const metadata = { title: "Inventario" };
@@ -23,14 +23,6 @@ const PATH = "/products/inventory";
 const u = (n: number) => `${fmtInt(n)} u.`;
 const rate = (n: number) => (n >= 10 ? String(Math.round(n)) : n.toFixed(1));
 const days = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
-
-/** "hoy", "mañana" o "jue, 9 oct". */
-function dayLabel(day: string, today: string) {
-  const n = daysBetween(today, day);
-  if (n <= 0) return "hoy";
-  if (n === 1) return "mañana";
-  return new Intl.DateTimeFormat("es", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
-}
 
 /** Etiqueta de "cuándo pedir" para la tabla y la lista. */
 function whenLabel(p: ReorderPlan, today: string) {
@@ -57,7 +49,7 @@ function verdict(p: ReorderPlan, today: string) {
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requirePermission("products");
+  const user = await requirePermission("products");
   const sp = await searchParams;
   const pick = (k: string) => {
     const v = sp[k];
@@ -99,6 +91,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       <PageHead
         title="Inventario"
         sub={<>{fmtInt(all.length)} productos · {scope.label} · cuándo pedir según la venta reciente y lo que tarda en llegar cada reposición</>}
+        actions={user.is_owner && <SendDigestForm action={sendDigestNow} />}
       />
       <ProductsSubnav />
       <AccountChips accounts={accounts} current={scope.account} next={href({ p: undefined })} />

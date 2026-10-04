@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { RestockState } from "@/components/restock-forms";
 import { authorizeAction } from "@/lib/auth";
 import { REORDER } from "@/lib/inventory";
+import { runRestockDigest } from "@/lib/restock-digest-send";
 import { db } from "@/lib/supabase";
 
 // Registrar reposiciones pedidas y el tiempo que tardan en llegar: permiso Productos (no pide
@@ -78,4 +79,14 @@ export async function saveLeadTime(_prev: RestockState, form: FormData): Promise
   });
   if (error) return fail(`No se pudo guardar: ${error.message}`);
   return done(`Listo: ${days} ${days === 1 ? "día" : "días"} de reposición.`);
+}
+
+/** Envía ahora el resumen de "qué pedir hoy" (aunque no haya nada), para probar el correo. Solo el dueño. */
+export async function sendDigestNow(_prev: RestockState, _form: FormData): Promise<RestockState> {
+  const auth = await authorizeAction();
+  if (!auth.ok) return auth;
+  if (!auth.user.is_owner) return fail("Solo el dueño puede enviar el resumen.");
+  const run = await runRestockDigest({ force: true });
+  if (!run.ok) return fail(run.error);
+  return { ok: true, msg: `Resumen enviado a ${run.to.join(", ")}.` };
 }
