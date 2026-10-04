@@ -1,12 +1,50 @@
-/* Inventario */
+/* Inventario: qué pedir y cuándo */
 .inv-reorder { margin-bottom: 18px; }
-.inv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 18px; border-top: 1px solid var(--line); }
+.inv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "t need btn" "s s btn";
+  align-items: center;
+  gap: 4px 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+}
 .inv-reorder li:first-child .inv-row { border-top: 0; }
-.inv-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inv-row .s { font-size: var(--t-sm); color: var(--ink-3); }
-.inv-row .need { text-align: right; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.inv-row .t { grid-area: t; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-row .s { grid-area: s; font-size: var(--t-sm); color: var(--ink-3); }
+.inv-row .s .pill { margin-right: 4px; }
+.inv-row .need { grid-area: need; text-align: right; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.inv-row .btn { grid-area: btn; }
 .inv-table td { vertical-align: middle; }
-.inv-table td[data-high] { color: var(--danger); font-weight: 600; }
+.inv-table .inv-up { color: var(--warning); font-weight: 550; }
+.inv-table .inv-gap { color: var(--danger); font-weight: 550; }
+.inv-card-btn { margin-top: 10px; }
+
+/* Panel del producto: decisión, cuentas y formularios */
+.rs-verdict { display: flex; align-items: baseline; gap: 8px; margin: 0 0 14px; font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.rs-verdict .dot { flex: none; transform: translateY(-1px); }
+.rs-warn { margin: -6px 0 14px; padding: 8px 10px; border-radius: var(--r); background: var(--warning-bg); color: var(--warning); font-size: var(--t-sm); font-weight: 550; }
+.rs-form { display: grid; gap: 12px; justify-items: start; }
+.rs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.rs-grid .wide { grid-column: 1 / -1; }
+.rs-grid .input { width: 100%; }
+.rs-lead { display: flex; align-items: flex-end; gap: 8px; }
+.rs-lead .input { width: 120px; }
+.rs-hint { margin: 0; font-size: var(--t-xs); color: var(--ink-3); }
+.rs-msg { margin: 0; font-size: var(--t-sm); color: var(--success); }
+.rs-msg[data-ok="false"] { color: var(--danger); }
+.rs-inline { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rs-orders { list-style: none; margin: 0; padding: 0; }
+.rs-orders li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: var(--t-sm); }
+.rs-orders li:first-child { border-top: 0; padding-top: 0; }
+.rs-orders .grow { flex: 1; min-width: 0; }
+@media (max-width: 520px) {
+  .rs-grid { grid-template-columns: 1fr; }
+  /* en celular: nombre, detalle completo y, abajo, cuánto pedir con el botón */
+  .inv-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t t" "s s" "need btn"; padding: 12px 16px; }
+  .inv-row .s { white-space: normal; }
+  .inv-row .need { text-align: left; }
+}
 .inv-cards { list-style: none; margin: 0; padding: 0; }
 .inv-cards li { padding: 14px 16px; border-top: 1px solid var(--line); }
 .inv-cards li:first-child { border-top: 0; }
@@ -16,3 +54,4 @@
 .inv-cards dl div { display: flex; justify-content: space-between; gap: 8px; }
 .inv-cards dt { color: var(--ink-3); }
 .inv-cards dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
+.drawer .kv .spark { width: 100%; max-width: 280px; height: 28px; }

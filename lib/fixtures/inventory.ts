@@ -2,7 +2,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FixtureCtx, FixtureModule, Row } from "./types";
 
-function inventoryStatus(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf }: FixtureCtx) {
+function inventoryStatus(args: Row, ctx: FixtureCtx) {
+  const rows = baseStatus(args, ctx);
+  // para ver en local los estados de "Qué pedir": el que más sale, agotado; el segundo, con ~3 días
+  const top = [...rows].filter((r) => r.out14 > 0).sort((a, b) => b.out14 - a.out14);
+  if (top[0]) top[0].stock = 0;
+  if (top[1]) top[1].stock = Math.max(1, Math.round((top[1].out14 / 14) * 3));
+  return rows;
+}
+
+function baseStatus(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf }: FixtureCtx) {
   const now = Date.now();
   return CATALOG.filter((p) => !args.p_account || p.account_id === args.p_account).map((p) => {
     const lines = ORDERS.filter((o) => o.account_id === p.account_id && groupOf(o.status_code) !== "cancelled")
@@ -25,4 +34,5 @@ function inventoryStatus(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf }:
   });
 }
 
-export const fixtures: FixtureModule = { rpc: { inventory_status: inventoryStatus } };
+// pedidos de reposición ("Ya lo pedí") y tiempos fijados a mano: empiezan vacíos y se llenan desde el panel
+export const fixtures: FixtureModule = { rpc: { inventory_status: inventoryStatus }, tables: { restock_orders: [], product_lead_times: [] } };

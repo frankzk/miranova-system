@@ -10,7 +10,7 @@ import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { pendingFollowups, type Followup } from "@/lib/followups";
 import { crossSell } from "@/lib/cross-sell";
 import { inventoryAlerts } from "@/lib/inventory";
-import { inventoryStatus } from "@/lib/inventory-data";
+import { inventoryStatus, inventorySupply } from "@/lib/inventory-data";
 import { allStoreOpportunities, inventoryItems, OPP_GROUPS, productItems, sortOpportunities, withCrossSell, type OppGroup, type OppItem } from "@/lib/opportunities";
 import { can, permissionFlags, type PermissionFlags } from "@/lib/permissions";
 import { productInsights } from "@/lib/product-insights";
@@ -38,13 +38,15 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
   // seguimientos y contactos son de Tiendas: sin ese permiso ni se cargan
-  const [stores, followups, products, matrix, inventory, contacts] = await Promise.all([
+  const [stores, followups, products, matrix, inventory, contacts, supply] = await Promise.all([
     storeHealth(scope.account),
     can(user, "stores") ? pendingFollowups(scope.account) : Promise.resolve([] as Followup[]),
     productPerformance(scope.account),
     storeProductMatrix(scope.account, 30),
     inventoryStatus(scope.account),
     can(user, "stores") ? contactIndex() : Promise.resolve(new Map() as Awaited<ReturnType<typeof contactIndex>>),
+    // pedidos de reposición ya hechos: no se vuelve a sugerir pedir lo que ya viene en camino
+    inventorySupply(scope.account),
   ]);
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
   const today = todayIn(scope.tz);
@@ -54,7 +56,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const all = sortOpportunities([
     ...withCrossSell(storeItems, crossSell(matrix), accountName),
     ...productItems(productInsights(products), accountName),
-    ...inventoryItems(inventoryAlerts(inventory), accountName),
+    ...inventoryItems(inventoryAlerts(inventory, supply, today), accountName),
   ]);
   // seguimiento abierto por tienda: se muestra junto a su oportunidad para no contactarla dos veces
   const open = new Map<string, Followup>();
