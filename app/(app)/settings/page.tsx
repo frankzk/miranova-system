@@ -23,7 +23,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="page page-narrow">
-      <SettingsSubnav current="accounts" accounts users={can(me, "users")} />
+      <SettingsSubnav current="accounts" accounts users={can(me, "users")} email={me.is_owner} />
       <PageHead
         title="Cuentas"
         sub="Cada cuenta (plataforma + país) se sincroniza sola cada 10 minutos."

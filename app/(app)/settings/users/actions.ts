@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { accessEmail } from "@/lib/access-email";
 import { authorizeAction } from "@/lib/auth";
+import { appUrl, sendEmail } from "@/lib/email";
+import { isEmailAddress } from "@/lib/email-config";
 import {
   can, isPermission, normalizePermissions, normalizeUsername, passwordProblem, PERMISSION_KEYS, USERNAME_RE, type Permission,
 } from "@/lib/permissions";
@@ -16,6 +19,18 @@ const done = (msg: string): UserFormState => {
   revalidatePath("/settings/users");
   return { ok: true, msg };
 };
+
+/**
+ * Si se marcó "enviar por correo" y el usuario es un correo, le envía su acceso con la contraseña
+ * temporal (Ajustes → Correo). Devuelve el texto que se suma al mensaje del formulario.
+ */
+async function mailAccess(form: FormData, kind: "new" | "reset", u: { name: string; username: string }, password: string): Promise<string> {
+  if (form.get("send_email") !== "on") return "";
+  if (!isEmailAddress(u.username)) return " No se envió por correo: su usuario no es un correo.";
+  const mail = accessEmail({ kind, name: u.name, username: u.username, password, loginUrl: `${appUrl()}/login` });
+  const r = await sendEmail({ to: [u.username], ...mail });
+  return r.ok ? ` Le enviamos la contraseña a ${u.username}.` : ` No se pudo enviar el correo (${r.error}); compártesela tú.`;
+}
 
 /** Permisos marcados en el formulario (casillas "perm" con la clave como valor). */
 const checked = (f: FormData) => normalizePermissions(f.getAll("perm").map(String).filter(isPermission));
@@ -46,7 +61,8 @@ export async function createUserAction(_prev: UserFormState, form: FormData): Pr
 
   const r = await createUser({ username, name, password, permissions, is_owner: makeOwner, must_change_password: true, created_by: actor.id });
   if ("error" in r) return fail(r.error);
-  return done(`Usuario ${username} creado. Compártele su contraseña temporal: la cambiará al entrar.`);
+  const mailed = await mailAccess(form, "new", { name, username }, password);
+  return done(`Usuario ${username} creado.${mailed || " Compártele su contraseña temporal: la cambiará al entrar."}`);
 }
 
 export async function updateUserAction(_prev: UserFormState, form: FormData): Promise<UserFormState> {
@@ -102,5 +118,6 @@ export async function resetPasswordAction(_prev: UserFormState, form: FormData):
 
   const v = await setPassword(id, password, true);
   if (v === null) return fail("No se pudo cambiar la contraseña.");
-  return done(`Contraseña restablecida. ${target.name} deberá cambiarla al entrar; sus sesiones abiertas se cerraron.`);
+  const mailed = await mailAccess(form, "reset", target, password);
+  return done(`Contraseña restablecida. ${target.name} deberá cambiarla al entrar; sus sesiones abiertas se cerraron.${mailed}`);
 }

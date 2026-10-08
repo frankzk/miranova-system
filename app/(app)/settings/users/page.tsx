@@ -4,6 +4,8 @@ import { IconPlus } from "@/components/icons";
 import { SideSheet } from "@/components/side-sheet";
 import { EditUserForm, NewUserForm, ResetPasswordForm } from "@/components/user-forms";
 import { requirePermission } from "@/lib/auth";
+import { emailStatus } from "@/lib/email";
+import { isEmailAddress } from "@/lib/email-config";
 import { fmtAgo } from "@/lib/format";
 import { can, effectivePermissions, permissionLabel, PERMISSION_KEYS, type Permission } from "@/lib/permissions";
 import { listUsers, type AppUser } from "@/lib/users";
@@ -14,21 +16,23 @@ export const metadata = { title: "Usuarios" };
 
 export default async function UsersPage() {
   const me = await requirePermission("users");
-  const users = await listUsers();
+  const [users, mail] = await Promise.all([listUsers(), emailStatus()]);
+  // con el correo configurado (Ajustes → Correo), la contraseña temporal se puede enviar por correo
+  const canMail = Boolean(mail.provider);
   // permisos que este administrador no tiene: no puede darlos ni quitarlos
   const lockedPerms: Permission[] = PERMISSION_KEYS.filter((p) => !can(me, p));
   const active = users.filter((u) => u.active).length;
 
   return (
     <div className="page">
-      <SettingsSubnav current="users" accounts={can(me, "accounts")} users />
+      <SettingsSubnav current="users" accounts={can(me, "accounts")} users email={me.is_owner} />
       <PageHead
         title="Usuarios"
         sub={<>{active} {active === 1 ? "usuario activo" : "usuarios activos"} · cada uno entra con su usuario y ve solo lo que tiene marcado</>}
         actions={
           <SideSheet triggerClass="btn btn-primary" trigger={<><IconPlus /> Nuevo usuario</>} title="Nuevo usuario" sub="Entrará con una contraseña temporal y la cambiará al primer ingreso.">
             <div className="section">
-              <NewUserForm action={createUserAction} lockedPerms={lockedPerms} canMakeOwner={me.is_owner} />
+              <NewUserForm action={createUserAction} lockedPerms={lockedPerms} canMakeOwner={me.is_owner} canMail={canMail} />
             </div>
           </SideSheet>
         }
@@ -37,7 +41,7 @@ export default async function UsersPage() {
       <section className="panel" aria-label="Usuarios del panel">
         <ul className="users-list">
           {users.map((u) => (
-            <UserRow key={u.id} u={u} me={me} lockedPerms={lockedPerms} />
+            <UserRow key={u.id} u={u} me={me} lockedPerms={lockedPerms} canMail={canMail} />
           ))}
         </ul>
       </section>
@@ -50,7 +54,7 @@ export default async function UsersPage() {
   );
 }
 
-function UserRow({ u, me, lockedPerms }: { u: AppUser; me: { id: string; is_owner: boolean }; lockedPerms: Permission[] }) {
+function UserRow({ u, me, lockedPerms, canMail }: { u: AppUser; me: { id: string; is_owner: boolean }; lockedPerms: Permission[]; canMail: boolean }) {
   const self = u.id === me.id;
   const editable = !u.is_owner || me.is_owner;
   const perms = effectivePermissions(u);
@@ -100,8 +104,12 @@ function UserRow({ u, me, lockedPerms }: { u: AppUser; me: { id: string; is_owne
             {!self && (
               <div className="section">
                 <h3>Restablecer contraseña</h3>
-                <p className="sheet-note">Pon una contraseña temporal y compártela con {u.name.split(" ")[0]}; al entrar deberá cambiarla.</p>
-                <ResetPasswordForm action={resetPasswordAction} userId={u.id} />
+                <p className="sheet-note">
+                  {canMail && isEmailAddress(u.username)
+                    ? <>Pon una contraseña temporal y se la enviamos por correo a {u.name.split(" ")[0]}; al entrar deberá cambiarla.</>
+                    : <>Pon una contraseña temporal y compártela con {u.name.split(" ")[0]}; al entrar deberá cambiarla.</>}
+                </p>
+                <ResetPasswordForm action={resetPasswordAction} userId={u.id} mailTo={canMail && isEmailAddress(u.username) ? u.username : null} />
               </div>
             )}
           </SideSheet>

@@ -20,4 +20,5 @@ const app_users: Row[] = [
   },
 ];
 
-export const fixtures: FixtureModule = { tables: { app_users } };
+// app_settings: ajustes del panel (Ajustes → Correo); empieza vacío
+export const fixtures: FixtureModule = { tables: { app_users, app_settings: [] } };
