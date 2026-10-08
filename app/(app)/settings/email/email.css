@@ -1,0 +1,15 @@
+/* Ajustes → Correo */
+.em-status { display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px; }
+.em-status .dot { flex: none; transform: translateY(-1px); }
+.em-form { display: grid; gap: 14px; }
+.em-form .fu-actions { margin-top: 0; }
+.em-help { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: var(--t-sm); color: var(--ink-2); }
+.em-help summary { cursor: pointer; font-weight: 550; color: var(--ink); }
+.em-help ol { margin: 10px 0 8px; padding-left: 20px; display: grid; gap: 6px; }
+.em-help p { margin: 0; color: var(--ink-3); }
+.em-test-body { display: grid; gap: 12px; }
+.em-test-body p { margin: 0; font-size: var(--t-sm); }
+.em-test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.em-page .panel + .panel { margin-top: 16px; }
+.em-status[data-tone="warning"] { background: var(--warning-bg); border-color: #f3d9a4; color: var(--warning); }
+.em-status b { font-weight: 600; }

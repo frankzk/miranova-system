@@ -82,7 +82,7 @@ function PermissionChecks({ value, lockedPerms, allLocked }: { value: readonly s
 }
 
 /** Nuevo usuario: nombre, usuario, contraseña temporal y permisos. */
-export function NewUserForm({ action, lockedPerms, canMakeOwner }: { action: Action; lockedPerms: Permission[]; canMakeOwner: boolean }) {
+export function NewUserForm({ action, lockedPerms, canMakeOwner, canMail = false }: { action: Action; lockedPerms: Permission[]; canMakeOwner: boolean; canMail?: boolean }) {
   const [state, run] = useActionState(action, null);
   const sheet = useSheet();
   useEffect(() => {
@@ -104,6 +104,7 @@ export function NewUserForm({ action, lockedPerms, canMakeOwner }: { action: Act
         </label>
       </div>
       <TempPassword />
+      {canMail && <MailCheck label="Enviarle su acceso por correo" hint="Solo si su usuario es un correo." />}
       {canMakeOwner && <OwnerCheck defaultChecked={false} />}
       <PermissionChecks value={["stores", "products", "opportunities", "orders"]} lockedPerms={lockedPerms} />
       <div className="fu-actions">
@@ -154,13 +155,25 @@ export function EditUserForm({
   );
 }
 
-/** Restablecer la contraseña de otro usuario (queda como temporal). */
-export function ResetPasswordForm({ action, userId }: { action: Action; userId: string }) {
+/** Casilla para enviar la contraseña temporal por correo (Ajustes → Correo). */
+function MailCheck({ label, hint }: { label: string; hint: string }) {
+  return (
+    <label className="uf-perm">
+      <input type="checkbox" name="send_email" defaultChecked />
+      <span className="t">{label}</span>
+      <span className="h">{hint}</span>
+    </label>
+  );
+}
+
+/** Restablecer la contraseña de otro usuario (queda como temporal). `mailTo`: su correo, si se le puede enviar. */
+export function ResetPasswordForm({ action, userId, mailTo }: { action: Action; userId: string; mailTo?: string | null }) {
   const [state, run] = useActionState(action, null);
   return (
     <form action={run} className="uf-form">
       <input type="hidden" name="id" value={userId} />
       <TempPassword label="Nueva contraseña temporal" />
+      {mailTo && <MailCheck label={`Enviársela por correo a ${mailTo}`} hint="Le llega con el enlace para entrar; al entrar deberá cambiarla." />}
       <div className="fu-actions">
         <Msg state={state} />
         <SubmitButton className="btn" pending="Guardando…">Restablecer contraseña</SubmitButton>
