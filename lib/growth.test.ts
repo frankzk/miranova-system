@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  clock, dayMonth, monthProgress, monthProjection, monthShort, monthToDateLabels, pctChange, toDate, trimLeading, weekRange, weekToDateLabel,
+  clock, dayMonth, drivers, monthProgress, monthProjection, monthShort, monthToDateLabels, pctChange, toDate, trimLeading, weekRange, weekToDateLabel,
   type OrderGrowth,
 } from "./growth.ts";
 
@@ -55,4 +55,16 @@ test("etiquetas en español", () => {
   assert.equal(weekRange("2026-10-05"), "5 – 11 oct");
   assert.equal(dayMonth("2026-07-20"), "20 jul");
   assert.equal(monthShort("2025-12", "2026-02-01T00:00"), "dic 25");
+});
+
+test("qué tiendas explican el cambio: subidas y bajadas suman la diferencia total", () => {
+  const st = (name: string, cur: number, prev: number) => ({ account_id: "hn", store_id: name, account_name: "Drop Honduras", name, cur, prev });
+  const rows = [st("Velora", 106, 265), st("ZONAHN", 106, 235), st("vive", 26, 0), st("Nutralix", 18, 0), st("VitaWell", 31, 14), st("Igual", 5, 5)];
+  const d = drivers(rows, 2);
+  assert.deepEqual(d.up.map((r) => [r.name, r.diff]), [["vive", 26], ["Nutralix", 18]]);
+  assert.deepEqual(d.down.map((r) => [r.name, r.diff]), [["Velora", -159], ["ZONAHN", -129]]);
+  assert.deepEqual([d.upCount, d.upSum, d.downCount, d.downSum], [3, 61, 2, -288]);
+  const total = rows.reduce((t, r) => t + r.cur - r.prev, 0);
+  assert.equal(d.upSum + d.downSum, total);
+  assert.deepEqual(drivers(undefined), { up: [], down: [], upCount: 0, upSum: 0, downCount: 0, downSum: 0 });
 });

@@ -74,7 +74,7 @@ function businessOverview(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId, 
 }
 
 // order_growth: semanas (lunes a domingo) y meses en hora de Centroamérica (UTC−6, sin horario de verano)
-function orderGrowth(args: Row, { ORDERS }: FixtureCtx) {
+function orderGrowth(args: Row, { ORDERS, ACCOUNTS, storeId }: FixtureCtx) {
   const local = (iso: string) => new Date(Date.parse(iso) - 6 * 3_600_000);
   const now = local(new Date().toISOString());
   const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -82,11 +82,29 @@ function orderGrowth(args: Row, { ORDERS }: FixtureCtx) {
   const w0 = monday(now);
   const m0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const pm0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const ts = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account).map((o) => local(o.ordered_at));
+  const scoped = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account);
+  const ts = scoped.map((o) => local(o.ordered_at));
   const wk = (t: Date) => Math.round((w0.getTime() - monday(t).getTime()) / (7 * 86_400_000));
   const mk = (t: Date) => (now.getUTCFullYear() - t.getUTCFullYear()) * 12 + now.getUTCMonth() - t.getUTCMonth();
   const ew = now.getTime() - w0.getTime();
   const em = now.getTime() - m0.getTime();
+  const inPrevWeek = (t: Date) => t.getTime() >= w0.getTime() - 7 * 86_400_000 && t.getTime() < w0.getTime() - 7 * 86_400_000 + ew;
+  const inPrevMonth = (t: Date) => t >= pm0 && t.getTime() < Math.min(pm0.getTime() + em, m0.getTime());
+  const byStore = (cur: (t: Date) => boolean, prev: (t: Date) => boolean) => {
+    const m = new Map<string, Row>();
+    for (const o of scoped) {
+      const t = local(o.ordered_at);
+      const isCur = cur(t);
+      const isPrev = prev(t);
+      if (!isCur && !isPrev) continue;
+      const k = `${o.account_id}|${storeId(o)}`;
+      const r = m.get(k) ?? { account_id: o.account_id, store_id: storeId(o), account_name: ACCOUNTS.find((a) => a.id === o.account_id)?.name, name: o.dropshipper, cur: 0, prev: 0 };
+      if (isCur) r.cur++;
+      if (isPrev) r.prev++;
+      m.set(k, r);
+    }
+    return [...m.values()].filter((r) => r.cur !== r.prev).sort((a, b) => a.cur - a.prev - (b.cur - b.prev));
+  };
   return {
     now: now.toISOString().slice(0, 16),
     weeks: Array.from({ length: 12 }, (_, i) => 11 - i).map((k) => ({
@@ -95,8 +113,10 @@ function orderGrowth(args: Row, { ORDERS }: FixtureCtx) {
     months: Array.from({ length: 12 }, (_, i) => 11 - i).map((k) => ({
       k, month: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1)).toISOString().slice(0, 7), orders: ts.filter((t) => mk(t) === k).length,
     })),
-    week_prev_to_date: ts.filter((t) => t.getTime() >= w0.getTime() - 7 * 86_400_000 && t.getTime() < w0.getTime() - 7 * 86_400_000 + ew).length,
-    month_prev_to_date: ts.filter((t) => t >= pm0 && t.getTime() < Math.min(pm0.getTime() + em, m0.getTime())).length,
+    week_prev_to_date: ts.filter(inPrevWeek).length,
+    month_prev_to_date: ts.filter(inPrevMonth).length,
+    week_stores: byStore((t) => wk(t) === 0, inPrevWeek),
+    month_stores: byStore((t) => mk(t) === 0, inPrevMonth),
   };
 }
 

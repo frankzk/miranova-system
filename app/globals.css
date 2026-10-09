@@ -761,6 +761,19 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
 .og-kpi { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 6px 0 2px; font-size: var(--t-sm); }
 .og-kpi strong { font-size: var(--t-lg); font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .og-sub { margin: 0; font-size: var(--t-xs); }
+/* qué tiendas explican el cambio */
+.og-drv { margin: 10px 0 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-app); }
+.og-drv-sum { margin: 0 0 8px; font-size: var(--t-xs); color: var(--ink-2); }
+.og-drv-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 20px; }
+.og-drv-h { margin: 0 0 4px; font-size: var(--t-xs); font-weight: 600; color: var(--ink-3); }
+.og-drv ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.og-drv li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; font-size: var(--t-sm); }
+.og-drv li .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.og-drv li .n a { color: var(--ink); }
+.og-drv li .n a:hover { color: var(--accent-ink); }
+.og-drv li .c { grid-column: 1 / -1; font-size: var(--t-xs); margin-top: -2px; }
+.og-drv-none { margin: 0; font-size: var(--t-xs); }
+@media (max-width: 640px) { .og-drv-cols { grid-template-columns: minmax(0, 1fr); } }
 .og-cols { display: grid; gap: 4px; height: 92px; padding-top: 18px; margin-top: 10px; align-items: end; }
 .og-cols .col { height: 100%; display: flex; align-items: end; }
 .og-cols .bar { position: relative; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: #cdcaff; }
