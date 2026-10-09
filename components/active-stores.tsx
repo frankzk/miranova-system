@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { monthLong, monthShort, visibleMonths } from "@/lib/active-months";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import type { Overview, OverviewStore } from "@/lib/overview";
 import { storeHref } from "@/lib/store-links";
@@ -78,6 +79,7 @@ export function ActiveStores({ o, showAccount, tz, linkStores }: {
           <Change kind="reactivated" title="Reactivadas" hint="Volvieron a pedir en 30 días tras 30+ días sin pedidos" items={list("reactivated")} n={s.reactivated} link={linkStores} showAccount={showAccount} tz={tz} tone="info" />
           <Change kind="stopped" title="Dejaron de vender" hint="Pedían (3+ pedidos) y llevan 14 días sin pedidos" items={list("stopped")} n={s.stopped} link={linkStores} showAccount={showAccount} tz={tz} tone="danger" />
           <Weeks weeks={o.weeks} />
+          <Months months={o.months} />
         </div>
       </div>
     </section>
@@ -130,6 +132,44 @@ function Weeks({ weeks }: { weeks: Overview["weeks"] }) {
         ))}
       </div>
       <div className="ends muted"><span>hace 12 sem.</span><span>esta semana</span></div>
+    </figure>
+  );
+}
+
+/**
+ * Tiendas activas por mes calendario, con la misma idea que por semana: la barra son las tiendas
+ * con al menos un pedido en el mes y la parte oscura, las que hicieron su primer pedido ese mes.
+ */
+function Months({ months }: { months: Overview["months"] }) {
+  const list = visibleMonths(months);
+  if (list.length === 0) return null;
+  const max = Math.max(1, ...list.map((m) => m.active));
+  const current = list.at(-1)!.month;
+  const detail = (m: (typeof list)[number]) =>
+    `${monthLong(m.month)}${m.k === 0 ? " (en curso)" : ""}: ${fmtInt(m.active)} activas, ${fmtInt(m.new)} nuevas, ${fmtInt(m.orders)} pedidos`;
+  return (
+    <figure className="as-weeks as-months">
+      <figcaption>Tiendas activas por mes <span className="muted">· oscuro y +N = nuevas</span></figcaption>
+      <div className="cols" style={{ gridTemplateColumns: `repeat(${list.length}, minmax(0, 1fr))` }} role="img" aria-label={`Tiendas activas por mes: ${list.map(detail).join("; ")}`}>
+        {list.map((m) => (
+          <span key={m.month} className="col" title={detail(m)}>
+            <span className="bar" style={{ height: `${(m.active / max) * 100}%` }}>
+              <span className="v">{fmtInt(m.active)}</span>
+              <i className="all">
+                <i className="new" style={{ height: `${m.active ? (Math.min(m.new, m.active) / m.active) * 100 : 0}%` }} />
+              </i>
+            </span>
+          </span>
+        ))}
+      </div>
+      <div className="labels muted" style={{ gridTemplateColumns: `repeat(${list.length}, minmax(0, 1fr))` }} aria-hidden>
+        {list.map((m) => (
+          <span key={m.month}>
+            {monthShort(m.month, current)}
+            {m.new > 0 && <small>+{fmtInt(m.new)}</small>}
+          </span>
+        ))}
+      </div>
     </figure>
   );
 }

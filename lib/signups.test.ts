@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { filterSignups, localDay, monthBounds, signupPeriod, toSignups, type Signup } from "./signups.ts";
+import { entered, filterSignups, localDay, monthBounds, signupPeriod, toSignups, type Signup } from "./signups.ts";
 
 const s = (p: Partial<Signup>): Signup => ({
   account_id: "hn", store_id: "1", account_name: "Drop Honduras", name: "Tienda", person: null, first_at: "2026-09-10T15:00:00Z", email: null, ...p,
@@ -56,4 +56,9 @@ test("período de tiendas nuevas desde la URL", () => {
     period: "rango", custom: { from: "2026-09-15", to: "2026-10-01" }, bounds: { from: "2026-09-15", to: "2026-10-01" },
   });
   assert.equal(signupPeriod({ from: "no" }, today).period, "todas");
+});
+
+test("tiendas nuevas: sin las que solo tienen pedidos cancelados", () => {
+  const rows = [{ store_id: "a", first_at: "2026-09-10T15:00:00Z" }, { store_id: "b", first_at: null }];
+  assert.deepEqual(entered(rows).map((r) => r.store_id), ["a"]);
 });

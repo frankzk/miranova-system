@@ -27,7 +27,7 @@ export async function contactsById(ids: string[]): Promise<Map<string, StoreCont
 
 const key = (s: { account_id: string; store_id: string }) => `${s.account_id}|${s.store_id}`;
 
-/** Una tienda con su ingreso, dueño y correo detectado (función `store_profiles`, migración 0024). */
+/** Una tienda con su ingreso, dueño y correo detectado (función `store_profiles`, migraciones 0024 y 0031). */
 export type StoreProfile = {
   account_id: string;
   store_id: string;
@@ -36,9 +36,9 @@ export type StoreProfile = {
   name: string;
   /** Dueño según Drop (seller.lastName). */
   person: string | null;
-  /** Primer pedido con Miranova: el ingreso de la tienda. */
-  first_at: string;
-  last_at: string;
+  /** Primer pedido no cancelado con Miranova: el ingreso de la tienda (null si todos se cancelaron). */
+  first_at: string | null;
+  last_at: string | null;
   orders: number;
   /** Correo repetido en pedidos de 3+ clientes distintos: el de la tienda. */
   email: string | null;
