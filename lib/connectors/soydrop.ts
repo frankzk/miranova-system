@@ -1,5 +1,6 @@
 import { extractOrders } from "../normalize.ts";
 import { extractProducts } from "../products.ts";
+import { walletBalance } from "../wallet.ts";
 import {
   type Connector, type DateRange, type LoginResult, type OrdersPage, type PlatformAccount, type ProbeAttempt,
   type Session, PlatformError, SessionExpired,
@@ -43,6 +44,20 @@ const CATALOG_PATH_CANDIDATES = [
   "/seller/products",
   "/marketplace/products",
 ];
+
+// Billetera del proveedor ("Mi billetera": saldo actual y movimientos). La ruta no es pública;
+// Drop llama "balance" al saldo en las órdenes (isBalanceDebit/isBalanceCredit). Se prueban
+// estas candidatas con la sesión iniciada y gana la primera que trae un saldo legible.
+const WALLET_PATH_CANDIDATES = [
+  "/wallets/me", "/wallet/me", "/wallets/balance", "/wallet/balance", "/wallets/current", "/wallet/current",
+  "/wallet", "/wallet/", "/wallets", "/wallets/", "/balance", "/balance/", "/balances", "/balances/",
+  "/balances/me", "/balance/me", "/balance/current", "/vendor/wallet", "/vendors/wallet", "/vendor/balance",
+  "/accounts/wallet", "/accounts/balance", "/accounts/me", "/auth/me", "/me", "/users/me",
+  "/wallet-transactions", "/wallets/transactions", "/wallet/transactions", "/wallet/movements",
+  "/wallets/movements", "/balance-movements", "/balance/movements", "/transactions",
+];
+/** Claims del token que suelen ser el id de la cuenta (para rutas tipo /wallets/:id). */
+const ACCOUNT_ID_CLAIMS = ["accountId", "account", "accountRef", "ref", "vendorId", "sub"];
 
 const BASE_HEADERS: Record<string, string> = {
   accept: "application/json, text/plain, */*",
@@ -258,6 +273,37 @@ export const soydrop: Connector = {
     const url = `${API}/products/${encodeURIComponent(productId)}/stock-movements?page=${page}&limit=${STOCK_MOVEMENTS_PAGE_SIZE}`;
     const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
     if (res.status === 401 || res.status === 403) throw new SessionExpired();
+    const { json, text } = await readJson(res);
+    if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
+    return { url, payload: json };
+  },
+
+  async discoverWalletPath(session) {
+    const ids = [...new Set(ACCOUNT_ID_CLAIMS.map((k) => jwtClaim(session.token, k)).filter((v): v is string => Boolean(v)))];
+    const candidates = [
+      ...WALLET_PATH_CANDIDATES,
+      ...ids.flatMap((id) => [`/wallets/${id}`, `/wallet/${id}`, `/accounts/${id}/wallet`, `/accounts/${id}/balance`, `/vendors/${id}/wallet`]),
+    ];
+    const attempts: ProbeAttempt[] = [];
+    for (const path of candidates) {
+      try {
+        const res = await fetch(`${API}${path}`, { headers: authHeaders(session), cache: "no-store" });
+        const { json, text } = await readJson(res);
+        const reading = res.ok ? walletBalance(json) : null;
+        attempts.push({ path, status: res.status, orders: reading ? 1 : 0, sample: text.slice(0, 400) });
+        if (reading) return { path, attempts };
+      } catch (e) {
+        attempts.push({ path, status: -1, orders: 0, sample: String(e) });
+      }
+    }
+    return { path: null, attempts };
+  },
+
+  async fetchWallet(session, path) {
+    const url = `${API}${path}`;
+    const res = await fetch(url, { headers: authHeaders(session), cache: "no-store" });
+    // 403 aquí es "ruta no permitida" (la sesión ya sirvió para las órdenes): se busca otra ruta
+    if (res.status === 401) throw new SessionExpired();
     const { json, text } = await readJson(res);
     if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
     return { url, payload: json };

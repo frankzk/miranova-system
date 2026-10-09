@@ -4,11 +4,12 @@ import { RowLink } from "@/components/client";
 import { PageHead, StatusPill } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
-import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
+import { fmtAgo, fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { dashboardSummary, moneyByMonth, unpaidDelivered, type MonthRow } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { resolveRange } from "@/lib/ranges";
+import { walletBalances, type WalletRow } from "@/lib/wallet-data";
 
 export const metadata = { title: "Dinero" };
 
@@ -21,10 +22,11 @@ export default async function MoneyPage() {
   const canOrders = can(user, "orders");
   const accounts = await listAccounts();
   const scope = await getScope(accounts);
-  const [months, summary, unpaid] = await Promise.all([
+  const [months, summary, unpaid, wallets] = await Promise.all([
     moneyByMonth({ account: scope.account, months: MONTHS, tz: scope.tz }),
     dashboardSummary({ account: scope.account, ...resolveRange("30", scope.tz), tz: scope.tz }),
     unpaidDelivered(scope.account, 15),
+    walletBalances(scope.account),
   ]);
 
   const currencies = [...new Set([...summary.unpaid.map((u) => u.currency), ...months.map((m) => m.currency)])];
@@ -36,6 +38,8 @@ export default async function MoneyPage() {
       <PageHead title="Dinero" sub={<>Lo que vendes, lo que te toca y lo que falta por liquidar · {scope.label}</>} />
 
       <AccountChips accounts={accounts} current={scope.account} next="/money" />
+
+      {wallets.length > 0 && <Wallets rows={wallets} />}
 
       {bands.map((cur) => {
         const u = summary.unpaid.find((x) => x.currency === cur);
@@ -165,6 +169,52 @@ export default async function MoneyPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/** Lectura de más de 2 h: la sincronización de esa cuenta no está trayendo el saldo. */
+const STALE_MS = 2 * 3_600_000;
+
+/** Saldo actual en la billetera de cada cuenta de proveedor, y el total en dólares. */
+function Wallets({ rows }: { rows: WalletRow[] }) {
+  const known = rows.filter((r) => r.balance !== null);
+  const inUsd = known.filter((r) => r.usd !== null);
+  const total = inUsd.reduce((t, r) => t + (r.usd ?? 0), 0);
+  const left = known.length - inUsd.length;
+  return (
+    <section className="wallets" aria-labelledby="wallets-h">
+      <div className="wallets-head">
+        <h2 id="wallets-h">Saldo en billeteras</h2>
+        {inUsd.length > 1 && (
+          <span className="wallets-total">
+            Total ≈ <b>{fmtMoney(total, "USD")}</b> USD
+            {left > 0 && <span> · sin {left === 1 ? "1 cuenta" : `${left} cuentas`} sin tipo de cambio</span>}
+          </span>
+        )}
+      </div>
+      <div className="metrics" data-cols={Math.min(rows.length, 4)}>
+        {rows.map((r) => {
+          const stale = r.at !== null && Date.now() - Date.parse(r.at) > STALE_MS;
+          return (
+            <div className="metric" key={r.account_id}>
+              <span className="label">{r.name}</span>
+              <span className="value">{fmtMoney(r.balance, r.currency)}</span>
+              <span className="foot">
+                {r.balance === null ? (
+                  r.msg ?? "Se mostrará después de la próxima sincronización."
+                ) : (
+                  <>
+                    {r.usd !== null && r.currency !== "USD" && <>≈ {fmtMoney(r.usd, "USD")} · </>}
+                    {stale && <span className="dot" data-tone="warning" aria-hidden />}
+                    <span title={r.msg ?? undefined}>{stale ? `Leído ${fmtAgo(r.at)}` : `Actualizado ${fmtAgo(r.at)}`}</span>
+                  </>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

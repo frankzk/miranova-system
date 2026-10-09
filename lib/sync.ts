@@ -1,6 +1,6 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
-import { connectorFor, PlatformError, SessionExpired, type Session } from "./connectors";
+import { connectorFor, PlatformError, SessionExpired, type Connector, type Session } from "./connectors";
 import { SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { extractProducts } from "./products";
 import { extractMovements } from "./stock-movements";
@@ -9,6 +9,7 @@ import { db } from "./supabase";
 import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
 import { ingestPayload, saveCatalog, saveProducts, type AccountCtx } from "./store";
+import { walletBalance } from "./wallet";
 
 const DAY = 86_400_000;
 const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
@@ -23,6 +24,7 @@ const MAX_MOVEMENT_PAGES = 20;
 const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ventana reciente
 const OPEN_REFRESH_MAX_DAYS = 120;
 const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
+const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
 
 /** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
 const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
@@ -208,7 +210,16 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
       }
     }
 
-    // 3c. movimientos de inventario: unos cuantos productos por vez para no cargar la plataforma;
+    // 3c. saldo de la billetera: una consulta por sincronización. Un fallo aquí no detiene lo demás.
+    if (c.fetchWallet && c.discoverWalletPath) {
+      try {
+        await syncWallet(acc, (fn) => withSession(fn), c);
+      } catch (e) {
+        await updateAccount(acc.id, { wallet_msg: `No se pudo leer el saldo: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+
+    // 3d. movimientos de inventario: unos cuantos productos por vez para no cargar la plataforma;
     // de cada uno se bajan solo los movimientos nuevos (vienen del más reciente al más antiguo)
     let movesNote = "";
     if (c.fetchStockMovements && Date.now() < deadline - 60_000) {
@@ -331,6 +342,47 @@ export async function syncAll(): Promise<Record<string, SyncResult>> {
     out[a.name] = await syncAccount(a.id, deadline);
   }
   return out;
+}
+
+/**
+ * Saldo actual de la billetera del proveedor. La ruta se busca la primera vez (y otra vez si
+ * deja de responder); si no aparece, se reintenta cada 6 h con el diagnóstico guardado en debug.
+ */
+async function syncWallet(acc: Account, withSession: <T>(fn: (s: Session) => Promise<T>) => Promise<T>, c: Connector): Promise<void> {
+  let path = acc.wallet_path;
+  if (!path) {
+    if (acc.wallet_probe_at && Date.now() - Date.parse(acc.wallet_probe_at) < WALLET_PROBE_EVERY_MS) return;
+    const probe = await withSession((s) => c.discoverWalletPath!(s));
+    const fresh = (await getAccount(acc.id))!;
+    await updateAccount(acc.id, {
+      wallet_path: probe.path,
+      wallet_probe_at: new Date().toISOString(),
+      ...(probe.path ? {} : { wallet_msg: "Todavía no encuentro la billetera en la plataforma: lo vuelvo a intentar en unas horas." }),
+      debug: { ...(fresh.debug ?? {}), wallet_probe: probe.attempts },
+    });
+    if (!probe.path) return;
+    path = probe.path;
+  }
+
+  let payload: unknown;
+  try {
+    payload = (await withSession((s) => c.fetchWallet!(s, path!))).payload;
+  } catch (e) {
+    // la ruta dejó de responder (cambió en la plataforma): buscarla de nuevo
+    if (e instanceof PlatformError) await updateAccount(acc.id, { wallet_path: null });
+    throw e;
+  }
+  const reading = walletBalance(payload);
+  if (!reading) {
+    const fresh = (await getAccount(acc.id))!;
+    await updateAccount(acc.id, {
+      wallet_path: null,
+      wallet_msg: "La billetera respondió, pero sin un saldo legible.",
+      debug: { ...(fresh.debug ?? {}), wallet_sample: JSON.stringify(payload).slice(0, 2000) },
+    });
+    return;
+  }
+  await updateAccount(acc.id, { wallet_balance: reading.balance, wallet_at: new Date().toISOString(), wallet_msg: null });
 }
 
 /** Movimientos de inventario de los productos revisados hace más tiempo. Devuelve cuántos movimientos nuevos guardó. */

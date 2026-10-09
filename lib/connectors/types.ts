@@ -35,6 +35,10 @@ export interface Connector {
   discoverCatalogPath?(session: Session): Promise<{ path: string | null; attempts: ProbeAttempt[] }>;
   /** Descarga una página del catálogo de dropshipping. */
   fetchCatalog?(session: Session, path: string, page: number): Promise<OrdersPage>;
+  /** Busca la ruta de la billetera del proveedor (la que trae el saldo actual). */
+  discoverWalletPath?(session: Session): Promise<{ path: string | null; attempts: ProbeAttempt[] }>;
+  /** Descarga la billetera (el saldo se lee con walletBalance de lib/wallet.ts). */
+  fetchWallet?(session: Session, path: string): Promise<OrdersPage>;
 }
 
 export class SessionExpired extends Error {

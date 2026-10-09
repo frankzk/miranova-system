@@ -3,7 +3,7 @@ import { memo } from "./memo";
 import { db } from "./supabase";
 import type { OwnerAlerts } from "./alerts";
 import type { BusinessOverview } from "./business";
-import { groupById } from "./status";
+import { groupById, lateDispatchCutoff, UNDISPATCHED_CODES } from "./status";
 
 export type OrderItem = {
   product_name: string;
@@ -62,6 +62,8 @@ export type Filters = {
   dept?: string;
   /** órdenes que contienen este producto */
   product?: string;
+  /** subetapa de Por despachar: "late" = con retraso de despacho (más de 36 h sin "Orden despachada") */
+  stage?: "late";
   sort?: Sort;
   page?: number;
 };
@@ -94,6 +96,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     status: one("status"),
     dept: one("dept"),
     product: one("product"),
+    stage: one("stage") === "late" ? "late" : undefined,
     sort: (Object.keys(SORTS) as Sort[]).find((k) => k === one("sort") && k !== "recent"),
     page: Math.max(1, Number(one("page") ?? 1) || 1),
   };
@@ -142,6 +145,7 @@ function filtered(f: Filters, count = false) {
   const group = groupById(f.group);
   if (group) query = query.in("status_code", group.codes);
   if (f.status) query = query.eq("status_code", f.status);
+  if (f.stage === "late") query = query.in("status_code", UNDISPATCHED_CODES).lt("ordered_at", lateDispatchCutoff().toISOString());
   return applyFilters(query, f);
 }
 
@@ -285,17 +289,22 @@ export async function unpaidDelivered(account?: string, limit = 12) {
   return { orders: (data as Order[]).map(sortItems), count: count ?? 0 };
 }
 
-/** Cuántas órdenes hay en cada grupo de estado con los filtros actuales (para las pestañas). */
+/**
+ * Cuántas órdenes hay en cada grupo de estado con los filtros actuales (para las pestañas),
+ * más `late`: las de Por despachar con retraso de despacho.
+ */
 export async function groupCounts(f: Filters): Promise<Record<string, number>> {
   const { GROUPS } = await import("./status");
-  const base = (codes?: string[]) => {
+  const base = (codes?: string[], before?: Date) => {
     let q = db().from("orders").select(`id${f.product ? PRODUCT_EMBED : ""}` as "id", { count: "exact", head: true });
     if (codes) q = q.in("status_code", codes);
+    if (before) q = q.lt("ordered_at", before.toISOString());
     return applyFilters(q, f);
   };
   const entries = await Promise.all([
     base().then((r) => ["all", r.count ?? 0] as const),
     ...GROUPS.map((g) => base(g.codes).then((r) => [g.id, r.count ?? 0] as const)),
+    base(UNDISPATCHED_CODES, lateDispatchCutoff()).then((r) => ["late", r.count ?? 0] as const),
   ]);
   return Object.fromEntries(entries);
 }

@@ -46,6 +46,7 @@ const ACCOUNTS: Row[] = [
     platform_ref_name: "MIRANOVA", session_enc: null, orders_path: "/orders", geo: null, backfill_cursor: null, enabled: true,
     products_path: "/products/", products_sync_at: new Date(Date.now() - 4 * 60_000).toISOString(), products_sync_msg: "8 productos actualizados",
     last_sync_at: new Date(Date.now() - 4 * 60_000).toISOString(), last_sync_ok: true, last_sync_msg: "212 pedidos actualizados",
+    wallet_path: "/wallets/me", wallet_balance: 48215.3, wallet_at: new Date(Date.now() - 4 * 60_000).toISOString(), wallet_msg: null,
     debug: null, created_at: "2026-09-25T00:00:00Z",
   },
   {
@@ -54,6 +55,8 @@ const ACCOUNTS: Row[] = [
     platform_ref_name: "MIRANOVA GT", session_enc: null, orders_path: "/orders", geo: null, backfill_cursor: "2026-06-01T00:00:00Z",
     enabled: true, last_sync_at: new Date(Date.now() - 26 * 60_000).toISOString(), last_sync_ok: false,
     last_sync_msg: "Correo o contraseña incorrectos (Drop respondió 401)", debug: null, created_at: "2026-09-25T01:00:00Z",
+    // la sincronización falla: el saldo se quedó en la última lectura
+    wallet_path: "/wallets/me", wallet_balance: 7424.94, wallet_at: new Date(Date.now() - 26 * 3_600_000).toISOString(), wallet_msg: null,
   },
 ];
 
