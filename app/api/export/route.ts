@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
-import { fmtDate } from "@/lib/format";
+import { orderExportRows } from "@/lib/order-export";
 import { can } from "@/lib/permissions";
 import { listAllOrders, parseFilters } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
+import { buildXlsx, XLSX_TYPE } from "@/lib/xlsx";
 
-// Exporta a CSV (abre directo en Excel) con los mismos filtros de Órdenes y la cuenta activa.
-// Una fila por producto, para preparar despachos.
+// Exporta las órdenes con los mismos filtros de Órdenes y la cuenta activa, en Excel (.xlsx,
+// `format=xlsx`) o CSV. Una fila por producto, para preparar despachos.
 
 export const maxDuration = 60;
 
@@ -22,36 +23,30 @@ export async function GET(req: NextRequest) {
   // la columna Liquidada es dato de liquidación: solo con permiso de Dinero
   const paidCol = can(user, "money");
 
+  // los filtros que se repiten (varias tiendas) llegan como lista
+  const sp: Record<string, string | string[]> = {};
+  for (const [k, v] of req.nextUrl.searchParams) {
+    const prev = sp[k];
+    sp[k] = prev === undefined ? v : [...(Array.isArray(prev) ? prev : [prev]), v];
+  }
   const scope = await getScope(await listAccounts());
-  const filters = { ...parseFilters(Object.fromEntries(req.nextUrl.searchParams)), account: scope.account };
+  const filters = { ...parseFilters(sp), account: scope.account };
   const orders = await listAllOrders(filters);
+  const { columns, rows } = orderExportRows(orders, { paidCol });
+  const stamp = new Date().toISOString().slice(0, 10);
 
-  const header = [
-    "Cuenta", "Orden", "Orden Shopify", "Fecha", "Estado", "Dropshipper", "Cliente", "Teléfono", "Correo",
-    "Departamento", "Ciudad", "Dirección", "Punto de referencia", "Indicaciones", "Paquetera", "Guía",
-    "Tracking", "Pago", "Producto", "SKU", "Cantidad", "Precio", "Precio proveedor", "Total orden", "Te toca",
-    ...(paidCol ? ["Liquidada"] : []), "Moneda",
-  ];
-  const lines = [header.map(esc).join(",")];
-
-  for (const o of orders) {
-    const base = [
-      o.accounts?.name, o.external_id, o.shopify_order, fmtDate(o.ordered_at, o.accounts?.timezone), o.status, o.dropshipper,
-      o.customer_name, o.customer_phone, o.customer_email, o.department, o.city, o.address, o.reference_point, o.notes,
-      o.carrier, o.tracking_number, o.tracking_url, o.cod === null ? "" : o.cod ? "Contra entrega" : "Prepagado",
-    ];
-    const items = o.order_items.length ? o.order_items : [null];
-    for (const it of items) {
-      lines.push(
-        [
-          ...base, it?.product_name, it?.sku, it?.quantity, it?.price, it?.vendor_price, o.total, o.vendor_amount,
-          ...(paidCol ? [o.paid === null ? "" : o.paid ? "Sí" : "No"] : []), o.currency,
-        ].map(esc).join(","),
-      );
-    }
+  if (req.nextUrl.searchParams.get("format") === "xlsx") {
+    const book = buildXlsx([{ name: "Órdenes", columns, rows }]);
+    return new NextResponse(Buffer.from(book), {
+      headers: {
+        "content-type": XLSX_TYPE,
+        "content-disposition": `attachment; filename="ordenes-miranova-${stamp}.xlsx"`,
+        "cache-control": "no-store",
+      },
+    });
   }
 
-  const stamp = new Date().toISOString().slice(0, 10);
+  const lines = [columns.map((c) => esc(c.header)).join(","), ...rows.map((r) => r.map(esc).join(","))];
   // BOM para que Excel respete los acentos
   return new NextResponse("﻿" + lines.join("\r\n"), {
     headers: {

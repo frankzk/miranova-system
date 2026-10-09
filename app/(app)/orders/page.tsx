@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Drawer, DrawerClose, GetForm, RowLink } from "@/components/client";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { FilterSelect } from "@/components/filter-select";
+import { MultiSelect } from "@/components/multi-select";
 import { IconChevronLeft, IconChevronRight, IconClose, IconDownload, IconExternal, IconFilter, IconSearch } from "@/components/icons";
 import { OrderDetailView } from "@/components/order-detail";
 import { AccountChips } from "@/components/account-chips";
@@ -39,21 +40,26 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const showAccount = !scope.account && accounts.length > 1;
 
   const current = { group: f.group, stage: f.stage, q: f.q, status: f.status, dept: f.dept, product: f.product, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to, sort: f.sort };
-  const params = (patch: Record<string, string | number | undefined | null>) => {
+  type Patch = Record<string, string | string[] | number | undefined | null>;
+  const params = (patch: Patch) => {
     const p = new URLSearchParams();
     const merged: Record<string, unknown> = { ...current, page: f.page === 1 ? undefined : f.page, ...patch };
-    for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    for (const [k, v] of Object.entries(merged)) {
+      // varias tiendas: el parámetro se repite
+      if (Array.isArray(v)) for (const x of v) p.append(k, String(x));
+      else if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    }
     return p.toString();
   };
   /** URL con los filtros actuales + cambios. */
-  const url = (patch: Record<string, string | number | undefined | null>) => {
+  const url = (patch: Patch) => {
     const s = params(patch);
     return s ? `/orders?${s}` : "/orders";
   };
   /** Query base de cada filtro de columna: sin ese filtro ni la página. */
   const without = (key: string) => params({ [key]: undefined, page: undefined });
   const closeHref = url({});
-  const exportHref = `/api/export?${params({ page: undefined, group: f.group })}`;
+  const exportHref = (format: "xlsx" | "csv") => `/api/export?${params({ page: undefined, group: f.group, format })}`;
   const activeGroup = groupById(f.group);
 
   const statusOpts: FilterOption[] = facets.statuses
@@ -65,15 +71,20 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const plain = (xs: string[]): FilterOption[] => xs.map((x) => ({ value: x, label: x }));
   const sortOpts = (keys: Sort[]): FilterOption[] => keys.map((k) => ({ value: k, label: SORTS[k].label }));
 
-  // filtros aplicados, para mostrarlos como chips que se pueden quitar
+  // filtros aplicados, para mostrarlos como chips que se pueden quitar (cada tienda por separado)
+  const chip = (key: string, label: string) => ({ key, label, href: url({ [key]: undefined, page: undefined }) });
   const applied = [
-    f.status && { key: "status", label: `Estado: ${statusLabel(f.status)}` },
-    f.dept && { key: "dept", label: `Departamento: ${f.dept}` },
-    f.product && { key: "product", label: `Producto: ${f.product}` },
-    f.dropshipper && { key: "dropshipper", label: `Dropshipper: ${f.dropshipper}` },
-    f.carrier && { key: "carrier", label: `Paquetera: ${f.carrier}` },
-    f.sort && { key: "sort", label: `Orden: ${SORTS[f.sort].label}` },
-  ].filter(Boolean) as { key: string; label: string }[];
+    f.status && chip("status", `Estado: ${statusLabel(f.status)}`),
+    f.dept && chip("dept", `Departamento: ${f.dept}`),
+    f.product && chip("product", `Producto: ${f.product}`),
+    ...(f.dropshipper ?? []).map((d) => ({
+      key: `dropshipper:${d}`,
+      label: `Dropshipper: ${d}`,
+      href: url({ dropshipper: f.dropshipper!.filter((x) => x !== d), page: undefined }),
+    })),
+    f.carrier && chip("carrier", `Paquetera: ${f.carrier}`),
+    f.sort && chip("sort", `Orden: ${SORTS[f.sort].label}`),
+  ].filter(Boolean) as { key: string; label: string; href: string }[];
   const hasFilters = !!(f.q || f.from || f.to || applied.length);
   const late = counts.late ?? 0;
 
@@ -84,9 +95,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         sub={<>{fmtInt(counts.all ?? 0)} órdenes · {scope.label}</>}
         actions={
           can(user, "export") && (
-            <a className="btn" href={exportHref}>
-              <IconDownload /> Exportar CSV
-            </a>
+            <>
+              <a className="btn" href={exportHref("xlsx")} download title="Descargar en Excel (.xlsx), con los filtros aplicados: una fila por producto">
+                <IconDownload /> Descargar Excel
+              </a>
+              <a className="btn btn-ghost" href={exportHref("csv")} download title="Los mismos datos en CSV">CSV</a>
+            </>
           )
         }
       />
@@ -140,7 +154,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             <FilterSelect name="status" label="Estado" value={f.status} all="Todos los estados" options={statusOpts} />
             <FilterSelect name="dept" label="Departamento" value={f.dept} all="Todos los departamentos" options={deptOpts} />
             <FilterSelect name="product" label="Producto" value={f.product} all="Todos los productos" options={productOpts} />
-            <FilterSelect name="dropshipper" label="Dropshipper" value={f.dropshipper} all="Todos los dropshippers" options={plain(facets.dropshippers)} />
+            <MultiSelect name="dropshipper" label="Dropshipper" hint="una o varias" all="Todos los dropshippers" options={facets.dropshippers.map((x) => ({ value: x, label: x }))} selected={f.dropshipper ?? []} />
             <FilterSelect name="carrier" label="Paquetera" value={f.carrier} all="Todas las paqueteras" options={plain(facets.carriers)} />
             <FilterSelect name="sort" label="Ordenar por" value={f.sort} all={SORTS.recent.label} options={sortOpts(["old", "total_desc", "total_asc"])} />
           </div>
@@ -151,7 +165,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {applied.length > 0 && (
         <div className="applied" aria-label="Filtros aplicados">
           {applied.map((a) => (
-            <Link key={a.key} href={url({ [a.key]: undefined, page: undefined })} aria-label={`Quitar ${a.label}`}>
+            <Link key={a.key} href={a.href} aria-label={`Quitar ${a.label}`}>
               {a.label} <IconClose />
             </Link>
           ))}
@@ -187,7 +201,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <th><ColumnFilter label="Orden" param="sort" query={without("sort")} current={f.sort === "old" ? "old" : undefined} allLabel={SORTS.recent.label} options={sortOpts(["old"])} title="Ordenar por fecha" /></th>
                     <th><ColumnFilter label="Cliente" param="dept" query={without("dept")} current={f.dept} allLabel="Todos los departamentos" options={deptOpts} title="Filtrar por departamento" /></th>
                     <th className="hide-lg"><ColumnFilter label="Productos" param="product" query={without("product")} current={f.product} allLabel="Todos los productos" options={productOpts} title="Órdenes que contienen un producto" /></th>
-                    <th className="hide-md hide-l"><ColumnFilter label="Dropshipper" param="dropshipper" query={without("dropshipper")} current={f.dropshipper} allLabel="Todos los dropshippers" options={plain(facets.dropshippers)} /></th>
+                    <th className="hide-md hide-l"><ColumnFilter label="Dropshipper" param="dropshipper" query={without("dropshipper")} current={f.dropshipper} allLabel="Todos los dropshippers" options={plain(facets.dropshippers)} multiple title="Filtrar por una o varias tiendas" /></th>
                     <th className="hide-xl"><ColumnFilter label="Paquetera" param="carrier" query={without("carrier")} current={f.carrier} allLabel="Todas las paqueteras" options={plain(facets.carriers)} /></th>
                     <th><ColumnFilter label="Estado" param="status" query={without("status")} current={f.status} allLabel={activeGroup ? `Todos: ${activeGroup.label.toLowerCase()}` : "Todos los estados"} options={statusOpts} title="Estado exacto" /></th>
                     <th className="r"><ColumnFilter label="Total" param="sort" align="right" query={without("sort")} current={f.sort?.startsWith("total") ? f.sort : undefined} allLabel="Por fecha" options={sortOpts(["total_desc", "total_asc"])} title="Ordenar por total" /></th>

@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import "./multi-select.css";
 
-export type MultiOption = { value: string; label: string; count: number };
+export type MultiOption = { value: string; label: string; count?: number };
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -20,7 +20,8 @@ export function MultiSelect({ name, label, hint, all, allCount, options, selecte
   hint?: string;
   /** Texto de "sin filtro", p. ej. "Todos los proveedores". */
   all: string;
-  allCount: number;
+  /** Sin conteos (p. ej. tiendas en Órdenes), la lista no los muestra. */
+  allCount?: number;
   options: MultiOption[];
   selected: string[];
   searchFrom?: number;
@@ -39,7 +40,7 @@ export function MultiSelect({ name, label, hint, all, allCount, options, selecte
   }
 
   const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
-  const summary = sel.length === 0 ? `${all} (${fmt(allCount)})` : sel.length === 1 ? labelOf(sel[0]) : `${labelOf(sel[0])} +${sel.length - 1}`;
+  const summary = sel.length === 0 ? (allCount === undefined ? all : `${all} (${fmt(allCount)})`) : sel.length === 1 ? labelOf(sel[0]) : `${labelOf(sel[0])} +${sel.length - 1}`;
   const q = fold(text.trim());
   const toggle = (v: string) => setSel((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]));
 
@@ -88,7 +89,7 @@ export function MultiSelect({ name, label, hint, all, allCount, options, selecte
             <label>
               <input type="checkbox" checked={sel.length === 0} onChange={() => setSel([])} />
               <span className="n">{all}</span>
-              <span className="c">{fmt(allCount)}</span>
+              {allCount !== undefined && <span className="c">{fmt(allCount)}</span>}
             </label>
           </li>
           {options.map((o) => (
@@ -96,7 +97,7 @@ export function MultiSelect({ name, label, hint, all, allCount, options, selecte
               <label data-zero={o.count === 0 || undefined}>
                 <input type="checkbox" name={name} value={o.value} checked={sel.includes(o.value)} onChange={() => toggle(o.value)} />
                 <span className="n" title={o.label}>{o.label}</span>
-                <span className="c">{fmt(o.count)}</span>
+                {o.count !== undefined && <span className="c">{fmt(o.count)}</span>}
               </label>
             </li>
           ))}
