@@ -53,7 +53,8 @@ export type Filters = {
   account?: string;
   group?: string; // StatusGroup
   q?: string;
-  dropshipper?: string;
+  /** una o varias tiendas (dropshippers) */
+  dropshipper?: string[];
   carrier?: string;
   from?: string; // YYYY-MM-DD
   to?: string;
@@ -85,11 +86,16 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     const s = (Array.isArray(v) ? v[0] : v)?.trim();
     return s ? s : undefined;
   };
+  const many = (k: string) => {
+    const v = sp[k];
+    const list = [...new Set((Array.isArray(v) ? v : v ? [v] : []).map((x) => x.trim()).filter(Boolean))];
+    return list.length ? list : undefined;
+  };
   return {
     account: one("account"),
     group: one("group"),
     q: one("q"),
-    dropshipper: one("dropshipper"),
+    dropshipper: many("dropshipper"),
     carrier: one("carrier"),
     from: one("from"),
     to: one("to"),
@@ -113,9 +119,9 @@ const PRODUCT_EMBED = ", pf:order_items!inner(product_name)";
 
 /** Filtros comunes a la lista y a los conteos (sin grupo ni estado exacto). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyFilters<Q extends { eq: any; gte: any; lte: any; or: any }>(query: Q, f: Filters): Q {
+function applyFilters<Q extends { eq: any; in: any; gte: any; lte: any; or: any }>(query: Q, f: Filters): Q {
   if (f.account) query = query.eq("account_id", f.account);
-  if (f.dropshipper) query = query.eq("dropshipper", f.dropshipper);
+  if (f.dropshipper?.length) query = f.dropshipper.length === 1 ? query.eq("dropshipper", f.dropshipper[0]) : query.in("dropshipper", f.dropshipper);
   if (f.carrier) query = query.eq("carrier", f.carrier);
   if (f.dept) query = query.eq("department", f.dept);
   if (f.product) query = query.eq("pf.product_name", f.product);
