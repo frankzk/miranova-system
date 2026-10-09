@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AccountChips } from "@/components/account-chips";
 import { ActiveStores } from "@/components/active-stores";
 import { BarChart } from "@/components/bar-chart";
+import { OrderGrowth } from "@/components/order-growth";
 import { OwnerAlertsPanel } from "@/components/owner-alerts";
 import { IconArrowRight, IconChevronRight, IconPlus } from "@/components/icons";
 import { PageHead, place, StatusPill } from "@/components/ui";
@@ -9,7 +10,7 @@ import { listAccounts } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort, todayIn } from "@/lib/format";
 import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
-import { activeStores } from "@/lib/overview";
+import { activeStores, orderGrowth } from "@/lib/overview";
 import { getScope } from "@/lib/scope";
 import { can } from "@/lib/permissions";
 import { RangePicker } from "@/components/range-picker";
@@ -31,12 +32,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const range = resolveRange(sp.r ?? sp.days, scope.tz, { from: sp.from, to: sp.to });
   const rq = rangeQuery(range);
   const here = rq ? `/?${rq}` : "/";
-  const [s, attention, alerts, overview] = await Promise.all([
+  const [s, attention, alerts, overview, growth] = await Promise.all([
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     // órdenes con problemas: datos del cliente, solo con permiso de Órdenes
     canOrders ? attentionOrders(scope.account) : null,
     ownerAlerts(scope.account),
     activeStores(scope.account),
+    // crecimiento semanal y mensual: si falla, Inicio se muestra igual sin ese bloque
+    orderGrowth(scope.account).catch((e) => {
+      console.error("order_growth", e);
+      return null;
+    }),
   ]);
 
   const snap = s.snapshot;
@@ -134,6 +140,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
               </span>
             </div>
             <BarChart days={s.daily} bucket={range.bucket} />
+            {growth && <OrderGrowth g={growth} />}
           </div>
         </section>
 
