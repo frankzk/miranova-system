@@ -62,6 +62,13 @@ function businessOverview(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId, 
       new: stores.filter((s) => { const a = now - Date.parse(s.first_at); return a >= k * 7 * DAY && a < (k + 1) * 7 * DAY; }).length,
       orders: ok.filter((o) => inWeek(o, k)).length,
     })),
+    months: Array.from({ length: 12 }, (_, i) => 11 - i).map((k) => {
+      const ref = new Date();
+      const month = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() - k, 1)).toISOString().slice(0, 7);
+      const inMonth = (iso: string) => localDay(iso, "America/Tegucigalpa").slice(0, 7) === month;
+      const rows = ok.filter((o) => inMonth(o.ordered_at));
+      return { k, month, active: new Set(rows.map(key)).size, new: stores.filter((s) => inMonth(s.first_at)).length, orders: rows.length };
+    }),
     lists,
   };
 }

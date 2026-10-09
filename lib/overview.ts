@@ -1,7 +1,8 @@
 import "server-only";
+import type { ActiveMonth } from "./active-months";
 import { db } from "./supabase";
 
-// Resumen Miranova: base de tiendas y ritmo del negocio (ver supabase/migrations/0016_active_stores.sql).
+// Resumen Miranova: base de tiendas y ritmo del negocio (ver supabase/migrations/0016_active_stores.sql y 0030).
 
 export type OverviewStore = {
   kind: "new" | "reactivated" | "stopped";
@@ -25,6 +26,8 @@ export type Overview = {
   stores: { registered: number; active30: number; active7: number; active2d: number; new_month: number; reactivated: number; stopped: number };
   /** 12 semanas móviles, de la más antigua (k = 11) a la actual (k = 0) */
   weeks: { k: number; active: number; new: number; orders: number }[];
+  /** 12 meses calendario (zona de la cuenta), del más antiguo (k = 11) al en curso (k = 0) */
+  months?: ActiveMonth[];
   lists: OverviewStore[];
 };
 
