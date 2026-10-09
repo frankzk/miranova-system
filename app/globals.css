@@ -588,6 +588,14 @@ a.metric:hover .foot .go { color: var(--accent); transform: translateX(2px); }
 .tabs .c { font-size: var(--t-xs); font-weight: 550; color: var(--ink-3); background: var(--bg-app); border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
 .tabs a[aria-current="true"] .c { background: var(--accent-soft); color: var(--accent-ink); }
 
+/* Órdenes → Por despachar: subetapas (con retraso de despacho) */
+.stage-bar { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: -2px 0 14px; }
+.stage-bar .segmented a { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.stage-bar .segmented .c { font-size: var(--t-xs); font-weight: 550; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.stage-bar .dot { width: 7px; height: 7px; }
+.stage-bar .hint { font-size: var(--t-sm); color: var(--ink-3); }
+.table .sub.late { color: var(--danger); font-weight: 550; }
+
 .table-wrap { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-surface); box-shadow: var(--shadow-sm); overflow: hidden; }
 .table-scroll { overflow-x: auto; }
 table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
@@ -694,6 +702,16 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
 
 /* meses en celular */
 .only-sm { display: none; }
+/* Dinero → Saldo en billeteras */
+.wallets-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 0 0 8px; }
+.wallets-head h2 { font-size: var(--t-lg); font-weight: 600; letter-spacing: -0.01em; }
+.wallets-total { font-size: var(--t-sm); color: var(--ink-2); }
+.wallets-total b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wallets-total span { color: var(--ink-3); }
+.wallets .metrics[data-cols="1"] { grid-template-columns: minmax(0, 1fr); }
+.wallets .metrics[data-cols="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wallets .metrics[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wallets .metric .foot .dot { width: 7px; height: 7px; }
 .band-label { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); }
 .band-label span { font-weight: 400; color: var(--ink-3); }
 /* Inicio: tiendas activas */
@@ -889,7 +907,8 @@ html[data-drawer-loading] .drawer:not(.drawer-loading), html[data-drawer-loading
   .page { padding: 20px 16px 56px; }
   .page-head { margin-bottom: 18px; }
   .page-head h1 { font-size: 22px; }
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics, .wallets .metrics[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wallets .metrics[data-cols="1"] { grid-template-columns: minmax(0, 1fr); }
   .metric { padding: 14px 16px 12px; }
   .metric:nth-child(3) { border-left: 0; }
   .metric:nth-child(n + 3) { border-top: 1px solid var(--line); }

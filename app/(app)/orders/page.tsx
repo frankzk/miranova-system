@@ -13,7 +13,7 @@ import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { getOrder, groupCounts, listOrders, orderFacets, PAGE_SIZE, parseFilters, SORTS, type Sort } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { can } from "@/lib/permissions";
-import { GROUPS, groupById } from "@/lib/status";
+import { dispatchDelayHours, GROUPS, groupById, LATE_DISPATCH_HOURS, waitLabel } from "@/lib/status";
 
 export const metadata = { title: "Órdenes" };
 
@@ -39,7 +39,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const showAccount = !scope.account && accounts.length > 1;
 
-  const current = { group: f.group, q: f.q, status: f.status, dept: f.dept, product: f.product, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to, sort: f.sort };
+  const current = { group: f.group, stage: f.stage, q: f.q, status: f.status, dept: f.dept, product: f.product, dropshipper: f.dropshipper, carrier: f.carrier, from: f.from, to: f.to, sort: f.sort };
   const params = (patch: Record<string, string | number | undefined | null>) => {
     const p = new URLSearchParams();
     const merged: Record<string, unknown> = { ...current, page: f.page === 1 ? undefined : f.page, ...patch };
@@ -76,6 +76,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     f.sort && { key: "sort", label: `Orden: ${SORTS[f.sort].label}` },
   ].filter(Boolean) as { key: string; label: string }[];
   const hasFilters = !!(f.q || f.from || f.to || applied.length);
+  const late = counts.late ?? 0;
 
   return (
     <div className="page">
@@ -94,18 +95,36 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <AccountChips accounts={accounts} current={scope.account} next={url({ page: undefined })} />
 
       <nav className="tabs" aria-label="Filtrar por estado">
-        <Link href={url({ group: undefined, status: undefined, page: undefined })} aria-current={!activeGroup}>
+        <Link href={url({ group: undefined, stage: undefined, status: undefined, page: undefined })} aria-current={!activeGroup}>
           Todas <span className="c">{fmtInt(counts.all ?? 0)}</span>
         </Link>
         {GROUPS.map((g) => (
-          <Link key={g.id} href={url({ group: g.id, status: undefined, page: undefined })} aria-current={activeGroup?.id === g.id} title={g.hint}>
+          <Link key={g.id} href={url({ group: g.id, stage: undefined, status: undefined, page: undefined })} aria-current={activeGroup?.id === g.id} title={g.hint}>
+            {g.id === "dispatch" && late > 0 && <span className="dot" data-tone="danger" aria-hidden />}
             {g.label} <span className="c">{fmtInt(counts[g.id] ?? 0)}</span>
+            {g.id === "dispatch" && late > 0 && <span className="sr-only"> ({fmtInt(late)} con retraso de despacho)</span>}
           </Link>
         ))}
       </nav>
 
+      {activeGroup?.id === "dispatch" && (
+        <div className="stage-bar">
+          <nav className="segmented" aria-label="Subetapa de Por despachar">
+            <Link href={url({ stage: undefined, page: undefined })} aria-current={!f.stage ? "page" : undefined}>
+              Todas <span className="c">{fmtInt(counts.dispatch ?? 0)}</span>
+            </Link>
+            <Link href={url({ stage: "late", status: undefined, page: undefined })} aria-current={f.stage === "late" ? "page" : undefined}>
+              <span className="dot" data-tone={late > 0 ? "danger" : undefined} aria-hidden />
+              Con retraso de despacho <span className="c">{fmtInt(late)}</span>
+            </Link>
+          </nav>
+          <span className="hint">Más de {LATE_DISPATCH_HOURS} h sin “Orden despachada”: despachar tarde baja la probabilidad de entrega.</span>
+        </div>
+      )}
+
       <GetForm className="toolbar" role="search">
         {f.group && <input type="hidden" name="group" value={f.group} />}
+        {f.stage && <input type="hidden" name="stage" value={f.stage} />}
         <label className="input-icon search">
           <span className="sr-only">Buscar</span>
           <IconSearch />
@@ -143,12 +162,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div className="table-wrap">
         {orders.length === 0 ? (
           <div className="empty">
-            <h3>{hasFilters || activeGroup ? "Nada con estos filtros" : "Aún no hay órdenes"}</h3>
-            <p>
-              {hasFilters || activeGroup
-                ? "Prueba con otra búsqueda, quita algún filtro o cambia de pestaña."
-                : "Cuando tus cuentas sincronicen, las órdenes aparecerán aquí automáticamente."}
-            </p>
+            {f.stage === "late" && !hasFilters ? (
+              <>
+                <h3>Ninguna orden con retraso de despacho</h3>
+                <p>Todo lo que falta por despachar lleva menos de {LATE_DISPATCH_HOURS} horas.</p>
+              </>
+            ) : (
+              <>
+                <h3>{hasFilters || activeGroup ? "Nada con estos filtros" : "Aún no hay órdenes"}</h3>
+                <p>
+                  {hasFilters || activeGroup
+                    ? "Prueba con otra búsqueda, quita algún filtro o cambia de pestaña."
+                    : "Cuando tus cuentas sincronicen, las órdenes aparecerán aquí automáticamente."}
+                </p>
+              </>
+            )}
             {(hasFilters || activeGroup) && <Link className="btn" href="/orders">Ver todas las órdenes</Link>}
           </div>
         ) : (
@@ -171,11 +199,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   {orders.map((o) => {
                     const first = o.order_items[0];
                     const more = o.order_items.length - 1;
+                    const delay = dispatchDelayHours(o.status_code, o.ordered_at);
                     return (
                       <RowLink key={o.id} href={url({ order: o.id })} selected={o.id === openId}>
                         <td data-slot="id">
                           <Link className="order-no" href={url({ order: o.id })} scroll={false}>#{o.external_id}</Link>
                           <div className="sub nowrap">{fmtShort(o.ordered_at, o.accounts?.timezone)}</div>
+                          {delay !== null && <div className="sub late nowrap">{waitLabel(delay)} sin despachar</div>}
                           {showAccount && o.accounts && <div className="sub nowrap">{o.accounts.name}</div>}
                         </td>
                         <td data-slot="customer">

@@ -25,6 +25,32 @@ export const GROUPS: { id: StatusGroup; label: string; codes: string[]; hint: st
 
 export const groupById = (id: string | undefined) => GROUPS.find((g) => g.id === id);
 
+// "Con retraso de despacho": órdenes de Por despachar que siguen sin "Orden despachada"
+// (en Drop, el paso a `fulfilled`) pasadas 36 h desde que se crearon. Despachar tarde
+// baja la probabilidad de entrega.
+export const LATE_DISPATCH_HOURS = 36;
+/** Estados de Por despachar anteriores a "Orden despachada" (Drop: registered = Pendiente; Dropi: pending). */
+export const UNDISPATCHED_CODES = ["registered", "pending"];
+const HOUR = 3_600_000;
+
+/** Las órdenes creadas antes de este instante y aún sin despachar van con retraso. */
+export const lateDispatchCutoff = (now = Date.now()) => new Date(now - LATE_DISPATCH_HOURS * HOUR);
+
+/** Horas que lleva sin despachar si ya va con retraso; null si no aplica. */
+export function dispatchDelayHours(code: string | null | undefined, orderedAt: string | null | undefined, now = Date.now()): number | null {
+  if (!code || !orderedAt || !UNDISPATCHED_CODES.includes(code)) return null;
+  const hours = (now - Date.parse(orderedAt)) / HOUR;
+  return hours >= LATE_DISPATCH_HOURS ? Math.floor(hours) : null;
+}
+
+/** 40 → "40 h", 52 → "2 d 4 h", 72 → "3 d" */
+export function waitLabel(hours: number): string {
+  if (hours < 48) return `${hours} h`;
+  const d = Math.floor(hours / 24);
+  const h = hours % 24;
+  return h ? `${d} d ${h} h` : `${d} d`;
+}
+
 export function groupOf(code: string | null | undefined): StatusGroup | null {
   if (!code) return null;
   return GROUPS.find((g) => g.codes.includes(code))?.id ?? null;

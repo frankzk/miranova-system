@@ -26,6 +26,12 @@ export type Account = {
   catalog_path: string | null;
   catalog_sync_at: string | null;
   catalog_sync_msg: string | null;
+  // Billetera del proveedor: ruta descubierta en la API, último saldo leído y cuándo.
+  wallet_path: string | null;
+  wallet_balance: number | null;
+  wallet_at: string | null;
+  wallet_msg: string | null;
+  wallet_probe_at: string | null;
   enabled: boolean;
   last_sync_at: string | null;
   last_sync_ok: boolean | null;
