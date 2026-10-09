@@ -14,7 +14,7 @@ import { can } from "@/lib/permissions";
 import { customLabels, resolveRange } from "@/lib/ranges";
 import { getScope } from "@/lib/scope";
 import {
-  filterSignups, localDay, periodBounds, SIGNUP_PERIODS, signupPeriod, toSignups, type SignupPeriod, type SignupRow,
+  entered, filterSignups, localDay, periodBounds, SIGNUP_PERIODS, signupPeriod, toSignups, type SignupPeriod, type SignupRow,
 } from "@/lib/signups";
 import { daysBetween, fmtDay } from "@/lib/store-metrics";
 import { storeKey } from "@/lib/stores";
@@ -23,7 +23,7 @@ import "./nuevas.css";
 
 export const metadata = { title: "Tiendas nuevas" };
 
-// Cuándo entró cada tienda a vender con Miranova (su primer pedido), con su dueño y su correo,
+// Cuándo entró cada tienda a vender con Miranova (su primer pedido no cancelado, como en Inicio), con su dueño y su correo,
 // para cotejar referidos. Sale de los pedidos sincronizados: las tiendas nuevas aparecen solas.
 
 type SP = Record<string, string | string[] | undefined>;
@@ -46,7 +46,7 @@ export default async function NewStoresPage({ searchParams }: { searchParams: Pr
   const drawerData = loadDrawer(ficha);
   const [profiles, contacts] = await Promise.all([storeProfiles(), contactsByStore()]);
   const all = toSignups(
-    profiles.filter((p) => !scope.account || p.account_id === scope.account),
+    entered(profiles.filter((p) => !scope.account || p.account_id === scope.account)),
     (p) => contacts.get(contactKey(p)),
   );
 
@@ -197,7 +197,7 @@ export default async function NewStoresPage({ searchParams }: { searchParams: Pr
       )}
 
       <p className="footnote">
-        El ingreso es el primer pedido de la tienda con Miranova. El dueño es el nombre registrado en Drop. Drop no manda el correo de la tienda: se toma el que la tienda repite en sus pedidos
+        El ingreso es el primer pedido no cancelado de la tienda con Miranova (la misma regla de Inicio). El dueño es el nombre registrado en Drop. Drop no manda el correo de la tienda: se toma el que la tienda repite en sus pedidos
         (3 clientes o más) o el que se guarde en su contacto, que tiene prioridad. Si falta, ábrela y agrégalo en Contacto.
       </p>
     </div>

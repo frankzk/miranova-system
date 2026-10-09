@@ -4,7 +4,7 @@ import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeProfiles } from "@/lib/contacts";
 import { todayIn } from "@/lib/format";
 import { getScope } from "@/lib/scope";
-import { filterSignups, localDay, signupPeriod, toSignups } from "@/lib/signups";
+import { entered, filterSignups, localDay, signupPeriod, toSignups } from "@/lib/signups";
 import { buildXlsx, XLSX_TYPE, type Cell } from "@/lib/xlsx";
 
 // Exporta Tiendas nuevas a Excel con el mismo período, búsqueda y cuenta de la página: fecha de
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const [profiles, contacts] = await Promise.all([storeProfiles(), contactsByStore()]);
   const rows = filterSignups(
-    toSignups(profiles.filter((p) => !scope.account || p.account_id === scope.account), (p) => contacts.get(contactKey(p))),
+    toSignups(entered(profiles.filter((p) => !scope.account || p.account_id === scope.account)), (p) => contacts.get(contactKey(p))),
     { ...bounds, q },
     tzOf,
   );

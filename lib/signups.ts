@@ -10,7 +10,7 @@ export type Signup = {
   account_name: string;
   name: string;
   person: string | null;
-  /** Primer pedido (ISO). */
+  /** Primer pedido no cancelado (ISO). */
   first_at: string;
   email: string | null;
 };
@@ -42,6 +42,11 @@ export function toSignups<T extends Signup>(
       contactOwner: owner && p.person && norm(owner) !== norm(p.person) ? owner : null,
     };
   });
+}
+
+/** Solo las tiendas que ya entraron: con algún pedido no cancelado (la misma regla de Inicio). */
+export function entered<T extends { first_at: string | null }>(rows: T[]): (T & { first_at: string })[] {
+  return rows.filter((r): r is T & { first_at: string } => !!r.first_at);
 }
 
 /** Fecha local (YYYY-MM-DD) de un instante en la zona dada. */

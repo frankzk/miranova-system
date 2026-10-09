@@ -34,11 +34,12 @@ const EMAIL: Record<string, string> = {
 
 function storeProfiles(args: Row, ctx: FixtureCtx) {
   return (storeDirectory(args, ctx) as Row[]).map((s) => {
-    const mine = ctx.ORDERS.filter((o) => o.account_id === s.account_id && o.dropshipper && ctx.storeId(o) === s.store_id);
-    const first = mine.map((o) => o.ordered_at).sort()[0];
+    const mine = ctx.ORDERS.filter((o) => o.account_id === s.account_id && o.dropshipper && ctx.storeId(o) === s.store_id)
+      .filter((o) => ctx.groupOf(o.status_code) !== "cancelled");
+    const dates = mine.map((o) => o.ordered_at).sort();
     return {
       account_id: s.account_id, store_id: s.store_id, account_name: s.account_name, country: s.country, name: s.name,
-      person: s.person, first_at: first, last_at: s.last_at, orders: mine.length,
+      person: s.person, first_at: dates[0] ?? null, last_at: dates.at(-1) ?? null, orders: mine.length,
       email: s.country === "GT" ? null : EMAIL[s.name] ?? null, email_orders: EMAIL[s.name] ? 5 : null,
     };
   });
