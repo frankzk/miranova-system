@@ -35,9 +35,8 @@ const one = (sp: SP, k: string) => {
 const monthName = (ymd: string) => new Intl.DateTimeFormat("es", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${ymd}T12:00:00Z`));
 
 export default async function NewStoresPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const user = await requirePermission("stores");
+  const [user, accounts] = await Promise.all([requirePermission("stores"), listAccounts()]);
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const tzOf = (id: string) => accounts.find((a) => a.id === id)?.timezone ?? scope.tz;
   const today = todayIn(scope.tz);

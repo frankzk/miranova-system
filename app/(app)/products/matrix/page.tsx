@@ -19,13 +19,12 @@ const PATH = "/products/matrix";
 const SHOWN = 8;
 
 export default async function StoreProductMatrixPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const user = await requirePermission("products");
+  const [user, accounts] = await Promise.all([requirePermission("products"), listAccounts()]);
   // sin permiso de Tiendas, los nombres de tienda van sin enlace a su ficha
   const canStores = can(user, "stores");
   const sp = await searchParams;
   const raw = Number(Array.isArray(sp.days) ? sp.days[0] : sp.days);
   const days = (MATRIX_DAYS as readonly number[]).includes(raw) ? raw : 30;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const data = await storeProductMatrix(scope.account, days);
 

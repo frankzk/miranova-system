@@ -19,8 +19,7 @@ const one = (sp: SP, key: string) => { const v = sp[key]; return Array.isArray(v
 const pct = (n: number | null) => n === null ? "—" : `${(100 * n).toLocaleString("es", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
 
 export default async function DeliveryRatesPage({ searchParams }: { searchParams: Promise<SP> }) {
-  await requirePermission("business");
-  const [accounts, sp] = await Promise.all([listAccounts(), searchParams]);
+  const [, accounts, sp] = await Promise.all([requirePermission("business"), listAccounts(), searchParams]);
   const scope = await getScope(accounts);
   const scoped = accounts.filter((a) => !scope.account || a.id === scope.account);
   const countries = [...new Set(scoped.map((a) => a.country))].sort().map((code) => ({ code, name: countryByCode(code)?.name ?? code }));

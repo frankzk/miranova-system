@@ -8,7 +8,7 @@ import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
-import { ingestPayload, saveCatalog, saveProducts, type AccountCtx } from "./store";
+import { ingestPayload, purgeIngestLog, saveCatalog, saveProducts, type AccountCtx } from "./store";
 import { walletBalance } from "./wallet";
 
 const DAY = 86_400_000;
@@ -334,6 +334,7 @@ async function syncCatalogAccount(acc: Account, deadline: number): Promise<SyncR
 }
 
 export async function syncAll(): Promise<Record<string, SyncResult>> {
+  await purgeIngestLog();
   const { data, error } = await db().from("accounts").select("id, name").eq("enabled", true);
   if (error) throw error;
   const out: Record<string, SyncResult> = {};

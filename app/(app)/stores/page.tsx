@@ -36,10 +36,9 @@ const many = (sp: SP, k: string) => {
 };
 
 export default async function StoresPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const user = await requirePermission("stores");
+  const [user, accounts] = await Promise.all([requirePermission("stores"), listAccounts()]);
   const canEdit = can(user, "stores_edit");
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   // panel lateral de una tienda (?ficha=): contacto e historial de seguimiento sin salir del listado
   const ficha = parseFicha(one(sp, "ficha"));

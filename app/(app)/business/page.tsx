@@ -43,10 +43,9 @@ function Share({ value }: { value: number }) {
 }
 
 export default async function BusinessPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const user = await requirePermission("business");
+  const [user, accounts] = await Promise.all([requirePermission("business"), listAccounts()]);
   const perms = permissionFlags(user);
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const days = parsePeriod(one(sp, "d"));
   const countryParam = one(sp, "c")?.toUpperCase();

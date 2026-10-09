@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import type { AccountView } from "./accounts";
+import type { AccountSummary } from "./accounts";
 import { DEFAULT_TZ } from "./format";
 
 export const SCOPE_COOKIE = "mn_scope";
@@ -8,13 +8,13 @@ export const SCOPE_COOKIE = "mn_scope";
 export type Scope = {
   /** id de la cuenta elegida, o undefined = todas */
   account?: string;
-  current: AccountView | null;
+  current: AccountSummary | null;
   tz: string;
   label: string;
 };
 
 /** Cuenta activa (selector de la barra lateral), validada contra las cuentas existentes. */
-export async function getScope(accounts: AccountView[]): Promise<Scope> {
+export async function getScope(accounts: AccountSummary[]): Promise<Scope> {
   const id = (await cookies()).get(SCOPE_COOKIE)?.value;
   const current = accounts.find((a) => a.id === id) ?? null;
   return {

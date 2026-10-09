@@ -76,15 +76,26 @@ export async function ingestPayload(
   const orders = await mergeWithExisting(account.id, extractOrders(payload, opts(account)));
   const saved = await saveOrders(account.id, orders);
 
+  // la respuesta completa solo se guarda desde la extensión (para revisar el mapeo); la de cada
+  // página de la sincronización llegó a ocupar casi toda la base y nadie la lee
   const log = await db().from("ingest_log").insert({
     source,
     source_url: sourceUrl,
     orders_found: saved,
-    payload,
+    payload: source === "sync" ? null : payload,
     account_id: account.id,
   });
   if (log.error) console.error("ingest_log", log.error);
   return saved;
+}
+
+const INGEST_LOG_DAYS = 14;
+
+/** Borra del registro de ingestas lo de más de 14 días (solo sirve para depurar). */
+export async function purgeIngestLog(): Promise<void> {
+  const cutoff = new Date(Date.now() - INGEST_LOG_DAYS * 86_400_000).toISOString();
+  const { error } = await db().from("ingest_log").delete().lt("received_at", cutoff);
+  if (error) console.error("ingest_log purge", error);
 }
 
 /** Vuelve a normalizar todos los pedidos desde su `raw` (tras ajustar el mapeo). */

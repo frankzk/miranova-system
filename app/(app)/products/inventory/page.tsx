@@ -49,13 +49,12 @@ function verdict(p: ReorderPlan, today: string) {
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const user = await requirePermission("products");
+  const [user, accounts] = await Promise.all([requirePermission("products"), listAccounts()]);
   const sp = await searchParams;
   const pick = (k: string) => {
     const v = sp[k];
     return (Array.isArray(v) ? v[0] : v) ?? "";
   };
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const [all, supply] = await Promise.all([inventoryStatus(scope.account), inventorySupply(scope.account)]);
   const today = todayHN();
