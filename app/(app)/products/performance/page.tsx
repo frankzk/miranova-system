@@ -21,9 +21,8 @@ const PATH = "/products/performance";
 const SHOWN = 6;
 
 export default async function ProductPerformancePage({ searchParams }: { searchParams: Promise<SP> }) {
-  await requirePermission("products");
+  const [, accounts] = await Promise.all([requirePermission("products"), listAccounts()]);
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const all = await productPerformance(scope.account);
 

@@ -17,10 +17,9 @@ const MONTHS = 6;
 const CURRENCY_NAME: Record<string, string> = { HNL: "Lempiras", GTQ: "Quetzales", USD: "Dólares", NIO: "Córdobas", CRC: "Colones", DOP: "Pesos dominicanos", MXN: "Pesos mexicanos", COP: "Pesos colombianos", PEN: "Soles", CLP: "Pesos chilenos", EUR: "Euros" };
 
 export default async function MoneyPage() {
-  const user = await requirePermission("money");
+  const [user, accounts] = await Promise.all([requirePermission("money"), listAccounts()]);
   // sin Órdenes: ni el nombre del cliente ni enlaces al detalle de la orden
   const canOrders = can(user, "orders");
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const [months, summary, unpaid, wallets] = await Promise.all([
     moneyByMonth({ account: scope.account, months: MONTHS, tz: scope.tz }),

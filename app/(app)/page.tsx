@@ -20,10 +20,9 @@ export const metadata = { title: "Inicio" };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ r?: string; days?: string; from?: string; to?: string }> }) {
   // Inicio es para todos los usuarios; cada bloque se muestra según sus permisos
-  const user = await requireUser();
+  const [user, accounts] = await Promise.all([requireUser(), listAccounts()]);
   const canOrders = can(user, "orders");
   const canMoney = can(user, "money");
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
 
   if (accounts.length === 0) return <Welcome canConnect={can(user, "accounts")} />;

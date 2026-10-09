@@ -2,7 +2,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { IconAlert, IconCheck, IconChevronDown, IconPlus, IconRefresh } from "@/components/icons";
 import { SettingsSubnav } from "@/components/settings-subnav";
 import { PageHead } from "@/components/ui";
-import { listAccounts } from "@/lib/accounts";
+import { listAccountsFull } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { COUNTRIES, PLATFORMS, countryByCode } from "@/lib/countries";
@@ -17,9 +17,8 @@ export const maxDuration = 300;
 const platformName = (id: string) => PLATFORMS.find((p) => p.id === id)?.name ?? id;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ msg?: string; ok?: string }> }) {
-  const me = await requirePermission("accounts");
+  const [me, accounts] = await Promise.all([requirePermission("accounts"), listAccountsFull()]);
   const { msg, ok } = await searchParams;
-  const accounts = await listAccounts();
 
   return (
     <div className="page page-narrow">

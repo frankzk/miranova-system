@@ -24,11 +24,10 @@ import { getScope } from "@/lib/scope";
 export const metadata = { title: "Productos" };
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const user = await requirePermission("products");
+  const [user, accounts] = await Promise.all([requirePermission("products"), listAccounts()]);
   const canExport = can(user, "export");
   const canAccounts = can(user, "accounts");
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const [all, sales, media, users, everywhere] = await Promise.all([
     listProducts(scope.account),

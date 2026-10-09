@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget } from "./icons";
 import type { Permission, PermissionFlags } from "@/lib/permissions";
+import { setScopeAction } from "@/lib/scope-actions";
+import { NavPending } from "./nav-pending";
 
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
 
@@ -71,21 +73,23 @@ export function AppFrame({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // al cambiar de cuenta se vuelve a la misma sección, sin la orden abierta
-  const next = pathname;
-  const scopeHref = (id: string) => `/api/scope?${new URLSearchParams({ account: id, next })}`;
+  // al cambiar de cuenta se vuelve a la misma sección, sin la orden abierta (acción del servidor:
+  // navegación del cliente, sin recargar toda la página)
   const menu = (
     <div className="scope-menu" role="menu">
-      <a href={scopeHref("")} role="menuitem" aria-current={!scopeId}>
-        Todas las cuentas
-      </a>
-      <div className="sep" />
-      {accounts.map((a) => (
-        <a key={a.id} href={scopeHref(a.id)} role="menuitem" aria-current={scopeId === a.id}>
-          <span>{a.name}</span>
-          <span className="dot" data-tone={a.tone} aria-hidden />
-        </a>
-      ))}
+      <form action={setScopeAction}>
+        <input type="hidden" name="next" value={pathname} />
+        <button type="submit" name="account" value="" role="menuitem" aria-current={!scopeId}>
+          Todas las cuentas
+        </button>
+        <div className="sep" />
+        {accounts.map((a) => (
+          <button key={a.id} type="submit" name="account" value={a.id} role="menuitem" aria-current={scopeId === a.id}>
+            <span>{a.name}</span>
+            <span className="dot" data-tone={a.tone} aria-hidden />
+          </button>
+        ))}
+      </form>
     </div>
   );
 
@@ -136,6 +140,7 @@ export function AppFrame({
             <Link key={href} href={href} aria-current={match(pathname) ? "page" : undefined}>
               <Icon />
               {label}
+              <NavPending />
               {href === "/orders" && attention > 0 && (
                 <span className="count" title="Órdenes con problemas">{attention}</span>
               )}

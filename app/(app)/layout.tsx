@@ -12,8 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // cambiar la contraseña temporal se hace dentro del panel (Mi cuenta), por eso se permite aquí;
   // cada página vuelve a exigir su permiso y la contraseña ya cambiada
-  const user = await requireUser({ allowPasswordChange: true });
-  const accounts = await listAccounts();
+  const [user, accounts] = await Promise.all([requireUser({ allowPasswordChange: true }), listAccounts()]);
   const scope = await getScope(accounts);
 
   // contador de órdenes con problemas para la navegación (mismo número que Inicio y la pestaña)

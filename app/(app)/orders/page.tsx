@@ -20,9 +20,8 @@ export const metadata = { title: "Órdenes" };
 type SP = Record<string, string | string[] | undefined>;
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const user = await requirePermission("orders");
+  const [user, accounts] = await Promise.all([requirePermission("orders"), listAccounts()]);
   const sp = await searchParams;
-  const accounts = await listAccounts();
   const scope = await getScope(accounts);
   const f = { ...parseFilters(sp), account: scope.account };
   const openId = typeof sp.order === "string" ? sp.order : null;
