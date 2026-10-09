@@ -73,4 +73,31 @@ function businessOverview(args: Row, { ORDERS, ACCOUNTS, DAY, groupOf, storeId, 
   };
 }
 
-export const fixtures: FixtureModule = { rpc: { active_stores: businessOverview } };
+// order_growth: semanas (lunes a domingo) y meses en hora de Centroamérica (UTC−6, sin horario de verano)
+function orderGrowth(args: Row, { ORDERS }: FixtureCtx) {
+  const local = (iso: string) => new Date(Date.parse(iso) - 6 * 3_600_000);
+  const now = local(new Date().toISOString());
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const monday = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
+  const w0 = monday(now);
+  const m0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const pm0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const ts = ORDERS.filter((o) => !args.p_account || o.account_id === args.p_account).map((o) => local(o.ordered_at));
+  const wk = (t: Date) => Math.round((w0.getTime() - monday(t).getTime()) / (7 * 86_400_000));
+  const mk = (t: Date) => (now.getUTCFullYear() - t.getUTCFullYear()) * 12 + now.getUTCMonth() - t.getUTCMonth();
+  const ew = now.getTime() - w0.getTime();
+  const em = now.getTime() - m0.getTime();
+  return {
+    now: now.toISOString().slice(0, 16),
+    weeks: Array.from({ length: 12 }, (_, i) => 11 - i).map((k) => ({
+      k, start: day(new Date(w0.getTime() - k * 7 * 86_400_000)), orders: ts.filter((t) => wk(t) === k).length,
+    })),
+    months: Array.from({ length: 12 }, (_, i) => 11 - i).map((k) => ({
+      k, month: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1)).toISOString().slice(0, 7), orders: ts.filter((t) => mk(t) === k).length,
+    })),
+    week_prev_to_date: ts.filter((t) => t.getTime() >= w0.getTime() - 7 * 86_400_000 && t.getTime() < w0.getTime() - 7 * 86_400_000 + ew).length,
+    month_prev_to_date: ts.filter((t) => t >= pm0 && t.getTime() < Math.min(pm0.getTime() + em, m0.getTime())).length,
+  };
+}
+
+export const fixtures: FixtureModule = { rpc: { active_stores: businessOverview, order_growth: orderGrowth } };

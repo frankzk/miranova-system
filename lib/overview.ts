@@ -1,5 +1,6 @@
 import "server-only";
 import type { ActiveMonth } from "./active-months";
+import type { OrderGrowth } from "./growth";
 import { db } from "./supabase";
 
 // Resumen Miranova: base de tiendas y ritmo del negocio (ver supabase/migrations/0016_active_stores.sql y 0030).
@@ -35,4 +36,11 @@ export async function activeStores(account?: string): Promise<Overview> {
   const { data, error } = await db().rpc("active_stores", { p_account: account ?? null });
   if (error) throw error;
   return data as Overview;
+}
+
+/** Órdenes por semana y por mes con la comparación justa del período en curso (migración 0032). */
+export async function orderGrowth(account?: string): Promise<OrderGrowth> {
+  const { data, error } = await db().rpc("order_growth", { p_account: account ?? null });
+  if (error) throw error;
+  return data as OrderGrowth;
 }
