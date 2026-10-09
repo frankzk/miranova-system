@@ -1,15 +1,22 @@
+import Link from "next/link";
 import { fmtInt } from "@/lib/format";
 import {
-  clock, dayMonth, monthName, monthProjection, monthShort, monthToDateLabels, pctChange, toDate, trimLeading, weekRange, weekToDateLabel,
-  type OrderGrowth as Growth,
+  clock, dayMonth, drivers, monthName, monthProjection, monthShort, monthToDateLabels, pctChange, toDate, trimLeading, weekRange, weekToDateLabel,
+  type OrderGrowth as Growth, type StoreDelta,
 } from "@/lib/growth";
+import { storeHref } from "@/lib/store-links";
 
 /**
  * Inicio › Órdenes: crecimiento semana a semana y mes a mes (órdenes recibidas). El período en
  * curso se compara contra el mismo tramo del anterior, hasta el mismo día y hora, para saber si se
  * está creciendo sin esperar a que termine. No depende del período elegido arriba.
  */
-export function OrderGrowth({ g }: { g: Growth }) {
+export function OrderGrowth({ g, linkStores, showAccount }: {
+  g: Growth;
+  /** con permiso de Tiendas el nombre abre la ficha; sin él, solo texto */
+  linkStores: boolean;
+  showAccount: boolean;
+}) {
   const weeks = g.weeks ?? [];
   const months = trimLeading(g.months);
   if (weeks.every((w) => w.orders === 0)) return null;
@@ -34,6 +41,7 @@ export function OrderGrowth({ g }: { g: Growth }) {
           <strong>{fmtInt(w.current)}</strong> esta semana <Delta change={w.change} />
           <span className="muted">vs. {fmtInt(w.prev)} la semana pasada en el mismo tramo ({weekToDateLabel(g.now)})</span>
         </p>
+        <Drivers rows={g.week_stores} linkStores={linkStores} showAccount={showAccount} />
         <p className="og-sub muted">
           Semana pasada completa: {fmtInt(w.prevFull)} <Delta change={pctChange(w.prevFull, weekBefore)} /> vs. la anterior
         </p>
@@ -63,6 +71,7 @@ export function OrderGrowth({ g }: { g: Growth }) {
             <strong>{fmtInt(m.current)}</strong> en {monthName(cur)} <Delta change={m.change} />
             <span className="muted">vs. {fmtInt(m.prev)} del {ml.prev}, el mismo tramo ({ml.current}, hasta las {clock(g.now)})</span>
           </p>
+          <Drivers rows={g.month_stores} linkStores={linkStores} showAccount={showAccount} />
           <p className="og-sub muted">
             {projection !== null && <>A este ritmo, {monthName(cur)} cerraría en ~{fmtInt(projection)} · </>}
             {prev && <>{capitalize(monthName(prev.month))} cerró en {fmtInt(prev.orders)}</>}
@@ -136,3 +145,48 @@ function Delta({ change }: { change: number | null }) {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Qué tiendas explican el cambio del tramo: las que más subieron y más bajaron. */
+function Drivers({ rows, linkStores, showAccount }: { rows: StoreDelta[] | undefined; linkStores: boolean; showAccount: boolean }) {
+  const d = drivers(rows);
+  if (d.upCount + d.downCount === 0) return null;
+  const sign = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${fmtInt(Math.abs(n))}`;
+  const list = (items: typeof d.up, tone: "up" | "down", label: string) => (
+    <div>
+      <p className="og-drv-h">{label}</p>
+      {items.length === 0 ? (
+        <p className="muted og-drv-none">Ninguna</p>
+      ) : (
+        <ul>
+          {items.map((r) => {
+            const name = r.name ?? "Sin nombre";
+            return (
+              <li key={`${r.account_id}:${r.store_id}`}>
+                <span className="n">
+                  {linkStores ? <Link href={storeHref(r.account_id, r.store_id)} prefetch={false}>{name}</Link> : name}
+                  {showAccount && <small className="muted"> · {r.account_name}</small>}
+                </span>
+                <span className="delta" data-tone={tone}>{sign(r.diff)}</span>
+                <span className="muted c">{fmtInt(r.cur)} vs. {fmtInt(r.prev)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <div className="og-drv">
+      <p className="og-drv-sum">
+        Qué tiendas lo explican:{" "}
+        <span className="delta" data-tone="up">{fmtInt(d.upCount)} subieron {sign(d.upSum)}</span>
+        {" · "}
+        <span className="delta" data-tone="down">{fmtInt(d.downCount)} bajaron {sign(d.downSum)}</span>
+      </p>
+      <div className="og-drv-cols">
+        {list(d.up, "up", "Las que más subieron")}
+        {list(d.down, "down", "Las que más bajaron")}
+      </div>
+    </div>
+  );
+}

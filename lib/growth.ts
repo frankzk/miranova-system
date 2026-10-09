@@ -4,6 +4,8 @@
 
 export type GrowthWeek = { k: number; start: string; orders: number };
 export type GrowthMonth = { k: number; month: string; orders: number };
+/** Una tienda en el período en curso (cur) contra el mismo tramo del anterior (prev). */
+export type StoreDelta = { account_id: string; store_id: string; account_name: string; name: string | null; cur: number; prev: number };
 export type OrderGrowth = {
   /** Ahora en la zona de la cuenta: "YYYY-MM-DDTHH:MI". */
   now: string;
@@ -15,7 +17,29 @@ export type OrderGrowth = {
   week_prev_to_date: number;
   /** Órdenes del mes pasado hasta el mismo día y hora (o hasta su último día, si es más corto). */
   month_prev_to_date: number;
+  /** Tiendas cuyo número cambió en el tramo (migración 0033); sumadas dan la diferencia total. */
+  week_stores?: StoreDelta[];
+  month_stores?: StoreDelta[];
 };
+
+/**
+ * Qué tiendas explican el cambio: las que más subieron y más bajaron contra el mismo tramo, y
+ * cuánto suman unas y otras (subidas + bajadas = diferencia total del período).
+ */
+export function drivers(rows: StoreDelta[] | null | undefined, top = 4) {
+  const all = (rows ?? []).filter((r) => r.cur !== r.prev).map((r) => ({ ...r, diff: r.cur - r.prev }));
+  const upAll = all.filter((r) => r.diff > 0).sort((a, b) => b.diff - a.diff || b.cur - a.cur);
+  const downAll = all.filter((r) => r.diff < 0).sort((a, b) => a.diff - b.diff || b.prev - a.prev);
+  const sum = (xs: { diff: number }[]) => xs.reduce((t, x) => t + x.diff, 0);
+  return {
+    up: upAll.slice(0, top),
+    down: downAll.slice(0, top),
+    upCount: upAll.length,
+    upSum: sum(upAll),
+    downCount: downAll.length,
+    downSum: sum(downAll),
+  };
+}
 
 /** Cambio relativo (0.12 = +12 %); null si no hay base para comparar. */
 export const pctChange = (cur: number, prev: number): number | null => (prev > 0 ? (cur - prev) / prev : null);

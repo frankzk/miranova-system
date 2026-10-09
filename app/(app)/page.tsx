@@ -140,7 +140,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
               </span>
             </div>
             <BarChart days={s.daily} bucket={range.bucket} />
-            {growth && <OrderGrowth g={growth} />}
+            {growth && <OrderGrowth g={growth} linkStores={can(user, "stores")} showAccount={!scope.account && accounts.length > 1} />}
           </div>
         </section>
 
