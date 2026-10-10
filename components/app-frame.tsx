@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconStore, IconTarget } from "./icons";
+import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconLogout, IconMenu, IconMoney, IconOrders, IconShip, IconStore, IconTarget } from "./icons";
 import type { Permission, PermissionFlags } from "@/lib/permissions";
 import { setScopeAction } from "@/lib/scope-actions";
 import { NavPending } from "./nav-pending";
@@ -19,6 +19,7 @@ const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permissi
   { href: "/orders", label: "Órdenes", icon: IconOrders, perm: "orders", match: (p: string) => p.startsWith("/orders") },
   { href: "/stores", label: "Tiendas", icon: IconStore, perm: "stores", match: (p: string) => p.startsWith("/stores") },
   { href: "/products", label: "Productos", icon: IconBox, perm: "products", match: (p: string) => p.startsWith("/products") },
+  { href: "/imports", label: "Importaciones", icon: IconShip, perm: "imports", match: (p: string) => p.startsWith("/imports") },
   { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
 ];
 

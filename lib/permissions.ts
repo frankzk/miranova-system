@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   { key: "stores_edit", label: "Editar tiendas", hint: "Guardar contactos y grupos de WhatsApp, y registrar seguimientos" },
   { key: "products", label: "Productos", hint: "Catálogo, rendimiento, inventario y tienda × producto" },
   { key: "photos", label: "Fotos", hint: "Subir y borrar fotos y videos reales de productos (verlas y descargarlas va con Productos)" },
+  { key: "imports", label: "Importaciones", hint: "Registrar importaciones: productos, guías, documentos y estados (costos y pagos, solo con Dinero)" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
   { key: "export", label: "Exportar", hint: "Descargar órdenes y catálogo en CSV" },
