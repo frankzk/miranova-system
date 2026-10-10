@@ -1,4 +1,4 @@
-import { importsDigest, statusInfo, type DigestImport } from "./imports.ts";
+import { importsDigest, STALE_DAYS, statusInfo, type DigestImport } from "./imports.ts";
 import { dayLabel, reorderPlan, shortDate, urgency, type InventoryRow, type ReorderPlan, type Supply } from "./inventory.ts";
 
 // Resumen diario por correo de "qué pedir hoy": agotados, pedir hoy, pedir esta semana, pedidos
@@ -58,7 +58,7 @@ export function restockDigest(rows: InventoryRow[], supply: Supply, today: strin
   // las importaciones atrasadas van en su propia sección (una vez por importación, no por producto)
   const late = lines.flatMap((l) => l.plan.open.filter((o) => o.status === "late" && !o.import).map((o) => ({ ...l, order: o })));
   const imp = importsDigest(imports, today);
-  const impCount = new Set([...imp.late, ...imp.week, ...imp.unreported].map((i) => i.id)).size;
+  const impCount = new Set([...imp.late, ...imp.week, ...imp.unreported, ...imp.stale].map((i) => i.id)).size;
   const counts = { out: out.length, now: now.length, soon: soon.length, late: late.length, imports: impCount };
   const restockEmpty = !out.length && !now.length && !soon.length && !late.length;
   const empty = restockEmpty && !impCount;
@@ -71,6 +71,7 @@ export function restockDigest(rows: InventoryRow[], supply: Supply, today: strin
     imp.late.length && plural(imp.late.length, "importación atrasada", "importaciones atrasadas"),
     imp.week.length && `${plural(imp.week.length, "importación llega", "importaciones llegan")} esta semana`,
     imp.unreported.length && `${imp.unreported.length} sin avisar a la bodega`,
+    imp.stale.length && `${imp.stale.length} sin novedades`,
   ].filter(Boolean).join(", ");
   const date = shortDate(today);
   const subject = empty ? `Inventario al día · ${date}` : restockEmpty ? `Importaciones · ${head}` : `Qué pedir hoy · ${head}`;
@@ -98,6 +99,10 @@ export function restockDigest(rows: InventoryRow[], supply: Supply, today: strin
     {
       title: "Sin avisar a la bodega", tone: "#e5424d",
       items: imp.unreported.map((i) => impItem(i, `avisar a la bodega por WhatsApp (llega ${i.eta! < today ? "con retraso" : dayLabel(i.eta!, today)})`)),
+    },
+    {
+      title: `Viajan sin novedades (${STALE_DAYS}+ días)`, tone: "#e5850b",
+      items: imp.stale.map((i) => impItem(i, `sin novedades hace ${i.days} días: revisar el seguimiento y anotar cómo va`)),
     },
   ].filter((s) => s.items.length > 0);
 

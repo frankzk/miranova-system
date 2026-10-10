@@ -3,6 +3,7 @@ import {
   allInDrop, dropState, IMPORT_FILE_TYPES, INBOUND, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
   type DropState,
 } from "./imports";
+import type { RCost, RImport, RItem, RPayment } from "./import-reports";
 import { productKey, trackOrders, type TrackedOrder } from "./inventory";
 import { inventorySupply, stockEntries } from "./inventory-data";
 import { db } from "./supabase";
@@ -16,6 +17,7 @@ export type ImportRow = {
   id: string;
   code: string;
   supplier: string | null;
+  supplier_id: string | null;
   origin: string | null;
   dest_country: string;
   status: string;
@@ -72,15 +74,25 @@ const items = (rows: ImportItem[]) =>
   }));
 const costs = (rows: ImportCost[]) => rows.map((c) => ({ ...c, amount: Number(c.amount) }));
 
-export type ImportSummary = ImportRow & { lines: number; units: number; total: number; paid: number };
+export type ImportSummary = ImportRow & { lines: number; units: number; total: number; paid: number; last_event_at: string | null };
 
-/** Todas las importaciones, las más nuevas primero, con unidades, costo total y lo pagado. */
+/** Última novedad (cambio de estado, nota, aviso) de cada importación. */
+async function lastEvents(): Promise<Map<string, string>> {
+  const { data, error } = await db().from("import_events").select("import_id, at");
+  if (error) throw error;
+  const out = new Map<string, string>();
+  for (const e of (data ?? []) as { import_id: string; at: string }[]) if (!out.has(e.import_id) || e.at > out.get(e.import_id)!) out.set(e.import_id, e.at);
+  return out;
+}
+
+/** Todas las importaciones, las más nuevas primero, con unidades, costo total, lo pagado y su última novedad. */
 export async function listImports(): Promise<ImportSummary[]> {
-  const [imp, it, co, pa] = await Promise.all([
+  const [imp, it, co, pa, last] = await Promise.all([
     db().from("imports").select("*").order("created_at", { ascending: false }),
     db().from("import_items").select("id, import_id, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty"),
     db().from("import_costs").select("import_id, kind, amount, allocation, item_id"),
     db().from("import_payments").select("import_id, amount"),
+    lastEvents(),
   ]);
   for (const r of [imp, it, co, pa]) if (r.error) throw r.error;
   const group = <T extends { import_id: string }>(rows: T[]) => {
@@ -101,8 +113,45 @@ export async function listImports(): Promise<ImportSummary[]> {
       units: lc.totals.units,
       total: lc.totals.total,
       paid: (byPaid.get(r.id) ?? []).reduce((t, p) => t + Number(p.amount), 0),
+      last_event_at: last.get(r.id) ?? null,
     };
   });
+}
+
+// ─── Proveedores ───
+
+export type Supplier = {
+  id: string; name: string; origin: string | null; contact: string | null; whatsapp: string | null; email: string | null;
+  payment_terms: string | null; notes: string | null; created_at: string;
+};
+
+/** Proveedores guardados, por nombre (vacío si la tabla todavía no existe). */
+export async function listSuppliers(): Promise<Supplier[]> {
+  const { data, error } = await db().from("import_suppliers").select("*").order("name");
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw error;
+  }
+  return (data ?? []) as Supplier[];
+}
+
+/** Todo lo que necesitan los reportes y el directorio de proveedores. */
+export async function reportData(): Promise<{ imports: RImport[]; items: RItem[]; costs: RCost[]; payments: RPayment[] }> {
+  const [imp, it, co, pa] = await Promise.all([
+    db().from("imports").select("id, code, supplier_id, supplier, dest_country, status, ordered_at, created_at, eta, arrived_at"),
+    db().from("import_items").select("id, import_id, account_id, product_external_id, name, sku, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty"),
+    db().from("import_costs").select("import_id, kind, amount, allocation, item_id"),
+    db().from("import_payments").select("import_id, paid_at, amount"),
+  ]);
+  for (const r of [imp, it, co, pa]) if (r.error) throw r.error;
+  return {
+    imports: (imp.data ?? []) as RImport[],
+    items: ((it.data ?? []) as RItem[]).map((i) => ({
+      ...i, qty: Number(i.qty), unit_cost: Number(i.unit_cost), unit_weight_kg: num(i.unit_weight_kg), received_qty: num(i.received_qty), damaged_qty: Number(i.damaged_qty ?? 0),
+    })),
+    costs: ((co.data ?? []) as RCost[]).map((c) => ({ ...c, amount: Number(c.amount) })),
+    payments: ((pa.data ?? []) as RPayment[]).map((p) => ({ ...p, amount: Number(p.amount) })),
+  };
 }
 
 export type ImportDetail = {
@@ -240,12 +289,12 @@ export async function digestImports(): Promise<DigestImport[]> {
     if (error.code === "42P01" || error.code === "PGRST205") return [];
     throw error;
   }
-  const list = (data ?? []) as Omit<DigestImport, "units">[];
+  const list = (data ?? []) as Omit<DigestImport, "units" | "last_event_at">[];
   if (!list.length) return [];
-  const { data: its } = await db().from("import_items").select("import_id, qty").in("import_id", list.map((i) => i.id));
+  const [{ data: its }, last] = await Promise.all([db().from("import_items").select("import_id, qty").in("import_id", list.map((i) => i.id)), lastEvents()]);
   const units = new Map<string, number>();
   for (const i of (its ?? []) as { import_id: string; qty: number }[]) units.set(i.import_id, (units.get(i.import_id) ?? 0) + Number(i.qty));
-  return list.map((i) => ({ ...i, units: units.get(i.id) ?? 0 }));
+  return list.map((i) => ({ ...i, units: units.get(i.id) ?? 0, last_event_at: last.get(i.id) ?? null }));
 }
 
 // ─── Sincronización ───

@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { registerImportDocument, startImportUpload } from "@/app/(app)/imports/actions";
+import { quickCreateSupplier, type SupplierOption } from "@/app/(app)/imports/suppliers/actions";
 import {
   ALLOCATIONS, CARRIERS, COST_KINDS, DOC_KINDS, IMPORT_FILE_ACCEPT, IMPORT_STATUSES, importFileProblem, MONEY_DOCS, PAYMENT_METHODS, TRANSPORTS, type DocKind,
 } from "@/lib/imports";
 import { IconCheck, IconCopy, IconUpload } from "./icons";
 import { useSheet } from "./side-sheet";
+import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
 
 export type ImportFormState = { ok: boolean; msg: string } | null;
@@ -42,6 +45,7 @@ type Country = { code: string; name: string };
 export type ImportHeader = {
   id?: string;
   supplier?: string | null;
+  supplier_id?: string | null;
   origin?: string | null;
   dest_country?: string;
   ordered_at?: string | null;
@@ -55,17 +59,45 @@ export type ImportHeader = {
   notes?: string | null;
 };
 
-function HeaderFields({ v, countries, edit }: { v: ImportHeader; countries: Country[]; edit: boolean }) {
+function HeaderFields({ v, countries, edit, suppliers }: { v: ImportHeader; countries: Country[]; edit: boolean; suppliers: SupplierOption[] }) {
+  // proveedor y origen controlados: elegir un proveedor completa su origen (y no se pierden si algo falla)
+  const [list, setList] = useState(suppliers);
+  const [sid, setSid] = useState(v.supplier_id ?? "");
+  const [origin, setOrigin] = useState(v.origin ?? "");
+  const [adding, setAdding] = useState(false);
+  const labelId = useId();
+  const pick = (id: string) => {
+    setSid(id);
+    const s = list.find((x) => x.id === id);
+    if (s?.origin) setOrigin(s.origin);
+  };
   return (
     <div className="im-grid">
-      <label className="field">
-        <span>Proveedor</span>
-        <input className="input" name="supplier" defaultValue={v.supplier ?? ""} maxLength={120} placeholder="Nombre del proveedor" />
-      </label>
+      <div className="field wide">
+        <span id={labelId}>Proveedor</span>
+        <div className="im-supplier">
+          <select className="select" name="supplier_id" value={sid} onChange={(e) => pick(e.target.value)} aria-labelledby={labelId}>
+            <option value="">{list.length ? "Elige el proveedor" : "Sin proveedores guardados"}</option>
+            {list.map((s) => <option key={s.id} value={s.id}>{s.name}{s.origin ? ` · ${s.origin}` : ""}</option>)}
+          </select>
+          <button type="button" className="btn" onClick={() => setAdding(true)} aria-haspopup="dialog">+ Nuevo</button>
+        </div>
+      </div>
       <label className="field">
         <span>Origen <span className="hint">país o ciudad</span></span>
-        <input className="input" name="origin" defaultValue={v.origin ?? ""} maxLength={80} placeholder="China, Yiwu…" />
+        <input className="input" name="origin" value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={80} placeholder="China, Yiwu…" />
       </label>
+      {adding && (
+        <NewSupplierPopup
+          onClose={() => setAdding(false)}
+          onCreated={(s) => {
+            setList((cur) => [...cur, s].sort((a, b) => a.name.localeCompare(b.name, "es")));
+            setSid(s.id);
+            if (s.origin) setOrigin(s.origin);
+            setAdding(false);
+          }}
+        />
+      )}
       <label className="field">
         <span>Llega a</span>
         <select className="select" name="dest_country" defaultValue={v.dest_country ?? ""} required>
@@ -120,27 +152,104 @@ function HeaderFields({ v, countries, edit }: { v: ImportHeader; countries: Coun
   );
 }
 
-export function NewImportForm({ action, countries, defaultCountry }: { action: Action; countries: Country[]; defaultCountry: string }) {
-  const [state, run] = useActionState(action, null);
-  return (
-    <form action={run} className="im-form">
-      <HeaderFields v={{ dest_country: defaultCountry, transport: "courier", ordered_at: new Date().toISOString().slice(0, 10) }} countries={countries} edit={false} />
-      <Msg state={state} />
-      <SubmitButton className="btn btn-primary" pending="Creando…">Crear importación</SubmitButton>
-    </form>
+/**
+ * Ventana simple para guardar un proveedor sin salir de la importación: nombre, origen y WhatsApp.
+ * Va fuera del formulario (portal) para no anidar formularios; Esc la cierra sin cerrar el panel.
+ */
+function NewSupplierPopup({ onClose, onCreated }: { onClose: () => void; onCreated: (s: SupplierOption) => void }) {
+  const [name, setName] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null;
+    box.current?.querySelector("input")?.focus();
+    return () => back?.focus();
+  }, []);
+  async function save() {
+    if (busy || !name.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await quickCreateSupplier({ name, origin, whatsapp });
+      if (r.ok) onCreated(r.supplier);
+      else setErr(r.msg);
+    } catch {
+      setErr("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return createPortal(
+    <div className="im-pop-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div
+        ref={box}
+        className="im-pop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onKeyDown={(e) => {
+          // que el panel de atrás no reciba Esc ni Tab
+          if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose(); }
+          if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") { e.preventDefault(); save(); }
+          if (e.key === "Tab" && box.current) {
+            e.stopPropagation();
+            const items = box.current.querySelectorAll<HTMLElement>("input, button:not([disabled])");
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+          }
+        }}
+      >
+        <h3 id={titleId}>Nuevo proveedor</h3>
+        <label className="field">
+          <span>Nombre</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="Yiwu Trading Co." autoComplete="off" />
+        </label>
+        <label className="field">
+          <span>Origen <span className="hint">país o ciudad</span></span>
+          <input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={80} placeholder="China, Yiwu…" />
+        </label>
+        <label className="field">
+          <span>WhatsApp <span className="hint">opcional</span></span>
+          <input className="input" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} maxLength={40} inputMode="tel" placeholder="+86 138 0000 0000" />
+        </label>
+        {err && <p className="im-msg" data-ok="false" role="alert">{err}</p>}
+        <div className="im-pop-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={busy || !name.trim()}>{busy ? "Guardando…" : "Guardar proveedor"}</button>
+        </div>
+        <p className="im-pop-hint">Contacto, condiciones de pago y notas se completan después en Importaciones → Proveedores.</p>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
-export function ImportHeaderForm({ action, v, countries }: { action: Action; v: ImportHeader; countries: Country[] }) {
+export function NewImportForm({ action, countries, defaultCountry, suppliers }: { action: Action; countries: Country[]; defaultCountry: string; suppliers: SupplierOption[] }) {
+  const [state, run] = useActionState(action, null);
+  return (
+    <StickyForm state={state} action={run} className="im-form">
+      <HeaderFields v={{ dest_country: defaultCountry, transport: "courier", ordered_at: new Date().toISOString().slice(0, 10) }} countries={countries} edit={false} suppliers={suppliers} />
+      <Msg state={state} />
+      <SubmitButton className="btn btn-primary" pending="Creando…">Crear importación</SubmitButton>
+    </StickyForm>
+  );
+}
+
+export function ImportHeaderForm({ action, v, countries, suppliers }: { action: Action; v: ImportHeader; countries: Country[]; suppliers: SupplierOption[] }) {
   const [state, run] = useActionState(action, null);
   useCloseOnOk(state);
   return (
-    <form action={run} className="im-form">
+    <StickyForm state={state} action={run} className="im-form">
       <input type="hidden" name="id" value={v.id} />
-      <HeaderFields v={v} countries={countries} edit />
+      <HeaderFields v={v} countries={countries} edit suppliers={suppliers} />
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Guardando…">Guardar</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -149,7 +258,7 @@ export function ImportHeaderForm({ action, v, countries }: { action: Action; v: 
 export function StatusForm({ action, importId, current }: { action: Action; importId: string; current: string }) {
   const [state, run] = useActionState(action, null);
   return (
-    <form action={run} className="im-status-form">
+    <StickyForm state={state} action={run} className="im-status-form">
       <input type="hidden" name="id" value={importId} />
       <label className="field">
         <span>Estado</span>
@@ -163,7 +272,7 @@ export function StatusForm({ action, importId, current }: { action: Action; impo
       </label>
       <SubmitButton className="btn" pending="Guardando…">Guardar</SubmitButton>
       <Msg state={state} />
-    </form>
+    </StickyForm>
   );
 }
 
@@ -184,13 +293,13 @@ export function ReportBox({ action, importId, reported, who, message }: { action
       <div className="im-report-actions">
         <button type="button" className="btn" onClick={copy}>{copied ? <><IconCheck /> Copiado</> : <><IconCopy /> Copiar mensaje</>}</button>
         <a className="btn" href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">Abrir WhatsApp</a>
-        <form action={run}>
+        <StickyForm state={state} action={run}>
           <input type="hidden" name="id" value={importId} />
           <input type="hidden" name="reported" value={reported ? "0" : "1"} />
           <SubmitButton className={reported ? "btn btn-ghost" : "btn btn-primary"} pending="Guardando…">
             {reported ? "Quitar marca" : "Marcar como reportada"}
           </SubmitButton>
-        </form>
+        </StickyForm>
       </div>
       {reported && <p className="im-report-ok"><IconCheck /> Reportada {who ? `por ${who} ` : ""}el {new Date(reported).toLocaleDateString("es-HN", { day: "numeric", month: "short", year: "numeric" })}</p>}
       {/* al marcar bien, la línea de arriba ya lo dice: solo se muestran los errores */}
@@ -307,7 +416,7 @@ export function AddItemForm({ action, importId, choices, money }: { action: Acti
   }
 
   return (
-    <form ref={form} action={run} className="im-form">
+    <StickyForm state={state} ref={form} action={run} className="im-form">
       <input type="hidden" name="id" value={importId} />
       <input type="hidden" name="source" value={source} />
       <div className="segmented im-source" role="tablist" aria-label="Qué producto">
@@ -345,7 +454,7 @@ export function AddItemForm({ action, importId, choices, money }: { action: Acti
       <ItemNumbers money={money} />
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Agregando…" disabled={uploading || (source === "catalog" && !pick)}>Agregar producto</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -353,12 +462,12 @@ export function EditItemForm({ action, item, money }: { action: Action; item: { 
   const [state, run] = useActionState(action, null);
   useCloseOnOk(state);
   return (
-    <form action={run} className="im-form">
+    <StickyForm state={state} action={run} className="im-form">
       <input type="hidden" name="item_id" value={item.id} />
       <ItemNumbers money={money} v={item} />
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Guardando…">Guardar</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -371,13 +480,13 @@ export function LinkItemForm({ action, itemId, name, choices }: { action: Action
   // primero lo que se parece al nombre (sin palabras cortas)
   const initial = name.split(/\s+/).filter((w) => w.length > 3).slice(0, 2).join(" ");
   return (
-    <form action={run} className="im-form">
+    <StickyForm state={state} action={run} className="im-form">
       <input type="hidden" name="item_id" value={itemId} />
       <p className="muted im-small">Al enlazarlo, Inventario lo cuenta como &ldquo;en camino&rdquo; y se ve solo cuando Drop registra su entrada. Si tiene el mismo SKU o nombre, se enlaza solo en la próxima sincronización.</p>
       <CatalogPicker choices={choices} pick={pick} setPick={setPick} initial={initial} empty="Nada con esa búsqueda. Si todavía no está en Drop, se enlazará cuando aparezca." />
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Enlazando…" disabled={!pick}>Enlazar</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -394,7 +503,8 @@ export function ReceptionForm({ action, importId, lines }: { action: Action; imp
   const set = (id: string, k: "recv" | "dmg" | "note", val: string) => setV((cur) => ({ ...cur, [id]: { ...cur[id], [k]: val } }));
   const fillOrdered = () => setV((cur) => Object.fromEntries(lines.map((l) => [l.id, { ...cur[l.id], recv: cur[l.id].recv || String(l.drop ?? l.qty) }])));
   return (
-    <form
+    <StickyForm
+      state={state}
       action={run}
       className="im-form"
       onSubmit={(e) => {
@@ -437,18 +547,18 @@ export function ReceptionForm({ action, importId, lines }: { action: Action; imp
       {warn && <p className="im-msg" data-ok="false" role="alert">{warn}</p>}
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Guardando…">Guardar recepción</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
 export function RemoveButton({ action, name, value, label = "Quitar", confirmText }: { action: Action; name: string; value: string; label?: string; confirmText?: string }) {
   const [state, run] = useActionState(action, null);
   return (
-    <form action={run} className="im-inline" onSubmit={(e) => { if (confirmText && !window.confirm(confirmText)) e.preventDefault(); }}>
+    <StickyForm state={state} action={run} className="im-inline" onSubmit={(e) => { if (confirmText && !window.confirm(confirmText)) e.preventDefault(); }}>
       <input type="hidden" name={name} value={value} />
       <SubmitButton className="btn btn-ghost btn-sm" pending="…">{label}</SubmitButton>
       {state && !state.ok && <Msg state={state} />}
-    </form>
+    </StickyForm>
   );
 }
 
@@ -463,7 +573,7 @@ export function AddCostForm({ action, importId, items }: { action: Action; impor
     if (state?.ok) form.current?.reset();
   }, [state]);
   return (
-    <form ref={form} action={run} className="im-form im-cost-form">
+    <StickyForm state={state} ref={form} action={run} className="im-form im-cost-form">
       <input type="hidden" name="id" value={importId} />
       <div className="im-grid">
         <label className="field">
@@ -502,7 +612,7 @@ export function AddCostForm({ action, importId, items }: { action: Action; impor
       </div>
       <Msg state={state} />
       <SubmitButton className="btn" pending="Guardando…">Agregar costo</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -538,7 +648,7 @@ export function AddPaymentForm({ action, importId }: { action: Action; importId:
   }
 
   return (
-    <form ref={form} action={run} className="im-form">
+    <StickyForm state={state} ref={form} action={run} className="im-form">
       <input type="hidden" name="id" value={importId} />
       <input type="hidden" name="document_id" value={doc?.id ?? ""} />
       <div className="im-grid">
@@ -572,7 +682,7 @@ export function AddPaymentForm({ action, importId }: { action: Action; importId:
       </div>
       <Msg state={state} />
       <SubmitButton className="btn" pending="Guardando…" disabled={uploading}>Registrar pago</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
 
@@ -631,7 +741,7 @@ export function DocUpload({ importId, money, fixedKind, label = "Subir archivos"
 export function DeleteImportForm({ action, importId }: { action: Action; importId: string }) {
   const [state, run] = useActionState(action, null);
   return (
-    <form action={run} className="im-form">
+    <StickyForm state={state} action={run} className="im-form">
       <input type="hidden" name="id" value={importId} />
       <p className="muted">Se borran la importación, sus productos, costos, pagos, documentos y archivos. No se puede deshacer.</p>
       <label className="field">
@@ -640,6 +750,6 @@ export function DeleteImportForm({ action, importId }: { action: Action; importI
       </label>
       <Msg state={state} />
       <SubmitButton className="btn btn-danger" pending="Borrando…">Eliminar importación</SubmitButton>
-    </form>
+    </StickyForm>
   );
 }
