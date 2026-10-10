@@ -11,23 +11,32 @@ const OWNER = "a0000000-0000-4000-8000-000000000001";
 const A = "c0000000-0000-4000-8000-000000000001";
 const B = "c0000000-0000-4000-8000-000000000002";
 const C = "c0000000-0000-4000-8000-000000000003";
+const S1 = "c5000000-0000-4000-8000-000000000001";
+const S2 = "c5000000-0000-4000-8000-000000000002";
+const S3 = "c5000000-0000-4000-8000-000000000003";
 
 export const fixtures: FixtureModule = {
   tables: {
+    import_suppliers: [
+      { id: S1, name: "Yiwu Trading Co.", origin: "China, Yiwu", contact: "Lily Chen", whatsapp: "+86 138 0013 8000", email: "lily@yiwu.example", payment_terms: "30 % de anticipo, 70 % antes de enviar", notes: null, created_by: OWNER, created_at: iso(-60), updated_at: iso(-60) },
+      { id: S2, name: "Shenzhen Gadgets", origin: "China, Shenzhen", contact: null, whatsapp: null, email: null, payment_terms: null, notes: null, created_by: OWNER, created_at: iso(-30), updated_at: iso(-30) },
+      { id: S3, name: "Guangzhou Beauty", origin: "China, Guangzhou", contact: null, whatsapp: "+86 139 0000 1111", email: null, payment_terms: "100 % al pedir", notes: null, created_by: OWNER, created_at: iso(-50), updated_at: iso(-50) },
+      { id: "c5000000-0000-4000-8000-000000000004", name: "Miami Wholesale", origin: "Estados Unidos, Miami", contact: null, whatsapp: null, email: null, payment_terms: null, notes: null, created_by: OWNER, created_at: iso(-5), updated_at: iso(-5) },
+    ],
     imports: [
       {
-        id: A, code: `IMP-${new Date().getFullYear()}-001`, supplier: "Yiwu Trading Co.", origin: "China", dest_country: "HN", status: "transit",
+        id: A, code: `IMP-${new Date().getFullYear()}-001`, supplier_id: S1, supplier: "Yiwu Trading Co.", origin: "China", dest_country: "HN", status: "transit",
         ordered_at: date(-10), eta: date(2), arrived_at: null, transport: "courier", carrier: "DHL", tracking_number: "1234567890", tracking_url: null,
         weight_kg: 42, reported_at: null, reported_by: null, notes: "Pedido mixto: peladores y mini ventiladores.", created_by: OWNER,
         created_at: iso(-12), updated_at: iso(-1),
       },
       {
-        id: B, code: `IMP-${new Date().getFullYear()}-002`, supplier: "Shenzhen Gadgets", origin: "China", dest_country: "GT", status: "quote",
+        id: B, code: `IMP-${new Date().getFullYear()}-002`, supplier_id: S2, supplier: "Shenzhen Gadgets", origin: "China", dest_country: "GT", status: "quote",
         ordered_at: null, eta: null, arrived_at: null, transport: "courier", carrier: null, tracking_number: null, tracking_url: null,
         weight_kg: null, reported_at: null, reported_by: null, notes: null, created_by: OWNER, created_at: iso(-2), updated_at: iso(-2),
       },
       {
-        id: C, code: `IMP-${new Date().getFullYear()}-003`, supplier: "Guangzhou Beauty", origin: "China", dest_country: "HN", status: "received",
+        id: C, code: `IMP-${new Date().getFullYear()}-003`, supplier_id: S3, supplier: "Guangzhou Beauty", origin: "China", dest_country: "HN", status: "received",
         ordered_at: date(-35), eta: date(-14), arrived_at: date(-15), transport: "courier", carrier: "FedEx", tracking_number: "771234567890", tracking_url: null,
         weight_kg: 18, reported_at: iso(-17), reported_by: OWNER, notes: null, created_by: OWNER, created_at: iso(-36), updated_at: iso(-15),
       },
@@ -60,7 +69,7 @@ export const fixtures: FixtureModule = {
     import_events: [
       { id: "c4000000-0000-4000-8000-000000000001", import_id: A, status: "quote", note: "Importación creada", by_user: OWNER, at: iso(-12) },
       { id: "c4000000-0000-4000-8000-000000000002", import_id: A, status: "paid", note: "Anticipo del 50 %", by_user: OWNER, at: iso(-11) },
-      { id: "c4000000-0000-4000-8000-000000000003", import_id: A, status: "transit", note: "Salió de Shenzhen", by_user: OWNER, at: iso(-4) },
+      { id: "c4000000-0000-4000-8000-000000000003", import_id: A, status: "transit", note: "Salió de Shenzhen", by_user: OWNER, at: iso(-9) },
       { id: "c4000000-0000-4000-8000-000000000004", import_id: B, status: "quote", note: "Importación creada", by_user: OWNER, at: iso(-2) },
       { id: "c4000000-0000-4000-8000-000000000005", import_id: C, status: "quote", note: "Importación creada", by_user: OWNER, at: iso(-36) },
       { id: "c4000000-0000-4000-8000-000000000006", import_id: C, status: "received", note: "Recepción: 118 de 220 u. · faltan 2 · 2 dañadas · 1 sin contar", by_user: OWNER, at: iso(-15) },

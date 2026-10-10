@@ -54,7 +54,7 @@ async function logEvent(importId: string, userId: string, status: string | null,
 }
 
 /** Datos generales comunes a crear y editar. */
-function headerFields(form: FormData): { ok: true; row: Record<string, unknown> } | { ok: false; msg: string } {
+async function headerFields(form: FormData): Promise<{ ok: true; row: Record<string, unknown> } | { ok: false; msg: string }> {
   const dest = field(form, "dest_country");
   if (!countryByCode(dest)) return { ok: false, msg: "Elige el país al que llega." };
   const transport = field(form, "transport") || "courier";
@@ -66,10 +66,20 @@ function headerFields(form: FormData): { ok: true; row: Record<string, unknown> 
   if (trackingUrl && !/^https?:\/\/\S+$/i.test(trackingUrl)) return { ok: false, msg: "El enlace de seguimiento debe empezar con https://" };
   const weight = amount(form, "weight_kg");
   if (Number.isNaN(weight) || (weight !== null && weight < 0)) return { ok: false, msg: "El peso no es válido." };
+  // proveedor guardado: la importación guarda su id y su nombre
+  const supplierId = field(form, "supplier_id");
+  let supplier: { id: string; name: string } | null = null;
+  if (supplierId) {
+    if (!UUID.test(supplierId)) return { ok: false, msg: "Elige un proveedor de la lista." };
+    const { data } = await db().from("import_suppliers").select("id, name").eq("id", supplierId).maybeSingle();
+    if (!data) return { ok: false, msg: "Ese proveedor ya no existe; elige otro." };
+    supplier = data as { id: string; name: string };
+  }
   return {
     ok: true,
     row: {
-      supplier: field(form, "supplier").slice(0, 120) || null,
+      supplier_id: supplier?.id ?? null,
+      supplier: supplier?.name ?? null,
       origin: field(form, "origin").slice(0, 80) || null,
       dest_country: dest,
       ordered_at: ordered,
@@ -87,7 +97,7 @@ function headerFields(form: FormData): { ok: true; row: Record<string, unknown> 
 export async function createImport(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
   const auth = await authorizeAction("imports");
   if (!auth.ok) return auth;
-  const h = headerFields(form);
+  const h = await headerFields(form);
   if (!h.ok) return fail(h.msg);
   const year = new Date().getFullYear();
   let id: string | null = null;
@@ -114,7 +124,7 @@ export async function updateImport(_prev: ImportFormState, form: FormData): Prom
   if (!auth.ok) return auth;
   const imp = await importOf(field(form, "id"));
   if (!imp) return fail("Esa importación ya no existe.");
-  const h = headerFields(form);
+  const h = await headerFields(form);
   if (!h.ok) return fail(h.msg);
   const arrived = day(form, "arrived_at");
   if (arrived === false) return fail("Revisa la fecha de llegada.");

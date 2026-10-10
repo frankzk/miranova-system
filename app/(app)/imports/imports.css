@@ -108,6 +108,25 @@
 .im-recv-sum .total dd { color: var(--success); }
 .im-section > .panel-body > .sub { margin: 0; font-size: var(--t-xs); color: var(--ink-3); }
 
+/* fase 3: proveedores, alertas y reportes */
+.im-warn-text { color: var(--warning); font-weight: 550; }
+.im-supplier { display: flex; gap: 8px; }
+.im-supplier .select { flex: 1; min-width: 0; }
+.im-supplier .btn { flex: none; }
+.im-pop-back { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(10, 37, 64, 0.32); animation: fade 150ms ease-out; }
+.im-pop { width: min(380px, 100%); display: grid; gap: 12px; padding: 18px; border-radius: var(--r-lg); background: var(--bg-surface); box-shadow: var(--shadow-lg, 0 12px 32px rgba(10, 37, 64, 0.18)); }
+.im-pop h3 { margin: 0; font-size: var(--t-md, 15px); }
+.im-pop .field { margin: 0; }
+.im-pop-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.im-pop-hint { margin: 0; font-size: var(--t-xs); color: var(--ink-3); }
+.im-contact { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.im-buys { max-width: 320px; white-space: normal; }
+.chart.chart-money { grid-template-columns: 46px minmax(0, 1fr); }
+.im-months { margin-top: 14px; }
+.im-months td, .im-months th { padding-left: 0; }
+.im-hist summary { cursor: pointer; color: var(--accent); font-size: var(--t-sm); }
+.im-hist ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-xs); color: var(--ink-2); white-space: nowrap; }
+
 @media (max-width: 900px) {
   .im-two { grid-template-columns: minmax(0, 1fr); }
   .im-cost-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }

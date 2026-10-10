@@ -76,3 +76,13 @@ test("importaciones en el resumen: atrasadas, esta semana y sin avisar; sin mont
   assert.ok(d.html.includes('href="https://x.app/imports"'));
   assert.ok(!/\$\d/.test(d.text), "sin montos");
 });
+
+test("importaciones que viajan sin novedades hace una semana o más", () => {
+  const base = { supplier: null, dest_country: "GT", reported_at: "2026-09-20T10:00:00Z", units: 10, eta: "2026-10-30" };
+  const d = restockDigest([], supply(), TODAY, "https://x.app", [
+    { ...base, id: "1", code: "IMP-A", status: "customs", last_event_at: "2026-09-25T10:00:00Z" },
+    { ...base, id: "2", code: "IMP-B", status: "transit", last_event_at: "2026-10-01T10:00:00Z" },
+  ]);
+  assert.equal(d.subject, "Importaciones · 1 sin novedades");
+  assert.match(d.text, /VIAJAN SIN NOVEDADES \(7\+ DÍAS\) \(1\)\n- IMP-A \(GT\): sin novedades hace 9 días/);
+});

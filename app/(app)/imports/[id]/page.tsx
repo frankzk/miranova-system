@@ -13,9 +13,9 @@ import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
   allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
-  receptionSummary, recoveryShare, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
+  receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
 } from "@/lib/imports";
-import { dropStates, getImport, productChoices, salePrices } from "@/lib/imports-data";
+import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
 import { can } from "@/lib/permissions";
 import {
   addImportCost, addImportItem, addImportPayment, deleteImport, linkImportItem, removeImportCost, removeImportDocument, removeImportItem,
@@ -38,7 +38,9 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const { imp, items, costs, docs, payments, events, people } = detail;
   const money = can(user, "money");
   const today = todayIn();
-  const [prices, choices, drop] = await Promise.all([salePrices(items), productChoices(imp.dest_country), dropStates(items, today)]);
+  const [prices, choices, drop, suppliers] = await Promise.all([salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers()]);
+  const stale = staleDays(imp, events[0]?.at ?? null, today);
+  const supplier = imp.supplier_id ? suppliers.find((x) => x.id === imp.supplier_id) : undefined;
 
   const landed = landedCosts(items, costs);
   const byItem = new Map(landed.items.map((r) => [r.id, r]));
@@ -75,11 +77,15 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
       <PageHead
         crumbs={<Link href="/imports">Importaciones</Link>}
         title={<span className="im-title">{imp.code} <span className="pill" data-tone={st.tone}>{st.label}</span></span>}
-        sub={<>{imp.supplier ?? "Sin proveedor"} · {imp.origin ?? "Origen sin indicar"} → <b>{country}</b> · {transportLabel(imp.transport)}</>}
+        sub={<>
+          {imp.supplier ?? "Sin proveedor"}
+          {supplier?.whatsapp && <> (<a href={`https://wa.me/${supplier.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a>)</>}
+          {" "}· {imp.origin ?? "Origen sin indicar"} → <b>{country}</b> · {transportLabel(imp.transport)}
+        </>}
         actions={<>
           <a className="btn" href={`/api/export/imports/${imp.id}`} download title="Descargar la importación en Excel"><IconDownload /> Excel</a>
           <SideSheet trigger="Editar datos" title={`Editar ${imp.code}`} sub="Proveedor, país, transporte, guía y fechas">
-            <ImportHeaderForm action={updateImport} v={imp} countries={countries} />
+            <ImportHeaderForm action={updateImport} v={imp} countries={countries} suppliers={suppliers.map((x) => ({ id: x.id, name: x.name, origin: x.origin }))} />
           </SideSheet>
           <SideSheet trigger="Eliminar" triggerClass="btn btn-ghost btn-danger" title={`Eliminar ${imp.code}`}>
             <DeleteImportForm action={deleteImport} importId={imp.id} />
@@ -134,6 +140,9 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
               {imp.weight_kg !== null && <div><dt>Peso</dt><dd>{imp.weight_kg} kg</dd></div>}
             </dl>
             {imp.notes && <p className="im-notes">{imp.notes}</p>}
+            {stale !== null && (
+              <p className="im-warn">Sin novedades hace {stale} días (avisa a los {STALE_DAYS}): revisa el seguimiento y anota cómo va.</p>
+            )}
             {autoSoon && (
               <p className="im-ok">
                 Drop ya registró la entrada de todos los productos ({fmtInt(inDrop.units)} u.). En la próxima sincronización pasa sola a &ldquo;Ingresado en Drop&rdquo;.

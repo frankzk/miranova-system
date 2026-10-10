@@ -28,6 +28,20 @@ export const isActive = (s: string) => !ARRIVED.includes(s as ImportStatus) && s
 export const INBOUND: ImportStatus[] = ["paid", "production", "ready", "transit", "customs", "released", "to_warehouse", "received"];
 /** Ya entró a Drop (o se cerró). */
 export const IN_DROP: ImportStatus[] = ["in_drop", "closed"];
+/** Viajando: si pasan STALE_DAYS sin novedades (cambio de estado o nota), se avisa. */
+export const IN_MOTION: ImportStatus[] = ["transit", "customs", "released", "to_warehouse"];
+export const STALE_DAYS = 7;
+
+/** Pagada y con la llegada estimada vencida, sin haber llegado. */
+export const isLate = (imp: { status: string; eta: string | null }, today: string) =>
+  isActive(imp.status) && imp.status !== "quote" && imp.eta !== null && imp.eta < today;
+
+/** Días sin novedades de una importación que viene viajando (null si no corresponde o está al día). */
+export function staleDays(imp: { status: string }, lastEventAt: string | null, today: string): number | null {
+  if (!IN_MOTION.includes(imp.status as ImportStatus) || !lastEventAt) return null;
+  const d = Math.floor((Date.parse(`${today}T23:59:59Z`) - Date.parse(lastEventAt)) / 86_400_000);
+  return d >= STALE_DAYS ? d : null;
+}
 
 export const TRANSPORTS = [
   { id: "courier", label: "Courier" },
@@ -378,7 +392,11 @@ export function matchNewProduct<P extends { name: string; sku: string | null; co
 
 // ─── Resumen diario ───
 
-export type DigestImport = { id: string; code: string; supplier: string | null; dest_country: string; status: string; eta: string | null; reported_at: string | null; units: number };
+export type DigestImport = {
+  id: string; code: string; supplier: string | null; dest_country: string; status: string; eta: string | null; reported_at: string | null; units: number;
+  /** última novedad (para avisar si viaja sin novedades); opcional */
+  last_event_at?: string | null;
+};
 
 /** Para el correo diario: importaciones atrasadas, las que llegan esta semana y las que faltan avisar a la bodega. */
 export function importsDigest(imports: DigestImport[], today: string) {
@@ -388,5 +406,6 @@ export function importsDigest(imports: DigestImport[], today: string) {
     late: active.filter((i) => i.eta && days(i.eta) < 0),
     week: active.filter((i) => i.eta && days(i.eta) >= 0 && days(i.eta) <= 7),
     unreported: active.filter((i) => needsReport(i, today)),
+    stale: active.filter((i) => staleDays(i, i.last_event_at ?? null, today) !== null).map((i) => ({ ...i, days: staleDays(i, i.last_event_at ?? null, today)! })),
   };
 }
