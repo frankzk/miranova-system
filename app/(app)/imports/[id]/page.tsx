@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { IconDownload, IconExternal, IconPlus } from "@/components/icons";
 import {
-  AddCostForm, AddItemForm, AddPaymentForm, DeleteImportForm, DocUpload, EditItemForm, ImportHeaderForm, RemoveButton, ReportBox, StatusForm,
+  AddCostForm, AddItemForm, AddPaymentForm, DeleteImportForm, DocUpload, EditItemForm, ImportHeaderForm, LinkItemForm, ReceptionForm, RemoveButton,
+  ReportBox, StatusForm,
 } from "@/components/import-forms";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
@@ -11,14 +12,14 @@ import { requirePermission } from "@/lib/auth";
 import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
-  allocationLabel, costKindLabel, docKindLabel, DOC_KINDS, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport, recoveryShare, statusInfo,
-  trackingUrl, transportLabel, whatsappMessage,
+  allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
+  receptionSummary, recoveryShare, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
 } from "@/lib/imports";
-import { getImport, productChoices, salePrices } from "@/lib/imports-data";
+import { dropStates, getImport, productChoices, salePrices } from "@/lib/imports-data";
 import { can } from "@/lib/permissions";
 import {
-  addImportCost, addImportItem, addImportPayment, deleteImport, removeImportCost, removeImportDocument, removeImportItem, removeImportPayment,
-  setImportStatus, setReported, updateImport, updateImportItem,
+  addImportCost, addImportItem, addImportPayment, deleteImport, linkImportItem, removeImportCost, removeImportDocument, removeImportItem,
+  removeImportPayment, saveReception, setImportStatus, setReported, updateImport, updateImportItem,
 } from "../actions";
 import "../imports.css";
 
@@ -37,18 +38,25 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const { imp, items, costs, docs, payments, events, people } = detail;
   const money = can(user, "money");
   const today = todayIn();
-  const [prices, choices] = await Promise.all([salePrices(items), productChoices(imp.dest_country)]);
+  const [prices, choices, drop] = await Promise.all([salePrices(items), productChoices(imp.dest_country), dropStates(items, today)]);
 
   const landed = landedCosts(items, costs);
   const byItem = new Map(landed.items.map((r) => [r.id, r]));
+  /** unidades buenas de la línea (recibidas sin daño o, sin contar, las pedidas) */
+  const good = (i: (typeof items)[number]) => byItem.get(i.id)?.good ?? i.qty;
+  const reception = receptionSummary(items);
+  const lastCount = items.filter((i) => i.received_at).sort((a, b) => b.received_at!.localeCompare(a.received_at!))[0];
+  const inDrop = allInDrop(items, drop);
+  const autoSoon = INBOUND.includes(imp.status as ImportStatus) && inDrop.done;
+  const photos = docs.filter((d) => d.kind === "photo").length;
   const country = countryByCode(imp.dest_country)?.name ?? imp.dest_country;
   const st = statusInfo(imp.status);
   const link = trackingUrl(imp.carrier, imp.tracking_number, imp.tracking_url);
   const paid = payments.reduce((t, p) => t + p.amount, 0);
-  const revenue = items.reduce((t, i) => t + (prices.get(i.id) ?? 0) * i.qty, 0);
+  const revenue = items.reduce((t, i) => t + (prices.get(i.id) ?? 0) * good(i), 0);
   const priced = items.every((i) => (prices.get(i.id) ?? 0) > 0);
   const profit = items.reduce((t, i) => {
-    const m = marginOf(byItem.get(i.id)?.unit ?? 0, prices.get(i.id), i.qty);
+    const m = marginOf(byItem.get(i.id)?.unit ?? 0, prices.get(i.id), good(i));
     return t + (m?.total ?? 0);
   }, 0);
   const recovery = priced ? recoveryShare(landed.totals.total, revenue) : null;
@@ -84,14 +92,14 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
         <div className="metric">
           <span className="label">Productos</span>
           <span className="value">{fmtInt(landed.totals.units)} u.</span>
-          <span className="foot">{items.length} {items.length === 1 ? "producto" : "productos"}</span>
+          <span className="foot">{reception.started ? `${fmtInt(reception.good)} buenas al recibir` : `${items.length} ${items.length === 1 ? "producto" : "productos"}`}</span>
         </div>
         {money ? (
           <>
             <div className="metric">
               <span className="label">Costo total</span>
               <span className="value">{usd(landed.totals.total)}</span>
-              <span className="foot">Costo promedio {usd(landed.totals.units ? landed.totals.total / landed.totals.units : 0)} por unidad</span>
+              <span className="foot">Costo promedio {usd(landed.totals.good ? landed.totals.total / landed.totals.good : 0)} por unidad{reception.started ? " buena" : ""}</span>
             </div>
             <div className="metric" data-alert={priced && profit < 0 ? true : undefined}>
               <span className="label">Ganancia esperada</span>
@@ -126,6 +134,11 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
               {imp.weight_kg !== null && <div><dt>Peso</dt><dd>{imp.weight_kg} kg</dd></div>}
             </dl>
             {imp.notes && <p className="im-notes">{imp.notes}</p>}
+            {autoSoon && (
+              <p className="im-ok">
+                Drop ya registró la entrada de todos los productos ({fmtInt(inDrop.units)} u.). En la próxima sincronización pasa sola a &ldquo;Ingresado en Drop&rdquo;.
+              </p>
+            )}
             <StatusForm action={setImportStatus} importId={imp.id} current={imp.status} />
           </div>
         </section>
@@ -157,6 +170,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                 <tr>
                   <th>Producto</th>
                   <th className="r">Cantidad</th>
+                  <th>Llegada</th>
                   {money && <th className="r">Costo proveedor</th>}
                   {money && <th className="r">Costo final por unidad</th>}
                   {money && <th className="r hide-md">Precio de venta</th>}
@@ -168,7 +182,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                 {items.map((i) => {
                   const lc = byItem.get(i.id)!;
                   const price = prices.get(i.id) ?? null;
-                  const m = marginOf(lc.unit, price, i.qty);
+                  const m = marginOf(lc.unit, price, lc.good);
                   const src = photo(i);
                   return (
                     <tr key={i.id}>
@@ -181,7 +195,22 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                           </div>
                         </div>
                       </td>
-                      <td className="num">{fmtInt(i.qty)}</td>
+                      <td className="num">
+                        {fmtInt(i.qty)}
+                        {counted(i) && (
+                          <div className={`sub${i.received_qty! < i.qty || i.damaged_qty > 0 ? " im-alert-text" : ""}`}>
+                            llegaron {fmtInt(i.received_qty!)}{i.damaged_qty > 0 && ` · ${fmtInt(i.damaged_qty)} dañadas`}
+                          </div>
+                        )}
+                      </td>
+                      <td className="nowrap">
+                        <DropCell st={drop.get(i.id)!} status={imp.status} />
+                        {drop.get(i.id)?.kind === "unlinked" && choices.length > 0 && (
+                          <SideSheet trigger="Enlazar" triggerClass="btn btn-ghost btn-sm im-link" title={`Enlazar ${i.name}`} sub={`Con su producto en Drop ${country}`}>
+                            <LinkItemForm action={linkImportItem} itemId={i.id} name={i.name} choices={choices} />
+                          </SideSheet>
+                        )}
+                      </td>
                       {money && <td className="num">{usd(i.unit_cost)}</td>}
                       {money && (
                         <td className="num strong" title={`Producto ${usd(lc.unitParts.product)} + envío ${usd(lc.unitParts.shipping)} + importación ${usd(lc.unitParts.import)} + adicionales ${usd(lc.unitParts.other)}`}>
@@ -211,6 +240,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                   <tr>
                     <td className="strong">Total</td>
                     <td className="num strong">{fmtInt(landed.totals.units)}</td>
+                    <td />
                     <td className="num">{usd(landed.totals.product)}</td>
                     <td className="num strong">{usd(landed.totals.total)}</td>
                     <td className="hide-md" />
@@ -224,6 +254,78 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
         )}
         {money && landed.notes.map((n) => <p key={n} className="im-note">{n}</p>)}
       </section>
+
+      {/* recepción */}
+      {items.length > 0 && (
+        <section className="panel im-section" aria-labelledby="im-recv">
+          <div className="panel-head">
+            <h2 id="im-recv">Recepción en bodega</h2>
+            <SideSheet
+              trigger={reception.started ? "Editar recepción" : "Registrar recepción"}
+              triggerClass={reception.started ? "btn btn-sm" : "btn btn-sm btn-primary"}
+              title="Recepción en bodega"
+              sub={`${imp.code} · lo que contaron en ${country}`}
+            >
+              <ReceptionForm
+                action={saveReception}
+                importId={imp.id}
+                lines={items.map((i) => {
+                  const st = drop.get(i.id);
+                  return {
+                    id: i.id, name: i.name, sku: i.sku, qty: i.qty, received_qty: i.received_qty, damaged_qty: i.damaged_qty, received_note: i.received_note,
+                    drop: st?.kind === "in" && st.seen ? st.units : null,
+                  };
+                })}
+              />
+              <div className="section im-recv-photos">
+                <h3>Fotos de la recepción</h3>
+                <p className="muted im-small">De lo que llegó dañado o de las cajas. Quedan en Documentos.</p>
+                <DocUpload importId={imp.id} money={money} fixedKind="photo" label="Subir fotos" />
+              </div>
+            </SideSheet>
+          </div>
+          <div className="panel-body">
+            {!reception.started ? (
+              <p className="muted im-small">
+                Cuando llegue a la bodega, anota cuánto llegó de cada producto y lo que vino dañado (con fotos). Lo que falte o llegue dañado se descuenta y el costo por unidad se calcula con las unidades buenas.
+              </p>
+            ) : (
+              <>
+                <dl className="im-recv-sum">
+                  <div><dt>Pedidas</dt><dd>{fmtInt(reception.ordered)}</dd></div>
+                  <div><dt>Llegaron</dt><dd>{fmtInt(reception.received)}</dd></div>
+                  <div data-bad={reception.missing > 0 || undefined}><dt>Faltan</dt><dd>{fmtInt(reception.missing)}</dd></div>
+                  <div data-bad={reception.damaged > 0 || undefined}><dt>Dañadas</dt><dd>{fmtInt(reception.damaged)}</dd></div>
+                  <div className="total"><dt>Buenas</dt><dd>{fmtInt(reception.good)}</dd></div>
+                </dl>
+                {items.some((i) => counted(i) && (i.received_qty !== i.qty || i.damaged_qty > 0 || i.received_note)) && (
+                  <ul className="im-list">
+                    {items.filter((i) => counted(i) && (i.received_qty !== i.qty || i.damaged_qty > 0 || i.received_note)).map((i) => {
+                      const diff = i.received_qty! - i.qty;
+                      return (
+                        <li key={i.id}>
+                          <span className="grow">
+                            {i.name}
+                            <span className="sub">
+                              {[diff < 0 ? `faltan ${fmtInt(-diff)}` : diff > 0 ? `sobran ${fmtInt(diff)}` : "", i.damaged_qty ? `${fmtInt(i.damaged_qty)} dañadas` : "", i.received_note ?? ""].filter(Boolean).map((t) => ` · ${t}`).join("")}
+                            </span>
+                          </span>
+                          <span className="num">{fmtInt(i.received_qty!)} de {fmtInt(i.qty)}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {!reception.complete && <p className="im-warn">Falta contar {items.length - reception.lines} {items.length - reception.lines === 1 ? "producto" : "productos"}.</p>}
+                <p className="sub">
+                  {lastCount ? <>Contada el {day(lastCount.received_at!.slice(0, 10))}{lastCount.received_by && people[lastCount.received_by] ? ` por ${people[lastCount.received_by]}` : ""}</> : null}
+                  {photos > 0 && <> · {photos} {photos === 1 ? "foto" : "fotos"} en Documentos</>}
+                </p>
+              </>
+            )}
+          </div>
+        </section>
+      )}
 
       {money && (
         <div className="im-two">
@@ -316,4 +418,15 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
       </div>
     </div>
   );
+}
+
+/** Cómo va la línea frente a Drop: ya entró, en camino (cuenta en Inventario) o producto nuevo sin enlazar. */
+function DropCell({ st, status }: { st: DropState; status: string }) {
+  if (st.kind === "in") {
+    const d = new Date(st.at.length === 10 ? `${st.at}T12:00:00Z` : st.at).toLocaleDateString("es-HN", { day: "numeric", month: "short", timeZone: "UTC" });
+    return <><span className="pill" data-tone="success">En Drop</span><div className="sub">{fmtInt(st.units)} u. · {d}{!st.seen && " · marcada a mano"}</div></>;
+  }
+  if (st.kind === "coming") return <><span className="pill" data-tone={st.late ? "warning" : "info"}>{st.late ? "Atrasada" : "En camino"}</span><div className="sub">cuenta en Inventario</div></>;
+  if (st.kind === "unlinked") return <><span className="pill">Sin enlazar</span><div className="sub">producto nuevo: se enlaza al aparecer en Drop</div></>;
+  return <span className="subtle">{status === "cancelled" ? "Cancelada" : "Al pagarla, cuenta en Inventario"}</span>;
 }

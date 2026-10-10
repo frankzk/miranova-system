@@ -31,7 +31,7 @@ test("resumen: agotados, pedir hoy, esta semana y pedidos atrasados, con el bot�
   ];
   const late = order({ product_external_id: "d", eta: "2026-10-01", note: "Proveedor X" });
   const d = restockDigest(rows, supply([late]), TODAY, "https://miranova-system.vercel.app/");
-  assert.deepEqual(d.counts, { out: 1, now: 1, soon: 1, late: 1 });
+  assert.deepEqual(d.counts, { out: 1, now: 1, soon: 1, late: 1, imports: 0 });
   assert.equal(d.empty, false);
   assert.equal(d.subject, "Qué pedir hoy · 1 agotado, 1 para pedir hoy, 1 esta semana, 1 pedido atrasado");
   // los nombres van escapados (vienen de Drop)
@@ -50,4 +50,29 @@ test("lo que ya viene no se vuelve a pedir; sin nada que pedir, el resumen queda
   const d = restockDigest([row({ external_id: "b", stock: 90 })], coming, TODAY, "https://x.app");
   assert.equal(d.empty, true);
   assert.match(d.subject, /^Inventario al día · /);
+});
+
+test("importaciones en el resumen: atrasadas, esta semana y sin avisar; sin montos ni duplicar pedidos atrasados", () => {
+  const base = { supplier: "Yiwu <Trading>", reported_at: null, units: 450 };
+  const imports = [
+    { ...base, id: "1", code: "IMP-2026-001", dest_country: "GT", status: "transit", eta: "2026-10-02" },
+    { ...base, id: "2", code: "IMP-2026-002", dest_country: "CR", status: "customs", eta: "2026-10-07", reported_at: "2026-10-03T10:00:00Z" },
+  ];
+  // la línea de importación atrasada no sale como "pedido atrasado" del producto
+  const fromImport = order({
+    product_external_id: "d", units: 300, eta: "2026-10-02", note: "IMP-2026-001",
+    import: { id: "1", code: "IMP-2026-001", item_id: "l1", declared_at: null }, min_units: 150,
+  });
+  const names: Record<string, string> = { GT: "Guatemala", CR: "Costa Rica" };
+  const d = restockDigest([row({ external_id: "d", stock: 500 })], supply([fromImport]), TODAY, "https://x.app", imports, (c) => names[c] ?? c);
+  assert.deepEqual(d.counts, { out: 0, now: 0, soon: 0, late: 0, imports: 2 });
+  assert.equal(d.empty, false);
+  assert.equal(d.subject, "Importaciones · 1 importación atrasada, 1 importación llega esta semana, 1 sin avisar a la bodega");
+  assert.match(d.text, /IMPORTACIONES ATRASADAS \(1\)\n- IMP-2026-001 · Yiwu <Trading> \(Guatemala\): llegaba el .+\. 450 u\. · En tránsito · falta avisar a la bodega/);
+  assert.match(d.text, /IMPORTACIONES QUE LLEGAN ESTA SEMANA \(1\)\n- IMP-2026-002 · Yiwu <Trading> \(Costa Rica\): llega .+ · bodega avisada/);
+  assert.match(d.text, /SIN AVISAR A LA BODEGA \(1\)\n- IMP-2026-001 .+avisar a la bodega por WhatsApp \(llega con retraso\)/);
+  assert.ok(!d.text.includes("PEDIDOS ATRASADOS"));
+  assert.ok(d.html.includes("Yiwu &lt;Trading&gt;"));
+  assert.ok(d.html.includes('href="https://x.app/imports"'));
+  assert.ok(!/\$\d/.test(d.text), "sin montos");
 });

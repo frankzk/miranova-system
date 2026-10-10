@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
-import { allocationLabel, costKindLabel, landedCosts, marginOf, statusInfo, trackingUrl, transportLabel } from "@/lib/imports";
-import { getImport, salePrices } from "@/lib/imports-data";
+import { todayIn } from "@/lib/format";
+import { allocationLabel, costKindLabel, counted, landedCosts, marginOf, receptionSummary, statusInfo, trackingUrl, transportLabel, type DropState } from "@/lib/imports";
+import { dropStates, getImport, salePrices } from "@/lib/imports-data";
 import { can } from "@/lib/permissions";
 import { buildXlsx, XLSX_TYPE, type Cell, type Sheet } from "@/lib/xlsx";
 
@@ -18,8 +19,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!detail) return NextResponse.json({ error: "No existe" }, { status: 404 });
   const { imp, items, costs, payments } = detail;
   const money = can(user, "money");
-  const prices = await salePrices(items);
+  const [prices, drop] = await Promise.all([salePrices(items), dropStates(items, todayIn())]);
   const landed = landedCosts(items, costs);
+  const reception = receptionSummary(items);
+  const dropText = (st: DropState | undefined) =>
+    !st ? null
+      : st.kind === "in" ? `En Drop: ${st.units} u. (${st.at.slice(0, 10)})${st.seen ? "" : ", marcada a mano"}`
+        : st.kind === "coming" ? (st.late ? "Atrasada" : "En camino")
+          : st.kind === "unlinked" ? "Sin enlazar con Drop" : null;
   const byItem = new Map(landed.items.map((r) => [r.id, r]));
   const paid = payments.reduce((t, p) => t + p.amount, 0);
 
@@ -38,6 +45,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Llegó", imp.arrived_at],
     ["Reportada a la bodega", imp.reported_at ? imp.reported_at.slice(0, 10) : "No"],
     ["Unidades", landed.totals.units],
+    ...(reception.started
+      ? ([
+          ["Llegaron", reception.received],
+          ["Dañadas", reception.damaged],
+          ["Faltan", reception.missing],
+          ["Unidades buenas", reception.good],
+        ] as Cell[][])
+      : []),
     ...(money
       ? ([
           ["Costo de productos (USD)", r2(landed.totals.product)],
@@ -55,9 +70,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const itemRows = items.map((i): Cell[] => {
     const lc = byItem.get(i.id)!;
     const price = prices.get(i.id) ?? null;
-    const m = marginOf(lc.unit, price, i.qty);
+    const m = marginOf(lc.unit, price, lc.good);
     return [
       i.name, i.sku, i.product_external_id ? "Catálogo" : "Nuevo", i.qty, i.unit_weight_kg,
+      counted(i) ? i.received_qty : null, counted(i) ? i.damaged_qty : null, lc.good, i.received_note, dropText(drop.get(i.id)),
       ...(money
         ? [r2(i.unit_cost), r2(lc.unitParts.shipping), r2(lc.unitParts.import), r2(lc.unitParts.other), r2(lc.unit), r2(lc.total), r2(price), r2(m?.unit), m ? Math.round(m.pct * 1000) / 10 : null, r2(m?.total)]
         : []),
@@ -70,10 +86,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       name: "Productos",
       columns: [
         { header: "Producto", width: 40 }, { header: "SKU", width: 16 }, { header: "Origen", width: 10 }, { header: "Cantidad", width: 10 }, { header: "Peso por unidad (kg)", width: 12 },
+        { header: "Llegaron", width: 10 }, { header: "Dañadas", width: 10 }, { header: "Buenas", width: 10 }, { header: "Nota de recepción", width: 28 }, { header: "Drop", width: 26 },
         ...(money
           ? [
               { header: "Costo proveedor por unidad (USD)", width: 14 }, { header: "Envío por unidad (USD)", width: 12 }, { header: "Importación por unidad (USD)", width: 13 },
-              { header: "Adicionales por unidad (USD)", width: 13 }, { header: "Costo final por unidad (USD)", width: 14 }, { header: "Costo total de la línea (USD)", width: 14 },
+              { header: "Adicionales por unidad (USD)", width: 13 }, { header: "Costo final por unidad buena (USD)", width: 16 }, { header: "Costo total de la línea (USD)", width: 14 },
               { header: "Precio de venta (USD)", width: 12 }, { header: "Margen por unidad (USD)", width: 12 }, { header: "Margen (%)", width: 10 }, { header: "Ganancia total (USD)", width: 13 },
             ]
           : []),

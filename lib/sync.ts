@@ -2,6 +2,8 @@ import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Connector, type Session } from "./connectors";
 import { SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
+import { todayIn } from "./format";
+import { advanceImports, linkNewProducts, productsToWatch } from "./imports-data";
 import { extractProducts } from "./products";
 import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
@@ -20,6 +22,8 @@ const MAX_PRODUCT_PAGES = 50;
 const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
 const GEO_MAX_AGE_MS = 7 * DAY;
 const MOVEMENT_PRODUCTS_PER_SYNC = 20; // productos por sincronización (los revisados hace más tiempo primero)
+const WATCHED_PER_SYNC = 5; // de esos, primero los de importaciones por llegar
+const WATCH_EVERY_MS = 30 * 60_000; // y no más seguido que esto
 const MAX_MOVEMENT_PAGES = 20;
 const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ventana reciente
 const OPEN_REFRESH_MAX_DAYS = 120;
@@ -202,6 +206,8 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
         }
         productsNote = ` · ${total} productos`;
         await updateAccount(acc.id, { products_sync_at: new Date().toISOString(), products_sync_msg: `${total} productos actualizados` });
+        // productos nuevos de importaciones que ya aparecen en el catálogo: se enlazan solos
+        await linkNewProducts(acc.id, acc.country).catch((e) => console.error(`importaciones: enlazar productos ${acc.name}`, e));
       } catch (e) {
         if (e instanceof SessionExpired) throw e;
         const msg = e instanceof Error ? e.message : String(e);
@@ -233,6 +239,10 @@ export async function syncAccount(accountId: string, deadline = Date.now() + TIM
       }
     }
     productsNote += movesNote;
+    // importaciones cuyos productos ya entraron todos a Drop: pasan a "Ingresado en Drop"
+    if (c.fetchStockMovements) {
+      await advanceImports(acc.id, todayIn(acc.timezone)).catch((e) => console.error(`importaciones: avanzar ${acc.name}`, e));
+    }
 
     // 4. historial, hacia atrás por meses, retomando donde quedó la vez anterior
     let cursor = acc.backfill_cursor ? new Date(acc.backfill_cursor) : null;
@@ -393,17 +403,29 @@ async function syncStockMovements(
   fetchPage: (s: Session, productId: string, page: number) => Promise<{ payload: unknown }>,
   deadline: number,
 ): Promise<number> {
-  const { data: products, error } = await db()
+  const { data: oldest, error } = await db()
     .from("products")
     .select("external_id")
     .eq("account_id", acc.id)
     .order("movements_sync_at", { ascending: true, nullsFirst: true })
     .limit(MOVEMENT_PRODUCTS_PER_SYNC);
   if (error) throw error;
+  // primero los de importaciones por llegar (si no se revisaron hace poco), para ver antes su entrada
+  const watch = await productsToWatch(acc.id, todayIn(acc.timezone)).catch(() => [] as string[]);
+  let first: string[] = [];
+  if (watch.length) {
+    const { data: due } = await db().from("products").select("external_id, movements_sync_at").eq("account_id", acc.id).in("external_id", watch);
+    first = ((due ?? []) as { external_id: string; movements_sync_at: string | null }[])
+      .filter((p) => !p.movements_sync_at || Date.now() - Date.parse(p.movements_sync_at) > WATCH_EVERY_MS)
+      .sort((a, b) => (a.movements_sync_at ?? "").localeCompare(b.movements_sync_at ?? ""))
+      .slice(0, WATCHED_PER_SYNC)
+      .map((p) => p.external_id);
+  }
+  const queue = [...first, ...((oldest ?? []) as { external_id: string }[]).map((p) => p.external_id).filter((id) => !first.includes(id))].slice(0, MOVEMENT_PRODUCTS_PER_SYNC);
 
   let added = 0;
   let sampled = Boolean(acc.debug?.stock_movements_sample);
-  for (const { external_id: productId } of products ?? []) {
+  for (const productId of queue) {
     if (Date.now() > deadline) break;
     const { data: known } = await db()
       .from("stock_movements")

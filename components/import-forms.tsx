@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { registerImportDocument, startImportUpload } from "@/app/(app)/imports/actions";
-import { ALLOCATIONS, CARRIERS, COST_KINDS, DOC_KINDS, IMPORT_FILE_ACCEPT, IMPORT_STATUSES, importFileProblem, MONEY_DOCS, PAYMENT_METHODS, TRANSPORTS } from "@/lib/imports";
+import {
+  ALLOCATIONS, CARRIERS, COST_KINDS, DOC_KINDS, IMPORT_FILE_ACCEPT, IMPORT_STATUSES, importFileProblem, MONEY_DOCS, PAYMENT_METHODS, TRANSPORTS, type DocKind,
+} from "@/lib/imports";
 import { IconCheck, IconCopy, IconUpload } from "./icons";
 import { useSheet } from "./side-sheet";
 import { SubmitButton } from "./submit-button";
@@ -203,6 +205,45 @@ export type Choice = { account_id: string; external_id: string; name: string; sk
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
+/** Buscar y elegir un producto del catálogo de Drop (manda account_id y product_id). */
+function CatalogPicker({ choices, pick, setPick, initial = "", empty }: { choices: Choice[]; pick: Choice | null; setPick: (c: Choice | null) => void; initial?: string; empty: string }) {
+  const [q, setQ] = useState(initial);
+  const shown = useMemo(() => {
+    const t = fold(q.trim());
+    const words = t.split(/\s+/).filter(Boolean);
+    const list = words.length ? choices.filter((c) => { const h = fold(`${c.name} ${c.sku ?? ""}`); return words.every((w) => h.includes(w)); }) : choices;
+    return list.slice(0, 40);
+  }, [choices, q]);
+  return (
+    <div className="im-pick">
+      <input type="hidden" name="account_id" value={pick?.account_id ?? ""} />
+      <input type="hidden" name="product_id" value={pick?.external_id ?? ""} />
+      {pick ? (
+        <div className="im-picked">
+          {pick.image_url ? <img src={pick.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
+          <div className="grow"><b>{pick.name}</b>{pick.sku && <span>SKU {pick.sku}</span>}</div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPick(null)}>Cambiar</button>
+        </div>
+      ) : (
+        <>
+          <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU" aria-label="Buscar producto del catálogo" autoComplete="off" />
+          <ul className="im-choices" role="listbox" aria-label="Productos del catálogo">
+            {shown.map((c) => (
+              <li key={`${c.account_id}:${c.external_id}`}>
+                <button type="button" role="option" aria-selected={false} onClick={() => setPick(c)}>
+                  {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
+                  <span className="grow"><b>{c.name}</b>{c.sku && <span>SKU {c.sku}</span>}</span>
+                </button>
+              </li>
+            ))}
+            {shown.length === 0 && <li className="im-empty">{empty}</li>}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ItemNumbers({ money, v }: { money: boolean; v?: { qty?: number; unit_cost?: number; unit_weight_kg?: number | null; sale_price_usd?: number | null }; }) {
   return (
     <div className="im-grid">
@@ -233,11 +274,11 @@ function ItemNumbers({ money, v }: { money: boolean; v?: { qty?: number; unit_co
 export function AddItemForm({ action, importId, choices, money }: { action: Action; importId: string; choices: Choice[]; money: boolean }) {
   const [state, run] = useActionState(action, null);
   const [source, setSource] = useState<"catalog" | "new">(choices.length ? "catalog" : "new");
-  const [q, setQ] = useState("");
   const [pick, setPick] = useState<Choice | null>(null);
   const [photo, setPhoto] = useState<{ path: string; preview: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [upErr, setUpErr] = useState<string | null>(null);
+  const [round, setRound] = useState(0);
   const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -245,14 +286,8 @@ export function AddItemForm({ action, importId, choices, money }: { action: Acti
     form.current?.reset();
     setPick(null);
     setPhoto(null);
-    setQ("");
+    setRound((r) => r + 1); // limpia la búsqueda
   }, [state]);
-
-  const shown = useMemo(() => {
-    const t = fold(q.trim());
-    const list = t ? choices.filter((c) => fold(`${c.name} ${c.sku ?? ""}`).includes(t)) : choices;
-    return list.slice(0, 40);
-  }, [choices, q]);
 
   async function upload(file: File) {
     setUpErr(null);
@@ -281,32 +316,7 @@ export function AddItemForm({ action, importId, choices, money }: { action: Acti
       </div>
 
       {source === "catalog" ? (
-        <div className="im-pick">
-          <input type="hidden" name="account_id" value={pick?.account_id ?? ""} />
-          <input type="hidden" name="product_id" value={pick?.external_id ?? ""} />
-          {pick ? (
-            <div className="im-picked">
-              {pick.image_url ? <img src={pick.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
-              <div className="grow"><b>{pick.name}</b>{pick.sku && <span>SKU {pick.sku}</span>}</div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPick(null)}>Cambiar</button>
-            </div>
-          ) : (
-            <>
-              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU" aria-label="Buscar producto del catálogo" autoComplete="off" />
-              <ul className="im-choices" role="listbox" aria-label="Productos del catálogo">
-                {shown.map((c) => (
-                  <li key={`${c.account_id}:${c.external_id}`}>
-                    <button type="button" role="option" aria-selected={false} onClick={() => setPick(c)}>
-                      {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
-                      <span className="grow"><b>{c.name}</b>{c.sku && <span>SKU {c.sku}</span>}</span>
-                    </button>
-                  </li>
-                ))}
-                {shown.length === 0 && <li className="im-empty">Nada con esa búsqueda. ¿Es un producto nuevo?</li>}
-              </ul>
-            </>
-          )}
-        </div>
+        <CatalogPicker key={round} choices={choices} pick={pick} setPick={setPick} empty="Nada con esa búsqueda. ¿Es un producto nuevo?" />
       ) : (
         <div className="im-grid">
           <label className="field wide">
@@ -353,6 +363,84 @@ export function EditItemForm({ action, item, money }: { action: Action; item: { 
 }
 
 /** Botón que envía un formulario con un id (quitar un producto, costo, pago o documento). */
+/** Enlazar un producto nuevo con el producto de Drop (cuando ya existe allá). */
+export function LinkItemForm({ action, itemId, name, choices }: { action: Action; itemId: string; name: string; choices: Choice[] }) {
+  const [state, run] = useActionState(action, null);
+  const [pick, setPick] = useState<Choice | null>(null);
+  useCloseOnOk(state);
+  // primero lo que se parece al nombre (sin palabras cortas)
+  const initial = name.split(/\s+/).filter((w) => w.length > 3).slice(0, 2).join(" ");
+  return (
+    <form action={run} className="im-form">
+      <input type="hidden" name="item_id" value={itemId} />
+      <p className="muted im-small">Al enlazarlo, Inventario lo cuenta como &ldquo;en camino&rdquo; y se ve solo cuando Drop registra su entrada. Si tiene el mismo SKU o nombre, se enlaza solo en la próxima sincronización.</p>
+      <CatalogPicker choices={choices} pick={pick} setPick={setPick} initial={initial} empty="Nada con esa búsqueda. Si todavía no está en Drop, se enlazará cuando aparezca." />
+      <Msg state={state} />
+      <SubmitButton className="btn btn-primary" pending="Enlazando…" disabled={!pick}>Enlazar</SubmitButton>
+    </form>
+  );
+}
+
+export type ReceptionLine = { id: string; name: string; sku: string | null; qty: number; received_qty: number | null; damaged_qty: number; received_note: string | null; drop: number | null };
+
+/** Lo que llegó a la bodega, producto por producto (campos controlados: no se pierden si algo falla). */
+export function ReceptionForm({ action, importId, lines }: { action: Action; importId: string; lines: ReceptionLine[] }) {
+  const [state, run] = useActionState(action, null);
+  const [v, setV] = useState(() =>
+    Object.fromEntries(lines.map((l) => [l.id, { recv: l.received_qty === null ? "" : String(l.received_qty), dmg: l.damaged_qty ? String(l.damaged_qty) : "", note: l.received_note ?? "" }])),
+  );
+  const [warn, setWarn] = useState<string | null>(null);
+  useCloseOnOk(state);
+  const set = (id: string, k: "recv" | "dmg" | "note", val: string) => setV((cur) => ({ ...cur, [id]: { ...cur[id], [k]: val } }));
+  const fillOrdered = () => setV((cur) => Object.fromEntries(lines.map((l) => [l.id, { ...cur[l.id], recv: cur[l.id].recv || String(l.drop ?? l.qty) }])));
+  return (
+    <form
+      action={run}
+      className="im-form"
+      onSubmit={(e) => {
+        const bad = lines.find((l) => v[l.id].dmg && Number(v[l.id].dmg) > Number(v[l.id].recv || 0));
+        setWarn(bad ? `${bad.name}: no pueden ser más dañadas que recibidas.` : null);
+        if (bad) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="id" value={importId} />
+      <div className="im-recv-head">
+        <p className="muted im-small">Anota lo que contaron en la bodega. Lo que falta o llegó dañado se descuenta: el costo por unidad se calcula con las buenas.</p>
+        <button type="button" className="btn btn-sm" onClick={fillOrdered}>Llenar con lo pedido</button>
+      </div>
+      <ul className="im-recv">
+        {lines.map((l) => {
+          const r = v[l.id];
+          const diff = r.recv === "" ? null : Number(r.recv) - l.qty;
+          return (
+            <li key={l.id}>
+              <div className="im-recv-name">
+                <b>{l.name}</b>
+                <span>Pedidas {l.qty.toLocaleString("en-US")}{l.drop !== null && <> · Drop registró {l.drop.toLocaleString("en-US")}</>}{diff !== null && diff !== 0 && <em data-bad={diff < 0 || undefined}> · {diff < 0 ? `faltan ${-diff}` : `sobran ${diff}`}</em>}</span>
+              </div>
+              <label className="field">
+                <span>Llegaron</span>
+                <input className="input" name={`recv_${l.id}`} type="number" min={0} step={1} inputMode="numeric" value={r.recv} onChange={(e) => set(l.id, "recv", e.target.value)} aria-label={`Llegaron de ${l.name}`} />
+              </label>
+              <label className="field">
+                <span>Dañadas</span>
+                <input className="input" name={`dmg_${l.id}`} type="number" min={0} step={1} inputMode="numeric" value={r.dmg} onChange={(e) => set(l.id, "dmg", e.target.value)} aria-label={`Dañadas de ${l.name}`} />
+              </label>
+              <label className="field im-recv-note">
+                <span>Nota <span className="hint">opcional</span></span>
+                <input className="input" name={`note_${l.id}`} maxLength={300} value={r.note} onChange={(e) => set(l.id, "note", e.target.value)} placeholder="Caja golpeada, faltó una bolsa…" aria-label={`Nota de ${l.name}`} />
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {warn && <p className="im-msg" data-ok="false" role="alert">{warn}</p>}
+      <Msg state={state} />
+      <SubmitButton className="btn btn-primary" pending="Guardando…">Guardar recepción</SubmitButton>
+    </form>
+  );
+}
+
 export function RemoveButton({ action, name, value, label = "Quitar", confirmText }: { action: Action; name: string; value: string; label?: string; confirmText?: string }) {
   const [state, run] = useActionState(action, null);
   return (
@@ -490,10 +578,10 @@ export function AddPaymentForm({ action, importId }: { action: Action; importId:
 
 // ─── Documentos ───
 
-export function DocUpload({ importId, money }: { importId: string; money: boolean }) {
+export function DocUpload({ importId, money, fixedKind, label = "Subir archivos" }: { importId: string; money: boolean; fixedKind?: DocKind; label?: string }) {
   const router = useRouter();
   const kinds = DOC_KINDS.filter((k) => money || !MONEY_DOCS.includes(k.id));
-  const [kind, setKind] = useState<string>(kinds[0].id);
+  const [kind, setKind] = useState<string>(fixedKind ?? kinds[0].id);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<ImportFormState>(null);
 
@@ -503,7 +591,7 @@ export function DocUpload({ importId, money }: { importId: string; money: boolea
     setMsg(null);
     let ok = 0;
     for (const f of files.slice(0, 10)) {
-      const problem = importFileProblem(f.type, f.name, f.size);
+      const problem = importFileProblem(f.type, f.name, f.size, fixedKind === "photo");
       if (problem) { setMsg({ ok: false, msg: `${f.name}: ${problem}` }); continue; }
       try {
         const start = await startImportUpload(importId, "docs", kind, f.name, f.type, f.size);
@@ -525,14 +613,16 @@ export function DocUpload({ importId, money }: { importId: string; money: boolea
 
   return (
     <div className="im-docup">
-      <select className="select" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de documento">
-        {kinds.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-      </select>
+      {!fixedKind && (
+        <select className="select" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de documento">
+          {kinds.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+        </select>
+      )}
       <label className="btn">
-        <IconUpload /> {busy ? "Subiendo…" : "Subir archivos"}
-        <input type="file" accept={IMPORT_FILE_ACCEPT} multiple hidden disabled={busy} onChange={(e) => { send(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+        <IconUpload /> {busy ? "Subiendo…" : label}
+        <input type="file" accept={fixedKind === "photo" ? "image/jpeg,image/png,image/webp" : IMPORT_FILE_ACCEPT} multiple hidden disabled={busy} onChange={(e) => { send(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </label>
-      <span className="hint">PDF, fotos o Excel, hasta 25 MB</span>
+      <span className="hint">{fixedKind === "photo" ? "JPG, PNG o WEBP, hasta 25 MB" : "PDF, fotos o Excel, hasta 25 MB"}</span>
       <Msg state={msg} />
     </div>
   );

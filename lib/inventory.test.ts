@@ -147,3 +147,30 @@ test("alertas: agotado, pedir hoy, pedir esta semana y devoluciones; lo que vien
   assert.match(withOrder[0].detail, /vienen 300 u\. \(llegada 9\/10\)/);
   assert.match(withOrder[0].action, /ya viene/);
 });
+
+test("líneas de importación: solo las cierra una entrada grande o la marca de ingresada en Drop", () => {
+  const imp = (id: string, p: Partial<RestockOrder>) =>
+    order({ id, units: 300, min_units: 150, import: { id: "i1", code: "IMP-2026-001", item_id: id, declared_at: null }, ...p });
+  const t = trackOrders(
+    [
+      imp("grande", { ordered_at: "2026-09-01" }),
+      imp("chica", { ordered_at: "2026-09-02", eta: "2026-10-01" }),
+      imp("marcada", { ordered_at: "2026-08-01", import: { id: "i0", code: "IMP-2026-000", item_id: "marcada", declared_at: "2026-08-30" } }),
+    ],
+    [
+      { at: "2026-09-10T12:00:00+00:00", units: 12, reason: "MANUAL" }, // ajuste chico: no cierra nada
+      { at: "2026-09-30T12:00:00+00:00", units: 290, reason: "STOCK_REQUEST" },
+    ],
+    TODAY,
+  );
+  const by = Object.fromEntries(t.map((o) => [o.id, o]));
+  // la marcada como ingresada no toma entradas de semanas después de la marca: llegó en su fecha
+  assert.deepEqual([by.marcada.status, by.marcada.arrived_at, by.marcada.arrived_units], ["arrived", "2026-08-30", 300]);
+  // el ajuste de 12 u. no alcanza la mitad; la entrada de 290 cierra la más antigua que sigue en camino
+  assert.deepEqual([by.grande.status, by.grande.arrived_units], ["arrived", 290]);
+  assert.equal(by.chica.status, "late");
+  // la importación cuenta en lo que viene en camino del plan
+  const p = reorderPlan(steady({ stock: 50 }), supply([imp("en-camino", { ordered_at: "2026-09-20", eta: "2026-10-20" })]), TODAY);
+  assert.equal(p.inTransit, 300);
+  assert.equal(p.open[0].import?.code, "IMP-2026-001");
+});

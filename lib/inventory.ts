@@ -40,6 +40,19 @@ export type RestockOrder = {
   eta: string | null;
   note: string | null;
   cancelled_at: string | null;
+  /** viene en una importación (se ve y se edita allá, no se cancela desde Inventario) */
+  import?: ImportRef;
+  /** solo una entrada de al menos estas unidades lo cierra (para no tomar ajustes chicos de stock) */
+  min_units?: number;
+};
+
+/** Línea de importación contada como pedido en camino (ver importOrders en lib/imports.ts). */
+export type ImportRef = {
+  id: string;
+  code: string;
+  item_id: string;
+  /** la importación ya se marcó como ingresada en Drop: llegó aunque no se vea la entrada */
+  declared_at: string | null;
 };
 
 /** Pedidos registrados y tiempos de reposición fijados a mano (clave `cuenta:producto`). */
@@ -130,7 +143,9 @@ export type TrackedOrder = RestockOrder & { status: OrderStatus; arrived_at: str
 /**
  * Estado de cada pedido: llegó cuando Drop registra una entrada de mercadería (solicitud de stock,
  * stock inicial o ajuste de entrada) después de pedirlo; cada entrada cierra un solo pedido, el
- * más antiguo. Sin entrada y con la fecha estimada vencida, está atrasado.
+ * más antiguo. Las líneas de importación solo se cierran con una entrada de al menos la mitad de
+ * lo esperado, o cuando la importación se marca como ingresada en Drop. Sin entrada y con la fecha
+ * estimada vencida, está atrasado.
  */
 export function trackOrders(orders: RestockOrder[], restocks: Restock[], today: string): TrackedOrder[] {
   const ins = [...restocks].filter((x) => x.units > 0).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
@@ -139,11 +154,15 @@ export function trackOrders(orders: RestockOrder[], restocks: Restock[], today: 
     .sort((a, b) => Date.parse(a.ordered_at) - Date.parse(b.ordered_at))
     .map((o): TrackedOrder => {
       if (o.cancelled_at) return { ...o, status: "cancelled", arrived_at: null, arrived_units: null };
-      const i = ins.findIndex((x, k) => !used.has(k) && Date.parse(x.at) > Date.parse(o.ordered_at));
+      // si ya se marcó como ingresada, su entrada es de antes de la llegada o de los días siguientes
+      // (de la bodega a Drop), no de semanas después
+      const until = o.import?.declared_at ? Date.parse(o.import.declared_at) + 10 * DAY : Infinity;
+      const i = ins.findIndex((x, k) => !used.has(k) && Date.parse(x.at) > Date.parse(o.ordered_at) && Date.parse(x.at) <= until && x.units >= (o.min_units ?? 0));
       if (i >= 0) {
         used.add(i);
         return { ...o, status: "arrived", arrived_at: ins[i].at, arrived_units: ins[i].units };
       }
+      if (o.import?.declared_at) return { ...o, status: "arrived", arrived_at: o.import.declared_at, arrived_units: o.units };
       return { ...o, status: o.eta && o.eta < today ? "late" : "open", arrived_at: null, arrived_units: null };
     });
 }

@@ -34,5 +34,12 @@ function baseStatus(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf }: Fixt
   });
 }
 
+// entradas de mercadería en stock_movements, iguales a las `restocks` de arriba (para importaciones)
+const HN = "11111111-1111-4111-8111-111111111111";
+const stock_movements: Row[] = Array.from({ length: 8 }, (_, i) => [
+  { id: `sm-${i}-a`, account_id: HN, product_external_id: `p${i}`, external_id: `m${i}a`, units: 120, kind: "IN", reason: "STOCK_REQUEST", occurred_at: new Date(Date.now() - 12 * 86_400_000).toISOString() },
+  { id: `sm-${i}-b`, account_id: HN, product_external_id: `p${i}`, external_id: `m${i}b`, units: 200, kind: "IN", reason: "INITIAL_STOCK", occurred_at: new Date(Date.now() - 40 * 86_400_000).toISOString() },
+]).flat();
+
 // pedidos de reposición ("Ya lo pedí") y tiempos fijados a mano: empiezan vacíos y se llenan desde el panel
-export const fixtures: FixtureModule = { rpc: { inventory_status: inventoryStatus }, tables: { restock_orders: [], product_lead_times: [] } };
+export const fixtures: FixtureModule = { rpc: { inventory_status: inventoryStatus }, tables: { restock_orders: [], product_lead_times: [], stock_movements } };

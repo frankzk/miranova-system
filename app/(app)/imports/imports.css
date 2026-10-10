@@ -81,6 +81,33 @@
 .im-timeline .dot { margin-top: 6px; }
 .im-timeline .sub { font-size: var(--t-xs); color: var(--ink-3); margin-top: 1px; }
 
+/* fase 2: llegada a Drop y recepción */
+.im-ok { margin: 0 0 14px; padding: 8px 12px; border-radius: var(--r); background: var(--success-bg); color: var(--success); font-size: var(--t-sm); font-weight: 550; }
+.im-link { margin-top: 4px; }
+.im-recv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.im-recv-head .im-small { margin: 0; }
+.im-recv-head .btn { flex: none; }
+.im-recv { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.im-recv li { display: grid; grid-template-columns: minmax(0, 1fr) 96px 96px; gap: 8px 10px; align-items: end; padding: 12px 0; border-top: 1px solid var(--line); }
+.im-recv li:last-child { border-bottom: 1px solid var(--line); }
+.im-recv .field { margin: 0; }
+.im-recv-name { min-width: 0; align-self: center; }
+.im-recv-name b { display: block; font-size: var(--t-sm); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.im-recv-name span { display: block; font-size: var(--t-xs); color: var(--ink-3); }
+.im-recv-name em { font-style: normal; color: var(--success); }
+.im-recv-name em[data-bad] { color: var(--danger); }
+.im-recv-note { grid-column: 1 / -1; }
+.im-recv-photos { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.im-recv-photos h3 { margin: 0 0 4px; font-size: var(--t-sm); }
+.im-recv-sum { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
+.im-recv-sum div { padding: 8px 10px; border-radius: var(--r); background: var(--bg-app); }
+.im-recv-sum dt { font-size: var(--t-xs); color: var(--ink-3); }
+.im-recv-sum dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.im-recv-sum div[data-bad] dd { color: var(--danger); }
+.im-recv-sum .total { background: var(--success-bg); }
+.im-recv-sum .total dd { color: var(--success); }
+.im-section > .panel-body > .sub { margin: 0; font-size: var(--t-xs); color: var(--ink-3); }
+
 @media (max-width: 900px) {
   .im-two { grid-template-columns: minmax(0, 1fr); }
   .im-cost-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -88,4 +115,9 @@
 }
 @media (max-width: 560px) {
   .im-grid, .im-facts { grid-template-columns: minmax(0, 1fr); }
+  .im-recv-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .im-recv-sum .total { grid-column: 1 / -1; }
+  .im-recv li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .im-recv-name { grid-column: 1 / -1; }
+  .im-recv-head { flex-direction: column; }
 }

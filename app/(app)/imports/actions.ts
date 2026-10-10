@@ -7,7 +7,7 @@ import { authorizeAction, type SessionUser } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
 import {
   importFileProblem, importFileType, IMPORT_FILE_TYPES, isAllocation, isCostKind, isDocKind, isImportFilePath, isImportStatus,
-  MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, statusInfo, TRANSPORTS,
+  isActive, MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, receptionSummary, statusInfo, TRANSPORTS,
 } from "@/lib/imports";
 import { removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
 import { can } from "@/lib/permissions";
@@ -215,6 +215,80 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
   if (error) return fail(`No se pudo agregar: ${error.message}`);
   await db().from("imports").update({ updated_at: new Date().toISOString() }).eq("id", imp.id);
   return done(imp.id, `Agregado: ${String(product.name)}. Puedes agregar otro o cerrar.`);
+}
+
+/**
+ * Recepción en la bodega: cuántas llegaron y cuántas dañadas de cada producto (campos
+ * recv_<id>, dmg_<id>, note_<id>). Vacío = todavía sin contar. Al registrarla, la importación
+ * pasa a "Recibido" si seguía en camino.
+ */
+export async function saveReception(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok) return auth;
+  const imp = await importOf(field(form, "id"));
+  if (!imp) return fail("Esa importación ya no existe.");
+  const { data, error } = await db().from("import_items").select("id, name, qty").eq("import_id", imp.id);
+  if (error) return fail(`No se pudo leer: ${error.message}`);
+  const lines = (data ?? []) as { id: string; name: string; qty: number }[];
+  if (!lines.length) return fail("Primero agrega los productos de la importación.");
+  const now = new Date().toISOString();
+  const rows: { id: string; received_qty: number | null; damaged_qty: number; received_note: string | null }[] = [];
+  for (const l of lines) {
+    const recv = amount(form, `recv_${l.id}`);
+    const dmg = amount(form, `dmg_${l.id}`) ?? 0;
+    const bad = (v: number | null) => v !== null && (Number.isNaN(v) || v < 0 || !Number.isInteger(v) || v > 1_000_000);
+    if (bad(recv) || bad(dmg)) return fail(`${l.name}: escribe cantidades enteras, sin decimales.`);
+    if (recv === null && dmg > 0) return fail(`${l.name}: anota cuántas llegaron antes de las dañadas.`);
+    if (recv !== null && dmg > recv) return fail(`${l.name}: no pueden ser más dañadas (${dmg}) que recibidas (${recv}).`);
+    rows.push({ id: l.id, received_qty: recv, damaged_qty: recv === null ? 0 : dmg, received_note: field(form, `note_${l.id}`).slice(0, 300) || null });
+  }
+  if (rows.every((r) => r.received_qty === null)) return fail("Anota cuántas llegaron de al menos un producto.");
+  for (const r of rows) {
+    const { error: e } = await db()
+      .from("import_items")
+      .update({ received_qty: r.received_qty, damaged_qty: r.damaged_qty, received_note: r.received_note, received_at: r.received_qty === null ? null : now, received_by: r.received_qty === null ? null : auth.user.id })
+      .eq("id", r.id);
+    if (e) return fail(`No se pudo guardar: ${e.message}`);
+  }
+  const sum = receptionSummary(lines.map((l) => ({ qty: Number(l.qty), ...rows.find((r) => r.id === l.id)! })));
+  const parts = [
+    `${sum.received.toLocaleString("en-US")} de ${sum.ordered.toLocaleString("en-US")} u.`,
+    sum.missing ? `faltan ${sum.missing}` : "",
+    sum.extra ? `sobran ${sum.extra}` : "",
+    sum.damaged ? `${sum.damaged} dañadas` : "",
+    sum.complete ? "" : `${lines.length - sum.lines} sin contar`,
+  ].filter(Boolean);
+  // al contarla, ya llegó a la bodega
+  const arrive = isActive(imp.status) && imp.status !== "quote";
+  if (arrive) await db().from("imports").update({ status: "received", arrived_at: imp.arrived_at ?? now.slice(0, 10), updated_at: now }).eq("id", imp.id);
+  await logEvent(imp.id, auth.user.id, arrive ? "received" : null, `Recepción: ${parts.join(" · ")}`);
+  return done(imp.id, sum.missing || sum.damaged ? "Recepción guardada: el costo por unidad ya se calcula con las unidades buenas." : "Recepción guardada.");
+}
+
+/** Enlaza una línea nueva con un producto de Drop del país (para seguir su llegada e Inventario). */
+export async function linkImportItem(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok) return auth;
+  const item = await itemOf(field(form, "item_id"));
+  if (!item) return fail("Ese producto ya no está en la importación.");
+  const accountId = field(form, "account_id");
+  const externalId = field(form, "product_id");
+  if (!UUID.test(accountId) || !externalId) return fail("Elige el producto de Drop.");
+  const [{ data: imp }, { data: acc }, { data: prod }] = await Promise.all([
+    db().from("imports").select("dest_country").eq("id", item.import_id).maybeSingle(),
+    db().from("accounts").select("country").eq("id", accountId).maybeSingle(),
+    db().from("products").select("name, image_url").eq("account_id", accountId).eq("external_id", externalId).maybeSingle(),
+  ]);
+  if (!prod) return fail("Ese producto ya no está en Drop.");
+  if (!imp || !acc || (acc as { country: string }).country !== (imp as { dest_country: string }).dest_country) return fail("El producto debe ser del país al que llega la importación.");
+  const p = prod as { name: string; image_url: string | null };
+  const { error } = await db()
+    .from("import_items")
+    .update({ account_id: accountId, product_external_id: externalId, ...(item.photo_path ? {} : { image_url: p.image_url }) })
+    .eq("id", item.id);
+  if (error) return fail(`No se pudo enlazar: ${error.message}`);
+  await logEvent(item.import_id, auth.user.id, null, `${item.name}: enlazado con el producto de Drop "${p.name}"`);
+  return done(item.import_id, `Enlazado con "${p.name}".`);
 }
 
 async function itemOf(id: string): Promise<{ id: string; import_id: string; photo_path: string | null; name: string } | null> {
