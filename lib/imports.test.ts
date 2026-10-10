@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { importFileProblem, isImportFilePath, landedCosts, marginOf, needsReport, nextCode, recoveryShare, trackingUrl, whatsappMessage } from "./imports.ts";
+import {
+  allInDrop, dropState, goodUnits, importFileProblem, importOrders, importsDigest, isImportFilePath, landedCosts, marginOf, matchNewProduct,
+  needsReport, nextCode, receptionSummary, recoveryShare, trackingUrl, whatsappMessage, type DropState,
+} from "./imports.ts";
+import { trackOrders } from "./inventory.ts";
 
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
@@ -111,4 +115,101 @@ test("archivos permitidos y rutas", () => {
   assert.equal(isImportFilePath(`${id}/docs/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf`, id, "docs"), true);
   assert.equal(isImportFilePath(`${id}/items/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf`, id, "docs"), false);
   assert.equal(isImportFilePath(`otro/docs/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.pdf`, id, "docs"), false);
+});
+
+test("recepción: el costo por unidad se reparte sobre las unidades buenas", () => {
+  const got = [
+    { id: "a", qty: 100, unit_cost: 2, unit_weight_kg: 0.5, received_qty: 95, damaged_qty: 5 }, // 90 buenas
+    { id: "b", qty: 50, unit_cost: 12, unit_weight_kg: 0.2, received_qty: null },               // sin contar: 50
+  ];
+  const r = landedCosts(got, [{ kind: "shipping", amount: 120, allocation: "weight" }]); // a 100, b 20 (sobre lo pedido)
+  close(r.items[0].total, 300);
+  assert.equal(r.items[0].good, 90);
+  close(r.items[0].unit, 300 / 90);
+  close(r.items[1].unit, 620 / 50);
+  assert.equal(r.totals.units, 150);
+  assert.equal(r.totals.good, 140);
+  // todo dañado: se avisa y se muestra sobre lo pedido
+  const lost = landedCosts([{ id: "x", qty: 10, unit_cost: 3, received_qty: 10, damaged_qty: 10 }], []);
+  close(lost.items[0].unit, 3);
+  assert.equal(lost.notes.length, 1);
+
+  const sum = receptionSummary([
+    { qty: 100, received_qty: 95, damaged_qty: 5 },
+    { qty: 50, received_qty: 52, damaged_qty: 0 },
+    { qty: 20, received_qty: null },
+  ]);
+  assert.deepEqual(
+    [sum.complete, sum.started, sum.lines, sum.ordered, sum.received, sum.damaged, sum.missing, sum.extra, sum.good],
+    [false, true, 2, 170, 147, 5, 5, 2, 90 + 52 + 20],
+  );
+  assert.equal(goodUnits({ qty: 7 }), 7);
+});
+
+test("importaciones en camino para Inventario: desde que se pagan, con las unidades buenas", () => {
+  const imps = [
+    { id: "i1", code: "IMP-2026-001", supplier: "Yiwu", status: "transit", ordered_at: "2026-09-01", created_at: "2026-08-30T10:00:00Z", eta: "2026-10-20", arrived_at: null },
+    { id: "i2", code: "IMP-2026-002", supplier: null, status: "quote", ordered_at: null, created_at: "2026-09-10T10:00:00Z", eta: null, arrived_at: null },
+    { id: "i3", code: "IMP-2026-003", supplier: null, status: "in_drop", ordered_at: null, created_at: "2026-08-01T10:00:00Z", eta: null, arrived_at: "2026-09-02" },
+  ];
+  const its = [
+    { id: "l1", import_id: "i1", account_id: "hn", product_external_id: "p1", qty: 300 },
+    { id: "l2", import_id: "i1", account_id: null, product_external_id: null, qty: 50 }, // nuevo sin enlazar
+    { id: "l3", import_id: "i1", account_id: "hn", product_external_id: "p2", qty: 100, received_qty: 90, damaged_qty: 10 },
+    { id: "l4", import_id: "i2", account_id: "hn", product_external_id: "p1", qty: 999 }, // cotización: no cuenta
+    { id: "l5", import_id: "i3", account_id: "hn", product_external_id: "p3", qty: 40 },
+  ];
+  const o = importOrders(imps, its);
+  assert.deepEqual(o.map((x) => [x.id, x.units, x.min_units, x.ordered_at, x.eta]), [
+    ["imp:l1", 300, 150, "2026-09-01T12:00:00Z", "2026-10-20"],
+    ["imp:l3", 80, 40, "2026-09-01T12:00:00Z", "2026-10-20"],
+    ["imp:l5", 40, 20, "2026-08-01T10:00:00Z", null],
+  ]);
+  assert.equal(o[0].note, "IMP-2026-001 · Yiwu");
+  assert.equal(o[2].import?.declared_at, "2026-09-02T12:00:00Z");
+
+  // estado frente a Drop: l1 entró (se vio), l3 sigue en camino, l2 sin enlazar
+  const tracked = trackOrders(o, [{ at: "2026-10-18T15:00:00Z", units: 298, reason: "STOCK_REQUEST" }], "2026-10-21");
+  const t = new Map(tracked.map((x) => [x.import!.item_id, x]));
+  const states = new Map<string, DropState>(its.map((i) => [i.id, dropState(i, t.get(i.id))]));
+  assert.deepEqual(states.get("l1"), { kind: "in", at: "2026-10-18T15:00:00Z", units: 298, seen: true });
+  assert.deepEqual(states.get("l3"), { kind: "coming", late: true });
+  assert.deepEqual(states.get("l2"), { kind: "unlinked" });
+  assert.deepEqual(states.get("l4"), { kind: "waiting" });
+  assert.deepEqual(states.get("l5"), { kind: "in", at: "2026-09-02T12:00:00Z", units: 40, seen: false });
+  // todavía no entró todo (falta l3 y hay uno sin enlazar); con solo l1, sí
+  assert.equal(allInDrop(its.slice(0, 3), states).done, false);
+  assert.deepEqual(allInDrop([its[0]], states), { done: true, at: "2026-10-18T15:00:00Z", units: 298 });
+  // marcada a mano como ingresada no cuenta como "vista" para avanzar sola
+  assert.equal(allInDrop([its[4]], states).done, false);
+});
+
+test("producto nuevo: se enlaza por SKU o nombre, solo si hay uno", () => {
+  const prods = [
+    { id: 1, name: "Lámpara LED Plegable", sku: "LAMP-01", code: "ID-AAA" },
+    { id: 2, name: "Organizador de cables", sku: null, code: "ID-BBB" },
+    { id: 3, name: "Organizador de Cables", sku: null, code: "ID-CCC" },
+    { id: 4, name: "Taza", sku: "TZ", code: null },
+  ];
+  assert.equal(matchNewProduct({ name: "otra cosa", sku: " lamp-01 " }, prods)?.id, 1);
+  assert.equal(matchNewProduct({ name: "x", sku: "id-bbb" }, prods)?.id, 2);
+  assert.equal(matchNewProduct({ name: "lampara led plegable", sku: null }, prods)?.id, 1);
+  assert.equal(matchNewProduct({ name: "Organizador de cables", sku: null }, prods), null); // dos iguales
+  assert.equal(matchNewProduct({ name: "Taza", sku: null }, prods), null); // nombre muy corto
+  assert.equal(matchNewProduct({ name: "Lámpara LED Plegable", sku: "OTRO" }, prods)?.id, 1); // SKU sin coincidencia: por nombre
+});
+
+test("resumen diario: atrasadas, llegan esta semana y sin avisar a la bodega", () => {
+  const base = { supplier: null, dest_country: "GT", reported_at: null, units: 100 };
+  const d = importsDigest([
+    { ...base, id: "1", code: "A", status: "transit", eta: "2026-10-08" },                       // atrasada
+    { ...base, id: "2", code: "B", status: "customs", eta: "2026-10-12", reported_at: "2026-10-09" }, // esta semana, reportada
+    { ...base, id: "3", code: "C", status: "transit", eta: "2026-10-11" },                       // esta semana, sin avisar
+    { ...base, id: "4", code: "D", status: "transit", eta: "2026-10-30" },                       // más adelante
+    { ...base, id: "5", code: "E", status: "received", eta: "2026-10-01" },                      // ya llegó
+    { ...base, id: "6", code: "F", status: "quote", eta: "2026-10-09" },                         // cotización
+  ], "2026-10-10");
+  assert.deepEqual(d.late.map((i) => i.code), ["A"]);
+  assert.deepEqual(d.week.map((i) => i.code), ["C", "B"]);
+  assert.deepEqual(d.unreported.map((i) => i.code), ["A", "C"]);
 });

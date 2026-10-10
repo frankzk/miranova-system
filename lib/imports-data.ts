@@ -1,5 +1,10 @@
 import "server-only";
-import { IMPORT_FILE_TYPES, landedCosts, type Allocation, type CostKind, type DocKind } from "./imports";
+import {
+  allInDrop, dropState, IMPORT_FILE_TYPES, INBOUND, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
+  type DropState,
+} from "./imports";
+import { productKey, trackOrders, type TrackedOrder } from "./inventory";
+import { inventorySupply, stockEntries } from "./inventory-data";
 import { db } from "./supabase";
 import { toUsd } from "./wallet";
 
@@ -44,6 +49,12 @@ export type ImportItem = {
   unit_weight_kg: number | null;
   sale_price_usd: number | null;
   position: number;
+  /** recepción en la bodega (null: todavía no se cuenta) */
+  received_qty: number | null;
+  damaged_qty: number;
+  received_note: string | null;
+  received_at: string | null;
+  received_by: string | null;
 };
 
 export type ImportCost = { id: string; import_id: string; kind: CostKind; label: string; amount: number; allocation: Allocation; item_id: string | null; created_at: string };
@@ -51,9 +62,14 @@ export type ImportDoc = { id: string; import_id: string; kind: DocKind; storage_
 export type ImportPayment = { id: string; import_id: string; paid_at: string; amount: number; method: string; note: string | null; document_id: string | null; created_at: string };
 export type ImportEvent = { id: string; import_id: string; status: string | null; note: string | null; by_user: string | null; at: string };
 
-const ITEM_COLS = "id, import_id, account_id, product_external_id, name, sku, image_url, photo_path, qty, unit_cost, unit_weight_kg, sale_price_usd, position";
+const ITEM_COLS =
+  "id, import_id, account_id, product_external_id, name, sku, image_url, photo_path, qty, unit_cost, unit_weight_kg, sale_price_usd, position, received_qty, damaged_qty, received_note, received_at, received_by";
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
-const items = (rows: ImportItem[]) => rows.map((i) => ({ ...i, qty: Number(i.qty), unit_cost: Number(i.unit_cost), unit_weight_kg: num(i.unit_weight_kg), sale_price_usd: num(i.sale_price_usd) }));
+const items = (rows: ImportItem[]) =>
+  rows.map((i) => ({
+    ...i, qty: Number(i.qty), unit_cost: Number(i.unit_cost), unit_weight_kg: num(i.unit_weight_kg), sale_price_usd: num(i.sale_price_usd),
+    received_qty: num(i.received_qty), damaged_qty: Number(i.damaged_qty ?? 0),
+  }));
 const costs = (rows: ImportCost[]) => rows.map((c) => ({ ...c, amount: Number(c.amount) }));
 
 export type ImportSummary = ImportRow & { lines: number; units: number; total: number; paid: number };
@@ -62,7 +78,7 @@ export type ImportSummary = ImportRow & { lines: number; units: number; total: n
 export async function listImports(): Promise<ImportSummary[]> {
   const [imp, it, co, pa] = await Promise.all([
     db().from("imports").select("*").order("created_at", { ascending: false }),
-    db().from("import_items").select("id, import_id, qty, unit_cost, unit_weight_kg"),
+    db().from("import_items").select("id, import_id, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty"),
     db().from("import_costs").select("import_id, kind, amount, allocation, item_id"),
     db().from("import_payments").select("import_id, amount"),
   ]);
@@ -189,6 +205,139 @@ export async function salePrices(list: ImportItem[]): Promise<Map<string, number
     out.set(i.id, p === undefined || p === null ? null : toUsd(p, currency.get(i.account_id!) ?? "USD", rates.get(i.account_id!) ?? null));
   }
   return out;
+}
+
+// ─── Drop: cómo va cada línea ───
+
+/**
+ * Estado de cada línea frente a Drop: si ya entró (y cuánto), si sigue en camino o si es un
+ * producto nuevo sin enlazar. Usa los mismos pedidos que Inventario (reposiciones e importaciones
+ * de la cuenta) y las entradas de mercadería de los movimientos de Drop.
+ */
+export async function dropStates(list: ImportItem[], today: string): Promise<Map<string, DropState>> {
+  const out = new Map<string, DropState>(list.map((i) => [i.id, dropState(i, undefined)]));
+  const linked = list.filter((i) => i.account_id && i.product_external_id);
+  if (!linked.length) return out;
+  const accounts = [...new Set(linked.map((i) => i.account_id!))];
+  const keys = new Set(linked.map((i) => productKey(i.account_id!, i.product_external_id!)));
+  const orders = (await Promise.all(accounts.map((a) => inventorySupply(a)))).flatMap((s) => s.orders).filter((o) => keys.has(productKey(o.account_id, o.product_external_id)));
+  const oldest = orders.map((o) => Date.parse(o.ordered_at)).filter(Number.isFinite).reduce((a, b) => Math.min(a, b), Date.now());
+  const entries = await stockEntries(linked.map((i) => ({ account_id: i.account_id!, external_id: i.product_external_id! })), new Date(oldest - 86_400_000).toISOString());
+  const byItem = new Map<string, TrackedOrder>();
+  for (const key of keys) {
+    for (const t of trackOrders(orders.filter((o) => productKey(o.account_id, o.product_external_id) === key), entries.get(key) ?? [], today)) {
+      if (t.import) byItem.set(t.import.item_id, t);
+    }
+  }
+  for (const i of list) out.set(i.id, dropState(i, byItem.get(i.id)));
+  return out;
+}
+
+/** Importaciones para el correo diario (sin montos). */
+export async function digestImports(): Promise<DigestImport[]> {
+  const { data, error } = await db().from("imports").select("id, code, supplier, dest_country, status, eta, reported_at").in("status", ["quote", ...INBOUND]);
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw error;
+  }
+  const list = (data ?? []) as Omit<DigestImport, "units">[];
+  if (!list.length) return [];
+  const { data: its } = await db().from("import_items").select("import_id, qty").in("import_id", list.map((i) => i.id));
+  const units = new Map<string, number>();
+  for (const i of (its ?? []) as { import_id: string; qty: number }[]) units.set(i.import_id, (units.get(i.import_id) ?? 0) + Number(i.qty));
+  return list.map((i) => ({ ...i, units: units.get(i.id) ?? 0 }));
+}
+
+// ─── Sincronización ───
+
+/** Productos de importaciones por llegar (en aduana o después, o con llegada en 5 días): sus movimientos se revisan primero. */
+export async function productsToWatch(accountId: string, today: string): Promise<string[]> {
+  const { data: its, error } = await db().from("import_items").select("import_id, product_external_id").eq("account_id", accountId);
+  if (error || !its?.length) return [];
+  const ids = [...new Set((its as { import_id: string }[]).map((i) => i.import_id))];
+  const { data: imps } = await db().from("imports").select("id, status, eta").in("id", ids).in("status", INBOUND);
+  const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 5 * 86_400_000).toISOString().slice(0, 10);
+  const near = new Set(
+    ((imps ?? []) as { id: string; status: string; eta: string | null }[])
+      .filter((i) => ["customs", "released", "to_warehouse", "received"].includes(i.status) || (i.eta !== null && i.eta <= soon))
+      .map((i) => i.id),
+  );
+  return [...new Set((its as { import_id: string; product_external_id: string | null }[]).filter((i) => near.has(i.import_id) && i.product_external_id).map((i) => i.product_external_id!))];
+}
+
+/**
+ * Pasa a "Ingresado en Drop" las importaciones en camino cuyos productos (todos enlazados) ya
+ * aparecen como entrada de mercadería en Drop. Devuelve cuántas avanzaron.
+ */
+export async function advanceImports(accountId: string, today: string): Promise<number> {
+  const { data: mine, error } = await db().from("import_items").select("import_id").eq("account_id", accountId);
+  if (error || !mine?.length) return 0;
+  const { data: imps } = await db()
+    .from("imports")
+    .select("id, status, arrived_at")
+    .in("id", [...new Set((mine as { import_id: string }[]).map((i) => i.import_id))])
+    .in("status", INBOUND);
+  const list = (imps ?? []) as { id: string; status: string; arrived_at: string | null }[];
+  if (!list.length) return 0;
+  const { data: all, error: e } = await db().from("import_items").select(ITEM_COLS).in("import_id", list.map((i) => i.id));
+  if (e) throw e;
+  const lines = items((all ?? []) as ImportItem[]);
+  const states = await dropStates(lines, today);
+  let moved = 0;
+  for (const imp of list) {
+    const r = allInDrop(lines.filter((i) => i.import_id === imp.id), states);
+    if (!r.done) continue;
+    const now = new Date().toISOString();
+    const { data: done } = await db()
+      .from("imports")
+      .update({ status: "in_drop", arrived_at: imp.arrived_at ?? r.at!.slice(0, 10), updated_at: now })
+      .eq("id", imp.id)
+      .in("status", INBOUND)
+      .select("id");
+    if (!done?.length) continue;
+    await db().from("import_events").insert({ import_id: imp.id, status: "in_drop", note: `Drop registró la entrada de ${r.units.toLocaleString("en-US")} u.`, by_user: null, at: now });
+    moved++;
+  }
+  return moved;
+}
+
+/**
+ * Enlaza los productos nuevos de las importaciones a este país con el producto de Drop que les
+ * corresponde (por SKU o nombre), cuando ya aparece en el catálogo. Devuelve cuántos enlazó.
+ */
+export async function linkNewProducts(accountId: string, country: string): Promise<number> {
+  const { data: imps, error } = await db().from("imports").select("id").eq("dest_country", country).in("status", ["quote", ...INBOUND]);
+  if (error || !imps?.length) return 0;
+  const { data: loose } = await db()
+    .from("import_items")
+    .select("id, import_id, name, sku, image_url, photo_path, product_external_id")
+    .in("import_id", (imps as { id: string }[]).map((i) => i.id))
+    .is("product_external_id", null);
+  const pending = (loose ?? []) as { id: string; import_id: string; name: string; sku: string | null; image_url: string | null; photo_path: string | null }[];
+  if (!pending.length) return 0;
+  // de a 1000 (el máximo por consulta)
+  const catalog: { external_id: string; name: string; sku: string | null; code: string | null; image_url: string | null }[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data: page, error: e } = await db().from("products").select("external_id, name, sku, code, image_url").eq("account_id", accountId).order("external_id").range(from, from + 999);
+    if (e) throw e;
+    catalog.push(...((page ?? []) as typeof catalog));
+    if ((page ?? []).length < 1000) break;
+  }
+  let linked = 0;
+  for (const it of pending) {
+    const p = matchNewProduct(it, catalog);
+    if (!p) continue;
+    const { data: done } = await db()
+      .from("import_items")
+      .update({ account_id: accountId, product_external_id: p.external_id, image_url: it.photo_path ? it.image_url : it.image_url ?? p.image_url })
+      .eq("id", it.id)
+      .is("product_external_id", null)
+      .select("id");
+    if (!done?.length) continue;
+    await db().from("import_events").insert({ import_id: it.import_id, status: null, note: `${it.name}: enlazado con el producto de Drop "${p.name}"`, by_user: null, at: new Date().toISOString() });
+    linked++;
+  }
+  return linked;
 }
 
 // ─── Archivos ───

@@ -9,10 +9,11 @@ import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { fmtInt, fmtShort, todayHN } from "@/lib/format";
 import {
-  addDays, dayLabel, INVENTORY_RULES, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL, reorderPlan, returnRate,
+  addDays, dayLabel, INVENTORY_RULES, shortDate, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL, reorderPlan, returnRate,
   urgency, type InventoryRow, type ReorderLevel, type ReorderPlan,
 } from "@/lib/inventory";
 import { inventoryStatus, inventorySupply } from "@/lib/inventory-data";
+import { can } from "@/lib/permissions";
 import { getScope } from "@/lib/scope";
 import { cancelRestockOrder, placeRestockOrder, saveLeadTime, sendDigestNow } from "./actions";
 import "./inventory.css";
@@ -243,15 +244,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         Venta por día: la más alta entre los últimos 7 y 14 días (salidas por pedido menos devoluciones), para no quedarse corto
         cuando la venta sube. Punto de pedido = venta por día × días que tarda en llegar + un colchón por lo que varía la venta.
         Si no fijas cuánto tarda, se usa lo medido con los pedidos que marcas como pedidos y llegan; si no hay, {REORDER.defaultLead} días.
-        Un pedido deja de estar en camino cuando Drop registra la entrada de mercadería.
+        Un pedido deja de estar en camino cuando Drop registra la entrada de mercadería. Las importaciones cuentan como en camino
+        desde que se pagan hasta que Drop registra su entrada.
       </p>
 
-      {sel && <ProductDrawer r={sel} p={planOf(sel)} today={today} closeHref={closeHref} />}
+      {sel && <ProductDrawer r={sel} p={planOf(sel)} today={today} closeHref={closeHref} canImports={can(user, "imports")} />}
     </div>
   );
 }
 
-function ProductDrawer({ r, p, today, closeHref }: { r: InventoryRow; p: ReorderPlan; today: string; closeHref: string }) {
+function ProductDrawer({ r, p, today, closeHref, canImports }: { r: InventoryRow; p: ReorderPlan; today: string; closeHref: string; canImports: boolean }) {
   const rr = returnRate(r);
   const arrived = p.orders.filter((o) => o.status === "arrived").slice(-3).reverse();
   return (
@@ -314,11 +316,15 @@ function ProductDrawer({ r, p, today, closeHref }: { r: InventoryRow; p: Reorder
                 <li key={o.id}>
                   <div className="grow">
                     <span className="strong">{u(o.units)}</span>
-                    <span className="muted"> · pedido el {fmtShort(o.ordered_at)}{o.eta && <> · llegada {dayLabel(o.eta, today)}</>}</span>
+                    <span className="muted"> · pedido el {o.import ? shortDate(o.ordered_at) : fmtShort(o.ordered_at)}{o.eta && <> · llegada {dayLabel(o.eta, today)}</>}</span>
                     {o.status === "late" && <> <span className="pill" data-tone="warning">Atrasado</span></>}
-                    {o.note && <div className="sub">{o.note}</div>}
+                    {o.note && <div className="sub">{o.import ? "Importación " : ""}{o.note}</div>}
                   </div>
-                  <CancelRestockForm action={cancelRestockOrder} orderId={o.id} />
+                  {o.import ? (
+                    canImports ? <Link className="btn btn-sm" href={`/imports/${o.import.id}`}>Ver importación</Link> : <span className="tag">{o.import.code}</span>
+                  ) : (
+                    <CancelRestockForm action={cancelRestockOrder} orderId={o.id} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -333,7 +339,7 @@ function ProductDrawer({ r, p, today, closeHref }: { r: InventoryRow; p: Reorder
                 <li key={o.id}>
                   <div className="grow">
                     <span className="strong">{u(o.arrived_units ?? o.units)}</span>
-                    <span className="muted"> · el {fmtShort(o.arrived_at)} · tardó {days(Math.max(0, Math.round((Date.parse(o.arrived_at!) - Date.parse(o.ordered_at)) / 86_400_000)))}</span>
+                    <span className="muted"> · el {o.import && o.arrived_at === o.import.declared_at ? shortDate(o.arrived_at!) : fmtShort(o.arrived_at)} · tardó {days(Math.max(0, Math.round((Date.parse(o.arrived_at!) - Date.parse(o.ordered_at)) / 86_400_000)))}{o.import && ` · ${o.import.code}`}</span>
                   </div>
                 </li>
               ))}
