@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { IMPORT_FILE_TYPES, MAX_IMPORT_FILE_BYTES } from "@/lib/imports";
 import { MAX_MEDIA_BYTES, MEDIA_TYPES } from "@/lib/media-rules";
 
 // Solo para desarrollo local con datos de prueba (MIRANOVA_FIXTURES=1): imita los enlaces
@@ -21,8 +22,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const form = await req.formData();
   const file = [...form.values()].find((v): v is File => typeof v !== "string");
   if (!file) return Response.json({ error: "Falta el archivo" }, { status: 400 });
-  if (!MEDIA_TYPES[file.type]) return Response.json({ error: "mime type not supported" }, { status: 415 });
-  if (file.size > MAX_MEDIA_BYTES) return Response.json({ error: "Payload too large" }, { status: 413 });
+  // fotos y videos de productos, o documentos de importaciones (cada bucket con sus tipos)
+  const imports = rest[0] === "import-files";
+  if (!(imports ? IMPORT_FILE_TYPES : MEDIA_TYPES)[file.type]) return Response.json({ error: "mime type not supported" }, { status: 415 });
+  if (file.size > (imports ? MAX_IMPORT_FILE_BYTES : MAX_MEDIA_BYTES)) return Response.json({ error: "Payload too large" }, { status: 413 });
   files().set(key, { type: file.type, data: new Uint8Array(await file.arrayBuffer()), created_at: new Date().toISOString() });
   return Response.json({ Key: key });
 }
