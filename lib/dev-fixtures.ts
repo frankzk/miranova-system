@@ -314,6 +314,10 @@ function storageBucket(bucket: string) {
       const f = DEV_FILES.get(key(path));
       return f ? { data: { name: path, size: f.data.byteLength, contentType: f.type, createdAt: f.created_at }, error: null } : { data: null, error: { message: "Object not found" } };
     },
+    download: async (path: string) => {
+      const f = DEV_FILES.get(key(path));
+      return f ? { data: new Blob([f.data as BlobPart], { type: f.type }), error: null } : { data: null, error: { message: "Object not found" } };
+    },
     remove: async (paths: string[]) => {
       for (const p of paths) DEV_FILES.delete(key(p));
       return { data: paths.map((name) => ({ name })), error: null };

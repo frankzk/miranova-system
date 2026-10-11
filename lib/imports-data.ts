@@ -35,6 +35,15 @@ export type ImportRow = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** seguimiento automático con 17TRACK (migración 0038) */
+  track_registered?: string | null;
+  track_status?: string | null;
+  track_sub_status?: string | null;
+  track_event?: string | null;
+  track_event_at?: string | null;
+  track_eta?: string | null;
+  track_checked_at?: string | null;
+  track_error?: string | null;
 };
 
 export type ImportItem = {

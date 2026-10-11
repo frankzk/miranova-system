@@ -11,6 +11,7 @@ import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { ARRIVED, isActive, isLate, needsReport, staleDays, statusInfo, trackingUrl } from "@/lib/imports";
 import { listImports, listSuppliers } from "@/lib/imports-data";
+import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
 import { can } from "@/lib/permissions";
 import { createImport } from "./actions";
 import "./imports.css";
@@ -148,6 +149,9 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                       </td>
                       <td className="hide-md nowrap">
                         {r.tracking_number ? (link ? <a href={link} target="_blank" rel="noreferrer">{[r.carrier, r.tracking_number].filter(Boolean).join(" ")}</a> : r.tracking_number) : <span className="subtle">—</span>}
+                        {r.track_status && r.track_registered === r.tracking_number && (
+                          <div className={`sub${trackAlert(r.track_status) ? " im-alert-text" : ""}`}>{trackStatusInfo(r.track_status).label}</div>
+                        )}
                       </td>
                       <td className="nowrap">
                         {r.reported_at ? <span className="pill" data-tone="success">Reportada</span> : alert ? <span className="pill" data-tone="danger">Avisar</span> : <span className="subtle">—</span>}

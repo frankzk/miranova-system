@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { IconDownload, IconExternal, IconPlus } from "@/components/icons";
 import {
   AddCostForm, AddItemForm, AddPaymentForm, DeleteImportForm, DocUpload, EditItemForm, ImportHeaderForm, LinkItemForm, ReceptionForm, RemoveButton,
-  ReportBox, StatusForm,
+  ReportBox, StatusForm, TrackRefreshForm,
 } from "@/components/import-forms";
+import { InvoiceReader } from "@/components/invoice-reader";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
@@ -16,10 +17,12 @@ import {
   receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
 } from "@/lib/imports";
 import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
+import { integrationKey } from "@/lib/integrations";
+import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
 import { can } from "@/lib/permissions";
 import {
   addImportCost, addImportItem, addImportPayment, deleteImport, linkImportItem, removeImportCost, removeImportDocument, removeImportItem,
-  removeImportPayment, saveReception, setImportStatus, setReported, updateImport, updateImportItem,
+  addInvoiceLines, refreshImportTracking, removeImportPayment, saveReception, setImportStatus, setReported, updateImport, updateImportItem,
 } from "../actions";
 import "../imports.css";
 
@@ -38,7 +41,16 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const { imp, items, costs, docs, payments, events, people } = detail;
   const money = can(user, "money");
   const today = todayIn();
-  const [prices, choices, drop, suppliers] = await Promise.all([salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers()]);
+  const [prices, choices, drop, suppliers, trackKey, aiKey] = await Promise.all([
+    salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
+    integrationKey("track17").then(Boolean), integrationKey("anthropic").then(Boolean),
+  ]);
+  /** documentos que la IA puede leer: PDF o foto de hasta 20 MB (no fotos de recepción) */
+  const readable = (d: (typeof docs)[number]) =>
+    aiKey && d.kind !== "photo" && ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(d.content_type) && (d.size_bytes ?? 0) <= 20 * 1024 * 1024;
+  // seguimiento automático: solo si lo guardado es de la guía actual
+  const tracked = imp.tracking_number && imp.track_registered === imp.tracking_number ? imp : null;
+  const trackable = Boolean(imp.tracking_number) && ["ready", "transit", "customs", "released", "to_warehouse"].includes(imp.status);
   const stale = staleDays(imp, events[0]?.at ?? null, today);
   const supplier = imp.supplier_id ? suppliers.find((x) => x.id === imp.supplier_id) : undefined;
 
@@ -147,6 +159,30 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
               <p className="im-ok">
                 Drop ya registró la entrada de todos los productos ({fmtInt(inDrop.units)} u.). En la próxima sincronización pasa sola a &ldquo;Ingresado en Drop&rdquo;.
               </p>
+            )}
+            {(trackable || tracked?.track_status) && (
+              <div className="im-track" data-alert={trackAlert(tracked?.track_status ?? null) || undefined}>
+                <div className="im-track-head">
+                  <b>Seguimiento automático</b>
+                  {tracked?.track_status && <span className="pill" data-tone={trackStatusInfo(tracked.track_status).tone}>{trackStatusInfo(tracked.track_status).label}</span>}
+                </div>
+                {tracked?.track_event && (
+                  <p className="im-track-event">
+                    {tracked.track_event}
+                    {tracked.track_event_at && <span className="sub"> · {when(tracked.track_event_at)}</span>}
+                  </p>
+                )}
+                {tracked?.track_eta && <p className="im-small">La paquetera estima que llega el <b>{day(tracked.track_eta)}</b>{imp.eta && imp.eta !== tracked.track_eta ? ` (tú pusiste ${day(imp.eta)})` : ""}.</p>}
+                {imp.track_error && <p className="im-alert-text im-small">{imp.track_error}</p>}
+                {!trackKey ? (
+                  <p className="muted im-small">Para que la guía se actualice sola, el dueño agrega la clave de 17TRACK en Ajustes → Integraciones.</p>
+                ) : (
+                  <div className="im-track-foot">
+                    <span className="sub">{imp.track_checked_at ? `Revisado ${when(imp.track_checked_at)} · se revisa cada 3 horas` : "Se revisa en la próxima sincronización (cada 3 horas)."}</span>
+                    {trackable && <TrackRefreshForm action={refreshImportTracking} importId={imp.id} />}
+                  </div>
+                )}
+              </div>
             )}
             <StatusForm action={setImportStatus} importId={imp.id} current={imp.status} />
           </div>
@@ -398,6 +434,11 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                   <li key={d.id}>
                     <span className="tag">{docKindLabel(d.kind)}</span>
                     <span className="grow clip"><a href={`/api/imports/doc/${d.id}`} target="_blank" rel="noreferrer">{d.filename ?? "archivo"}</a><span className="sub"> · {kb(d.size_bytes)}</span></span>
+                    {readable(d) && (
+                      <SideSheet trigger="Leer con IA" triggerClass="btn btn-ghost btn-sm im-ai-btn" title="Leer con IA" sub={d.filename ?? "Documento"}>
+                        <InvoiceReader docId={d.id} docName={d.filename ?? "el documento"} importId={imp.id} money={money} action={addInvoiceLines} />
+                      </SideSheet>
+                    )}
                     <a className="btn btn-ghost btn-sm" href={`/api/imports/doc/${d.id}?dl=1`} aria-label={`Descargar ${d.filename ?? "archivo"}`}><IconDownload /></a>
                     <RemoveButton action={removeImportDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />
                   </li>

@@ -551,6 +551,18 @@ export function ReceptionForm({ action, importId, lines }: { action: Action; imp
   );
 }
 
+/** "Actualizar ahora" del seguimiento automático (17TRACK). */
+export function TrackRefreshForm({ action, importId }: { action: Action; importId: string }) {
+  const [state, run] = useActionState(action, null);
+  return (
+    <StickyForm state={state} action={run} className="im-track-refresh">
+      <input type="hidden" name="id" value={importId} />
+      <SubmitButton className="btn btn-sm" pending="Consultando…">Actualizar ahora</SubmitButton>
+      <Msg state={state} />
+    </StickyForm>
+  );
+}
+
 export function RemoveButton({ action, name, value, label = "Quitar", confirmText }: { action: Action; name: string; value: string; label?: string; confirmText?: string }) {
   const [state, run] = useActionState(action, null);
   return (
