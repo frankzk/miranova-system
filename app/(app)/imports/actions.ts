@@ -9,7 +9,11 @@ import {
   importFileProblem, importFileType, IMPORT_FILE_TYPES, isAllocation, isCostKind, isDocKind, isImportFilePath, isImportStatus,
   isActive, MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, receptionSummary, statusInfo, TRANSPORTS,
 } from "@/lib/imports";
-import { removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
+import { IMPORT_BUCKET, productChoices, removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
+import { refreshTracking } from "@/lib/imports-tracking";
+import { integrationKey } from "@/lib/integrations";
+import { chargeAllocation, withMatches, wholeQty, type Proposal } from "@/lib/invoice";
+import { readInvoice } from "@/lib/invoice-ai";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/supabase";
 
@@ -498,4 +502,117 @@ export async function deleteImport(_prev: ImportFormState, form: FormData): Prom
   await removeFiles(paths).catch(() => {});
   revalidatePath("/imports");
   redirect("/imports");
+}
+
+/** "Actualizar ahora": pregunta a 17TRACK por la guía de esta importación. */
+export async function refreshImportTracking(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok) return auth;
+  const imp = await importOf(field(form, "id"));
+  if (!imp) return fail("Esa importación ya no existe.");
+  const r = await refreshTracking({ ids: [imp.id], force: true });
+  if (!r.ok) return fail(r.error);
+  if (!r.checked) return fail("Esta importación no tiene guía o todavía no está en camino.");
+  return done(imp.id, r.updated ? "Seguimiento actualizado: hay novedades." : "Seguimiento actualizado: sin novedades nuevas.");
+}
+
+// ─── Leer una factura con IA ───
+
+const AI_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+const AI_MAX_BYTES = 20 * 1024 * 1024;
+
+/** Lee un documento (factura, proforma o packing list) con IA y devuelve la propuesta: no guarda nada. */
+export async function readInvoiceDocument(docId: string): Promise<{ ok: true; proposal: Proposal; model: string; existing: number; country: string } | { ok: false; msg: string }> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok) return auth;
+  if (!UUID.test(String(docId))) return { ok: false, msg: "Ese documento ya no existe." };
+  const { data } = await db().from("import_documents").select("import_id, kind, storage_path, content_type, size_bytes").eq("id", docId).maybeSingle();
+  if (!data) return { ok: false, msg: "Ese documento ya no existe." };
+  const doc = data as { import_id: string; kind: string; storage_path: string; content_type: string; size_bytes: number | null };
+  if (MONEY_DOCS.includes(doc.kind as never) && !money(auth.user)) return { ok: false, msg: "Ese documento requiere el permiso de Dinero." };
+  if (!AI_TYPES.includes(doc.content_type)) return { ok: false, msg: "La IA lee PDF y fotos (JPG, PNG o WEBP)." };
+  if ((doc.size_bytes ?? 0) > AI_MAX_BYTES) return { ok: false, msg: "El archivo pesa más de 20 MB: la IA no lo puede leer." };
+  const key = await integrationKey("anthropic");
+  if (!key) return { ok: false, msg: "Falta la clave de Anthropic: el dueño la agrega en Ajustes → Integraciones." };
+  const { data: blob, error } = await db().storage.from(IMPORT_BUCKET).download(doc.storage_path);
+  if (error || !blob) return { ok: false, msg: "No se pudo abrir el archivo. Inténtalo de nuevo." };
+  const read = await readInvoice(new Uint8Array(await blob.arrayBuffer()), doc.content_type, key);
+  if (!read.ok) return read;
+  const [{ data: imp }, { data: its }] = await Promise.all([
+    db().from("imports").select("dest_country").eq("id", doc.import_id).maybeSingle(),
+    db().from("import_items").select("id").eq("import_id", doc.import_id),
+  ]);
+  const country = (imp as { dest_country: string } | null)?.dest_country ?? "";
+  const proposal = withMatches(read.data, country ? await productChoices(country) : []);
+  // sin permiso de Dinero, la propuesta va sin precios ni cargos
+  if (!money(auth.user)) {
+    proposal.lines = proposal.lines.map((l) => ({ ...l, unit_price: null, line_total: null }));
+    proposal.charges = [];
+    proposal.total = null;
+  }
+  return { ok: true, proposal, model: read.model, existing: (its ?? []).length, country };
+}
+
+type InvoicePayload = {
+  lines: { name: string; sku: string | null; qty: number; unit_cost: number | null; account_id: string | null; external_id: string | null }[];
+  charges: { label: string; kind: "shipping" | "import" | "other"; amount: number }[];
+  source: string;
+};
+
+/** Agrega las líneas y cargos elegidos de la factura leída (campo payload, JSON). */
+export async function addInvoiceLines(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok) return auth;
+  const imp = await importOf(field(form, "id"));
+  if (!imp) return fail("Esa importación ya no existe.");
+  let p: InvoicePayload;
+  try {
+    p = JSON.parse(field(form, "payload")) as InvoicePayload;
+  } catch {
+    return fail("No se pudo leer la propuesta. Vuelve a leer la factura.");
+  }
+  const canMoney = money(auth.user);
+  const lines = (Array.isArray(p?.lines) ? p.lines : []).slice(0, 200);
+  const charges = canMoney ? (Array.isArray(p?.charges) ? p.charges : []).slice(0, 20) : [];
+  if (!lines.length && !charges.length) return fail("Elige al menos un producto o un costo.");
+  const { data: impRow } = await db().from("imports").select("dest_country").eq("id", imp.id).maybeSingle();
+  const country = (impRow as { dest_country: string } | null)?.dest_country;
+  const { data: accs } = await db().from("accounts").select("id, country");
+  const okAccounts = new Set(((accs ?? []) as { id: string; country: string }[]).filter((a) => a.country === country).map((a) => a.id));
+  const { data: last } = await db().from("import_items").select("position").eq("import_id", imp.id).order("position", { ascending: false }).limit(1);
+  let position = (((last ?? []) as { position: number }[])[0]?.position ?? -1) + 1;
+  const now = new Date().toISOString();
+  const rows: Record<string, unknown>[] = [];
+  for (const l of lines) {
+    const name = String(l?.name ?? "").trim().slice(0, 200);
+    const qty = wholeQty(Number(l?.qty));
+    if (!name || !(qty > 0) || qty > 1_000_000) return fail(`Revisa la cantidad de "${name || "un producto"}".`);
+    const cost = canMoney && l.unit_cost !== null && l.unit_cost !== undefined ? Number(l.unit_cost) : 0;
+    if (!Number.isFinite(cost) || cost < 0) return fail(`Revisa el precio de "${name}".`);
+    let product: Record<string, unknown> = { name, sku: String(l?.sku ?? "").trim().slice(0, 80) || null };
+    if (l.account_id && l.external_id && okAccounts.has(l.account_id)) {
+      const { data: prod } = await db().from("products").select("name, sku, image_url").eq("account_id", l.account_id).eq("external_id", l.external_id).maybeSingle();
+      if (prod) {
+        const pr = prod as { name: string; sku: string | null; image_url: string | null };
+        product = { account_id: l.account_id, product_external_id: l.external_id, name: pr.name, sku: pr.sku, image_url: pr.image_url };
+      }
+    }
+    rows.push({ import_id: imp.id, ...product, qty, unit_cost: Math.round(cost * 10_000) / 10_000, position: position++, created_at: now });
+  }
+  if (rows.length) {
+    const { error } = await db().from("import_items").insert(rows);
+    if (error) return fail(`No se pudieron agregar los productos: ${error.message}`);
+  }
+  let added = 0;
+  for (const c of charges) {
+    const amount = Math.round(Number(c?.amount) * 100) / 100;
+    const kind = isCostKind(c?.kind) ? c.kind : "other";
+    const label = String(c?.label ?? "").trim().slice(0, 120);
+    if (!label || !Number.isFinite(amount) || amount <= 0) continue;
+    const { error } = await db().from("import_costs").insert({ import_id: imp.id, kind, label, amount, allocation: chargeAllocation(kind), item_id: null, created_at: now });
+    if (!error) added++;
+  }
+  const what = [rows.length && `${rows.length} ${rows.length === 1 ? "producto" : "productos"}`, added && `${added} ${added === 1 ? "costo" : "costos"}`].filter(Boolean).join(" y ");
+  await logEvent(imp.id, auth.user.id, null, `Factura leída con IA (${String(p?.source ?? "documento").slice(0, 120)}): ${what}`);
+  return done(imp.id, `Agregados ${what}.`);
 }

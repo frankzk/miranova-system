@@ -4,6 +4,7 @@ import { connectorFor, PlatformError, SessionExpired, type Connector, type Sessi
 import { SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { todayIn } from "./format";
 import { advanceImports, linkNewProducts, productsToWatch } from "./imports-data";
+import { refreshTracking } from "./imports-tracking";
 import { extractProducts } from "./products";
 import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
@@ -352,6 +353,8 @@ export async function syncAll(): Promise<Record<string, SyncResult>> {
   for (const a of data) {
     out[a.name] = await syncAccount(a.id, deadline);
   }
+  // guías de las importaciones con 17TRACK (cada una, cada pocas horas); sin clave no hace nada
+  if (Date.now() < deadline) await refreshTracking().catch((e) => console.error("importaciones: seguimiento", e));
   return out;
 }
 
