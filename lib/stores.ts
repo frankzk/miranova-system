@@ -167,6 +167,9 @@ export const STORE_SORTS = {
 } as const;
 export type StoreSort = keyof typeof STORE_SORTS;
 
+/** Nombre del orden con el período elegido ("Más pedidos (30 días)"). */
+export const sortLabel = (k: StoreSort, period = "7 días") => STORE_SORTS[k].replace("7 días", period);
+
 export function sortStores(rows: StoreRow[], sort: StoreSort): StoreRow[] {
   const nz = (v: number | null | undefined, empty: number) => (v === null || v === undefined ? empty : v);
   const key: Record<StoreSort, (s: StoreRow) => number> = {
@@ -250,10 +253,87 @@ export function parseStoreFilters(p: Params): StoreFilters {
   };
 }
 
-/** Filas del listado con los filtros aplicados y en el orden elegido. */
-export function applyStoreFilters(rows: StoreRow[], f: StoreFilters, hasGroup: (s: StoreRow) => boolean): StoreRow[] {
+/**
+ * Filas del listado con los filtros aplicados y en el orden elegido. El estado se mira en la fila
+ * de salud; `view` da lo que se muestra y se ordena (las cifras del período, si hay uno elegido).
+ */
+export function applyStoreFilters(
+  rows: StoreRow[], f: StoreFilters, hasGroup: (s: StoreRow) => boolean, view: (s: StoreRow) => StoreRow = (s) => s,
+): StoreRow[] {
   return sortStores(
-    filterStores(rows, { keys: f.t, q: f.q }).filter((s) => (!f.g || (f.g === "con") === hasGroup(s)) && (!f.h || classify(s) === f.h)),
+    filterStores(rows, { keys: f.t, q: f.q }).filter((s) => (!f.g || (f.g === "con") === hasGroup(s)) && (!f.h || classify(s) === f.h)).map(view),
     f.sort,
   );
+}
+
+// ─── Período elegido ───
+// Por defecto la tabla muestra 7 días contra los 7 anteriores (lo de store_health). Con otro período
+// (?r=hoy|ayer|30|90, o ?from=&to=) las cifras de la tabla salen de `store_period`; el estado, los
+// avisos y "Contactar hoy" siguen mirando la semana actual.
+
+/** Cifras de una tienda en el período elegido (función SQL `store_period`). */
+export type StorePeriod = {
+  account_id: string;
+  store_id: string;
+  name: string;
+  account_name: string;
+  currency: string;
+  orders: number;
+  /** pedidos del período anterior del mismo largo */
+  prev: number;
+  /** días con al menos un pedido dentro del período */
+  active: number;
+  ticket: number | null;
+  vendor_per_order: number | null;
+  units_per_order: number | null;
+  skus: number;
+  top_product: string | null;
+  top_share: number | null;
+  /** última venta de la tienda, en cualquier fecha */
+  last_at: string | null;
+};
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Suma las tiendas que vendieron en el período pero no salen en Salud (sin pedidos en 60 días, por
+ * ejemplo con un rango de hace meses). Entran sin ventas recientes, así que su estado es "Inactiva".
+ */
+export function withPeriodStores(all: StoreRow[], period: StorePeriod[], now = Date.now()): StoreRow[] {
+  const known = new Set(all.map(storeKey));
+  const extra = period
+    .filter((p) => !known.has(storeKey(p)))
+    .map((p): StoreRow => ({
+      account_id: p.account_id, store_id: p.store_id, account_name: p.account_name, currency: p.currency, name: p.name,
+      today: 0, d7: 0, prev7: 0, active7: 0, active_prev7: 0,
+      last_at: p.last_at,
+      days_since: p.last_at ? Math.max(0, Math.floor((now - Date.parse(p.last_at)) / DAY_MS)) : null,
+      n30: 0, ticket: null, vendor_per_order: null, units_per_order: null, delivered30: 0, failed30: 0, sales30: null,
+      skus30: 0, top_product: null, top_share: null, daily: Array<number>(14).fill(0),
+    }));
+  return extra.length ? [...all, ...extra] : all;
+}
+
+/**
+ * Lo que muestra (y ordena) la tabla con un período elegido: los pedidos, la comparación, los días
+ * activos y los promedios del período van en los mismos campos (`d7`, `prev7`, `active7`, `skus30`…).
+ * El estado y los avisos se calculan con la fila original, nunca con esta.
+ */
+export function periodView(period: StorePeriod[]): (s: StoreRow) => StoreRow {
+  const by = new Map(period.map((p) => [storeKey(p), p]));
+  return (s) => {
+    const p = by.get(storeKey(s));
+    return {
+      ...s,
+      d7: p?.orders ?? 0,
+      prev7: p?.prev ?? 0,
+      active7: p?.active ?? 0,
+      ticket: p?.ticket ?? null,
+      vendor_per_order: p?.vendor_per_order ?? null,
+      units_per_order: p?.units_per_order ?? null,
+      skus30: p?.skus ?? 0,
+      top_product: p?.top_product ?? null,
+      top_share: p?.top_share ?? null,
+    };
+  };
 }

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyStoreFilters, classify, filterStores, matchesStore, opportunities, parseStoreFilters, sortStores, storeKey, toContact, typicalTickets, type StoreRow } from "./stores.ts";
+import {
+  applyStoreFilters, classify, filterStores, matchesStore, opportunities, parseStoreFilters, periodView, sortLabel, sortStores, storeKey, toContact,
+  typicalTickets, withPeriodStores, type StorePeriod, type StoreRow,
+} from "./stores.ts";
+import { periodParams, periodUnit, prevPhrase, storePeriodChoice } from "./store-period.ts";
 
 const row = (p: Partial<StoreRow>): StoreRow => ({
   account_id: "a", store_id: "s", account_name: "Drop Honduras", currency: "HNL", name: "Tienda", today: 0, d7: 0, prev7: 0,
@@ -105,4 +109,62 @@ test("filtros de la URL de Salud de tiendas: los mismos para la página y el Exc
   assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ q: "velora" }), grupo), [c, a]);
   assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ g: "sin" }), grupo), [b]);
   assert.deepEqual(applyStoreFilters([a, b, c], parseStoreFilters({ t: "hn:2" }), grupo), [b]);
+});
+
+const per = (p: Partial<StorePeriod>): StorePeriod => ({
+  account_id: "a", store_id: "s", name: "Tienda", account_name: "Drop Honduras", currency: "HNL", orders: 0, prev: 0, active: 0,
+  ticket: null, vendor_per_order: null, units_per_order: null, skus: 0, top_product: null, top_share: null, last_at: null, ...p,
+});
+
+test("período elegido: la tabla muestra sus cifras y el estado sigue siendo el de la semana", () => {
+  // vendía seguido y se frenó esta semana (alerta), pero en 30 días hizo 90 pedidos (+50% vs. los 30 anteriores)
+  const health = [row({ store_id: "x", name: "Velora", d7: 2, prev7: 30, active7: 1, active_prev7: 7, days_since: 3, ticket: 40, skus30: 3 })];
+  const period = [per({ store_id: "x", orders: 90, prev: 60, active: 24, ticket: 35, units_per_order: 1.4, skus: 5, top_product: "Gotas", top_share: 0.6 })];
+  const all = withPeriodStores(health, period);
+  assert.equal(all, health); // ninguna tienda nueva
+  const shown = periodView(period)(all[0]);
+  assert.equal(shown.d7, 90);
+  assert.equal(shown.prev7, 60);
+  assert.equal(shown.active7, 24);
+  assert.equal(shown.ticket, 35);
+  assert.equal(shown.skus30, 5);
+  assert.equal(shown.days_since, 3); // la última venta no cambia con el período
+  assert.equal(classify(all[0]), "alert");
+  // los filtros miran el estado de la fila de salud, y se ordena por las cifras del período
+  const f = parseStoreFilters({ h: "alert" });
+  assert.deepEqual(applyStoreFilters(all, f, () => false, periodView(period)).map((s) => s.d7), [90]);
+  // una tienda sin pedidos en el período sale con ceros
+  const quiet = periodView([])(row({ d7: 5, prev7: 4, active7: 3, ticket: 20 }));
+  assert.deepEqual([quiet.d7, quiet.prev7, quiet.active7, quiet.ticket], [0, 0, 0, null]);
+});
+
+test("período elegido: tiendas que vendieron en el período pero no en 60 días", () => {
+  const now = Date.parse("2026-10-12T12:00:00Z");
+  const all = withPeriodStores([row({ store_id: "x" })], [per({ store_id: "x" }), per({ store_id: "old", name: "Antigua", orders: 12, last_at: "2026-07-02T12:00:00Z" })], now);
+  assert.equal(all.length, 2);
+  const old = all[1];
+  assert.equal(old.name, "Antigua");
+  assert.equal(old.days_since, 102);
+  assert.equal(old.daily.length, 14);
+  assert.equal(classify(old), "inactive");
+});
+
+test("período elegido desde la URL", () => {
+  const tz = "America/Tegucigalpa";
+  const def = storePeriodChoice({}, tz);
+  assert.equal(def.custom, false);
+  assert.equal(def.days, 7);
+  assert.deepEqual(periodParams(def), { r: undefined, from: undefined, to: undefined });
+  assert.equal(periodUnit(def), "7 d");
+  const m = storePeriodChoice({ r: "30" }, tz);
+  assert.deepEqual([m.custom, m.days, periodUnit(m)], [true, 30, "30 d"]);
+  assert.deepEqual(periodParams(m), { r: "30", from: undefined, to: undefined });
+  const c = storePeriodChoice({ from: "2026-09-01", to: "2026-09-15" }, tz);
+  assert.deepEqual([c.custom, c.days, c.range.id], [true, 15, "custom"]);
+  assert.deepEqual(periodParams(c), { r: undefined, from: "2026-09-01", to: "2026-09-15" });
+  assert.equal(storePeriodChoice({ r: "hoy" }, tz).days, 1);
+  assert.equal(prevPhrase(1), "vs. el día anterior");
+  assert.equal(prevPhrase(30), "vs. los 30 días anteriores");
+  assert.equal(sortLabel("d7_desc", "30 días"), "Más pedidos (30 días)");
+  assert.equal(sortLabel("ticket_desc", "30 días"), "Ticket más alto");
 });

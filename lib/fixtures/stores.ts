@@ -50,4 +50,35 @@ function topProduct(rows: Row[]) {
   return { skus30: n.size, top_product: top, top_share: rows.length ? +(c / rows.length).toFixed(3) : null };
 }
 
-export const fixtures: FixtureModule = { rpc: { store_health: storeHealth } };
+/** Como store_period: cifras del período y del anterior del mismo largo, sin cancelados. */
+function storePeriod(args: Row, { ORDERS, ACCOUNTS, groupOf, localDay }: FixtureCtx) {
+  const [from, to, pFrom, pTo] = [args.p_from, args.p_to, args.p_prev_from, args.p_prev_to].map((x) => Date.parse(x));
+  const groups = new Map<string, Row[]>();
+  const valid = (o: Row) => o.dropshipper && groupOf(o.status_code) !== "cancelled" && (!args.p_account || o.account_id === args.p_account);
+  for (const o of ORDERS) {
+    const t = Date.parse(o.ordered_at);
+    if (!valid(o) || !((t >= from && t <= to) || (t >= pFrom && t <= pTo))) continue;
+    const k = `${o.account_id}|${o.dropshipper}`;
+    groups.set(k, [...(groups.get(k) ?? []), o]);
+  }
+  return [...groups.values()].map((rows) => {
+    const acc = ACCOUNTS.find((a) => a.id === rows[0].account_id)!;
+    const cur = rows.filter((o) => Date.parse(o.ordered_at) >= from);
+    const avg = (xs: number[]) => (xs.length ? +(xs.reduce((t, x) => t + x, 0) / xs.length).toFixed(2) : null);
+    const top = topProduct(cur);
+    const last = ORDERS.filter((o) => valid(o) && o.account_id === acc.id && o.dropshipper === rows[0].dropshipper).map((o) => o.ordered_at).sort().pop() ?? null;
+    return {
+      account_id: acc.id, store_id: `name:${rows[0].dropshipper}`, name: rows[0].dropshipper, account_name: acc.name, currency: acc.currency,
+      orders: cur.length,
+      prev: rows.length - cur.length,
+      active: new Set(cur.map((o) => localDay(o.ordered_at, acc.timezone))).size,
+      ticket: avg(cur.map((o) => o.total)),
+      vendor_per_order: avg(cur.map((o) => o.vendor_amount)),
+      units_per_order: avg(cur.map((o) => (o.order_items ?? []).reduce((t: number, i: any) => t + i.quantity, 0))),
+      skus: top.skus30, top_product: top.top_product, top_share: top.top_share,
+      last_at: last,
+    };
+  });
+}
+
+export const fixtures: FixtureModule = { rpc: { store_health: storeHealth, store_period: storePeriod } };

@@ -7,7 +7,15 @@ import type { Range } from "@/lib/ranges";
  * Rango de fechas propio, al final del selector de período: "Rango" abre dos fechas (desde y
  * hasta). Con un rango aplicado, el botón muestra las fechas y queda marcado.
  */
-export function RangePicker({ range, today, path }: { range: Range; today: string; path: string }) {
+export function RangePicker({ range, today, path, keep, clearHref }: {
+  range: Range;
+  today: string;
+  path: string;
+  /** otros filtros de la página que el rango no debe perder (pares nombre/valor de la URL) */
+  keep?: [string, string][];
+  /** a dónde lleva "Quitar rango" (por defecto, `path`) */
+  clearHref?: string;
+}) {
   const active = range.id === "custom";
   const from = range.days?.from ?? "";
   const to = range.days?.to ?? "";
@@ -19,6 +27,7 @@ export function RangePicker({ range, today, path }: { range: Range; today: strin
       </summary>
       <div className="range-panel">
         <GetForm action={path}>
+          {keep?.map(([k, v], i) => <input key={`${k}-${i}`} type="hidden" name={k} value={v} />)}
           <div className="range-fields">
             <label className="field">
               <span>Desde</span>
@@ -30,7 +39,7 @@ export function RangePicker({ range, today, path }: { range: Range; today: strin
             </label>
           </div>
           <div className="range-actions">
-            {active && <Link className="btn btn-ghost" href={path}>Quitar rango</Link>}
+            {active && <Link className="btn btn-ghost" href={clearHref ?? path}>Quitar rango</Link>}
             <button className="btn btn-primary" type="submit">Aplicar</button>
           </div>
         </GetForm>
