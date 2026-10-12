@@ -81,18 +81,19 @@ export const costKindLabel = (id: string) => COST_KINDS.find((k) => k.id === id)
 
 export const ALLOCATIONS = [
   { id: "value", label: "Por valor", hint: "Según lo que cuesta cada producto (lo normal para impuestos)" },
-  { id: "units", label: "Por unidades", hint: "Igual por cada unidad" },
-  { id: "weight", label: "Por peso", hint: "Según el peso de cada producto (lo normal para el flete)" },
+  { id: "units", label: "Por unidades", hint: "Igual por cada unidad (lo normal para el flete)" },
+  { id: "weight", label: "Por peso", hint: "Según el peso de cada producto" },
   { id: "item", label: "A un producto", hint: "Todo el costo a un solo producto" },
 ] as const;
 export type Allocation = (typeof ALLOCATIONS)[number]["id"];
 export const isAllocation = (v: unknown): v is Allocation => ALLOCATIONS.some((a) => a.id === v);
 export const allocationLabel = (id: string) => ALLOCATIONS.find((a) => a.id === id)?.label ?? id;
 
-export const PAYMENT_METHODS = ["Transferencia", "Tarjeta", "PayPal", "Alipay", "Western Union", "Efectivo", "Otro"] as const;
+export const PAYMENT_METHODS = ["Alibaba", "Transferencia", "Tarjeta", "PayPal", "Alipay", "Western Union", "Efectivo", "Otro"] as const;
 
 export const DOC_KINDS = [
-  { id: "invoice", label: "Factura / proforma" },
+  { id: "proforma", label: "Proforma invoice" },
+  { id: "invoice", label: "Factura comercial" },
   { id: "payment", label: "Comprobante de pago" },
   { id: "tracking", label: "Guía (AWB / BL)" },
   { id: "packing", label: "Packing list" },
@@ -104,7 +105,11 @@ export type DocKind = (typeof DOC_KINDS)[number]["id"];
 export const isDocKind = (v: unknown): v is DocKind => DOC_KINDS.some((k) => k.id === v);
 export const docKindLabel = (id: string) => DOC_KINDS.find((k) => k.id === id)?.label ?? id;
 /** Documentos con montos: solo los ve quien tiene permiso de Dinero. */
-export const MONEY_DOCS: DocKind[] = ["invoice", "payment"];
+export const MONEY_DOCS: DocKind[] = ["proforma", "invoice", "payment"];
+
+/** Tipos de evento del historial: los de actividad y montos no cuentan como novedad del envío. */
+export type EventKind = "status" | "tracking" | "activity" | "money";
+export const isNews = (kind: string | null | undefined) => !kind || kind === "status" || kind === "tracking";
 
 /** Archivos que se pueden adjuntar: PDF, fotos y planillas (igual que el bucket import-files). */
 export const IMPORT_FILE_TYPES: Record<string, { ext: string; photo: boolean }> = {

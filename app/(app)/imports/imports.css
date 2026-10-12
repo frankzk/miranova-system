@@ -80,6 +80,10 @@
 .im-timeline li { display: flex; gap: 10px; align-items: flex-start; font-size: var(--t-sm); }
 .im-timeline .dot { margin-top: 6px; }
 .im-timeline .sub { font-size: var(--t-xs); color: var(--ink-3); margin-top: 1px; }
+/* lo que se agrega o quita (productos, costos, pagos, documentos): más liviano que los estados */
+.im-timeline li[data-kind="activity"] b, .im-timeline li[data-kind="money"] b { font-weight: 450; color: var(--ink-2); }
+.im-timeline li[data-kind="activity"] .dot, .im-timeline li[data-kind="money"] .dot { width: 6px; height: 6px; margin-top: 7px; margin-left: 1px; opacity: 0.6; }
+.im-copy { user-select: all; font-variant-numeric: tabular-nums; }
 
 /* fase 2: llegada a Drop y recepción */
 .im-ok { margin: 0 0 14px; padding: 8px 12px; border-radius: var(--r); background: var(--success-bg); color: var(--success); font-size: var(--t-sm); font-weight: 550; }

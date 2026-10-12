@@ -7,7 +7,8 @@ import { authorizeAction, type SessionUser } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
 import {
   importFileProblem, importFileType, IMPORT_FILE_TYPES, isAllocation, isCostKind, isDocKind, isImportFilePath, isImportStatus,
-  isActive, MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, receptionSummary, statusInfo, TRANSPORTS,
+  allocationLabel, docKindLabel, isActive, MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, receptionSummary, statusInfo, TRANSPORTS,
+  type EventKind,
 } from "@/lib/imports";
 import { IMPORT_BUCKET, productChoices, removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
 import { refreshTracking } from "@/lib/imports-tracking";
@@ -24,6 +25,7 @@ const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const fail = (msg: string): ImportFormState => ({ ok: false, msg });
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money = (u: SessionUser) => can(u, "money");
 
 function done(importId: string, msg: string): ImportFormState {
@@ -52,8 +54,9 @@ async function importOf(id: string): Promise<{ id: string; status: string; arriv
   return (data as { id: string; status: string; arrived_at: string | null } | null) ?? null;
 }
 
-async function logEvent(importId: string, userId: string, status: string | null, note: string | null) {
-  await db().from("import_events").insert({ import_id: importId, status, note, by_user: userId, at: new Date().toISOString() });
+/** Historial: `kind` activity/money registra lo que se agrega o quita (no cuenta como novedad del envío; money solo lo ve Dinero). */
+async function logEvent(importId: string, userId: string, status: string | null, note: string | null, kind: EventKind = "status") {
+  await db().from("import_events").insert({ import_id: importId, status, note, by_user: userId, at: new Date().toISOString(), kind });
   await db().from("imports").update({ updated_at: new Date().toISOString() }).eq("id", importId);
 }
 
@@ -84,6 +87,7 @@ async function headerFields(form: FormData): Promise<{ ok: true; row: Record<str
     row: {
       supplier_id: supplier?.id ?? null,
       supplier: supplier?.name ?? null,
+      order_ref: field(form, "order_ref").replace(/\s+/g, " ").slice(0, 60) || null,
       origin: field(form, "origin").slice(0, 80) || null,
       dest_country: dest,
       ordered_at: ordered,
@@ -134,6 +138,7 @@ export async function updateImport(_prev: ImportFormState, form: FormData): Prom
   if (arrived === false) return fail("Revisa la fecha de llegada.");
   const { error } = await db().from("imports").update({ ...h.row, arrived_at: arrived, updated_at: new Date().toISOString() }).eq("id", imp.id);
   if (error) return fail(`No se pudo guardar: ${error.message}`);
+  await logEvent(imp.id, auth.user.id, null, "Datos de la importación editados", "activity");
   return done(imp.id, "Guardado.");
 }
 
@@ -227,7 +232,7 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
   const position = (((last ?? []) as { position: number }[])[0]?.position ?? -1) + 1;
   const { error } = await db().from("import_items").insert({ import_id: imp.id, ...product, ...nums.row, position, created_at: new Date().toISOString() });
   if (error) return fail(`No se pudo agregar: ${error.message}`);
-  await db().from("imports").update({ updated_at: new Date().toISOString() }).eq("id", imp.id);
+  await logEvent(imp.id, auth.user.id, null, `Producto agregado: ${String(product.name)} (${Number(nums.row.qty).toLocaleString("en-US")} u.)`, "activity");
   return done(imp.id, `Agregado: ${String(product.name)}. Puedes agregar otro o cerrar.`);
 }
 
@@ -301,7 +306,7 @@ export async function linkImportItem(_prev: ImportFormState, form: FormData): Pr
     .update({ account_id: accountId, product_external_id: externalId, ...(item.photo_path ? {} : { image_url: p.image_url }) })
     .eq("id", item.id);
   if (error) return fail(`No se pudo enlazar: ${error.message}`);
-  await logEvent(item.import_id, auth.user.id, null, `${item.name}: enlazado con el producto de Drop "${p.name}"`);
+  await logEvent(item.import_id, auth.user.id, null, `${item.name}: enlazado con el producto de Drop "${p.name}"`, "activity");
   return done(item.import_id, `Enlazado con "${p.name}".`);
 }
 
@@ -320,6 +325,7 @@ export async function updateImportItem(_prev: ImportFormState, form: FormData): 
   if (!nums.ok) return fail(nums.msg);
   const { error } = await db().from("import_items").update(nums.row).eq("id", item.id);
   if (error) return fail(`No se pudo guardar: ${error.message}`);
+  await logEvent(item.import_id, auth.user.id, null, `Producto editado: ${item.name} (${Number(nums.row.qty).toLocaleString("en-US")} u.)`, "activity");
   return done(item.import_id, "Guardado.");
 }
 
@@ -331,6 +337,7 @@ export async function removeImportItem(_prev: ImportFormState, form: FormData): 
   const { error } = await db().from("import_items").delete().eq("id", item.id);
   if (error) return fail(`No se pudo quitar: ${error.message}`);
   if (item.photo_path) await removeFiles([item.photo_path]).catch(() => {});
+  await logEvent(item.import_id, auth.user.id, null, `Producto quitado: ${item.name}`, "activity");
   return done(item.import_id, `Quitado: ${item.name}.`);
 }
 
@@ -358,6 +365,7 @@ export async function addImportCost(_prev: ImportFormState, form: FormData): Pro
   }
   const { error } = await db().from("import_costs").insert({ import_id: imp.id, kind, label, amount: value, allocation, item_id: itemId, created_at: new Date().toISOString() });
   if (error) return fail(`No se pudo guardar: ${error.message}`);
+  await logEvent(imp.id, auth.user.id, null, `Costo agregado: ${label} · ${usd(value)} · ${allocationLabel(allocation).toLowerCase()}`, "money");
   return done(imp.id, `Costo agregado: ${label}.`);
 }
 
@@ -367,11 +375,13 @@ export async function removeImportCost(_prev: ImportFormState, form: FormData): 
   if (!money(auth.user)) return fail("Los costos requieren el permiso de Dinero.");
   const id = field(form, "cost_id");
   if (!UUID.test(id)) return fail("Ese costo ya no existe.");
-  const { data } = await db().from("import_costs").select("import_id").eq("id", id).maybeSingle();
+  const { data } = await db().from("import_costs").select("import_id, label, amount").eq("id", id).maybeSingle();
   if (!data) return fail("Ese costo ya no existe.");
+  const cost = data as { import_id: string; label: string; amount: number };
   const { error } = await db().from("import_costs").delete().eq("id", id);
   if (error) return fail(`No se pudo quitar: ${error.message}`);
-  return done((data as { import_id: string }).import_id, "Costo quitado.");
+  await logEvent(cost.import_id, auth.user.id, null, `Costo quitado: ${cost.label} · ${usd(Number(cost.amount))}`, "money");
+  return done(cost.import_id, "Costo quitado.");
 }
 
 export async function addImportPayment(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
@@ -396,7 +406,8 @@ export async function addImportPayment(_prev: ImportFormState, form: FormData): 
     document_id: docId || null, created_by: auth.user.id, created_at: new Date().toISOString(),
   });
   if (error) return fail(`No se pudo guardar: ${error.message}`);
-  return done(imp.id, `Pago de $${value.toLocaleString("en-US", { minimumFractionDigits: 2 })} registrado.`);
+  await logEvent(imp.id, auth.user.id, null, `Pago registrado: ${usd(value)} · ${method}${docId ? " · con comprobante" : ""}`, "money");
+  return done(imp.id, `Pago de ${usd(value)} registrado.`);
 }
 
 export async function removeImportPayment(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
@@ -405,11 +416,13 @@ export async function removeImportPayment(_prev: ImportFormState, form: FormData
   if (!money(auth.user)) return fail("Los pagos requieren el permiso de Dinero.");
   const id = field(form, "payment_id");
   if (!UUID.test(id)) return fail("Ese pago ya no existe.");
-  const { data } = await db().from("import_payments").select("import_id").eq("id", id).maybeSingle();
+  const { data } = await db().from("import_payments").select("import_id, amount, method").eq("id", id).maybeSingle();
   if (!data) return fail("Ese pago ya no existe.");
+  const pay = data as { import_id: string; amount: number; method: string };
   const { error } = await db().from("import_payments").delete().eq("id", id);
   if (error) return fail(`No se pudo quitar: ${error.message}`);
-  return done((data as { import_id: string }).import_id, "Pago quitado.");
+  await logEvent(pay.import_id, auth.user.id, null, `Pago quitado: ${usd(Number(pay.amount))} · ${pay.method}`, "money");
+  return done(pay.import_id, "Pago quitado.");
 }
 
 // ─── Archivos ───
@@ -436,7 +449,8 @@ export async function startImportUpload(importId: string, folder: "docs" | "item
 }
 
 /** Registra un documento ya subido; toma tipo y tamaño de Storage. */
-export async function registerImportDocument(importId: string, path: string, kind: string, filename: string): Promise<Result<{ id: string }>> {
+/** `forPayment`: el comprobante que se adjunta al registrar un pago ya queda en el historial con el pago. */
+export async function registerImportDocument(importId: string, path: string, kind: string, filename: string, forPayment = false): Promise<Result<{ id: string }>> {
   const auth = await authorizeAction("imports");
   if (!auth.ok) return auth;
   if (!isDocKind(kind) || (MONEY_DOCS.includes(kind) && !money(auth.user))) return { ok: false, msg: "No puedes subir ese tipo de documento." };
@@ -458,6 +472,9 @@ export async function registerImportDocument(importId: string, path: string, kin
     .select("id")
     .single();
   if (error || !data) return { ok: false, msg: `No se pudo registrar: ${error?.message ?? "sin respuesta"}` };
+  if (!forPayment) {
+    await logEvent(imp.id, auth.user.id, null, `Documento subido: ${String(filename ?? "").slice(0, 120) || "archivo"} (${docKindLabel(kind)})`, MONEY_DOCS.includes(kind) ? "money" : "activity");
+  }
   revalidatePath(`/imports/${imp.id}`);
   return { ok: true, id: (data as { id: string }).id };
 }
@@ -467,13 +484,14 @@ export async function removeImportDocument(_prev: ImportFormState, form: FormDat
   if (!auth.ok) return auth;
   const id = field(form, "doc_id");
   if (!UUID.test(id)) return fail("Ese documento ya no existe.");
-  const { data } = await db().from("import_documents").select("import_id, kind, storage_path").eq("id", id).maybeSingle();
+  const { data } = await db().from("import_documents").select("import_id, kind, storage_path, filename").eq("id", id).maybeSingle();
   if (!data) return fail("Ese documento ya no existe.");
-  const doc = data as { import_id: string; kind: string; storage_path: string };
+  const doc = data as { import_id: string; kind: string; storage_path: string; filename: string | null };
   if (MONEY_DOCS.includes(doc.kind as never) && !money(auth.user)) return fail("Ese documento requiere el permiso de Dinero.");
   const { error } = await db().from("import_documents").delete().eq("id", id);
   if (error) return fail(`No se pudo borrar: ${error.message}`);
   await removeFiles([doc.storage_path]).catch(() => {});
+  await logEvent(doc.import_id, auth.user.id, null, `Documento borrado: ${doc.filename ?? "archivo"} (${docKindLabel(doc.kind)})`, MONEY_DOCS.includes(doc.kind as never) ? "money" : "activity");
   return done(doc.import_id, "Documento borrado.");
 }
 
@@ -613,6 +631,6 @@ export async function addInvoiceLines(_prev: ImportFormState, form: FormData): P
     if (!error) added++;
   }
   const what = [rows.length && `${rows.length} ${rows.length === 1 ? "producto" : "productos"}`, added && `${added} ${added === 1 ? "costo" : "costos"}`].filter(Boolean).join(" y ");
-  await logEvent(imp.id, auth.user.id, null, `Factura leída con IA (${String(p?.source ?? "documento").slice(0, 120)}): ${what}`);
+  await logEvent(imp.id, auth.user.id, null, `Factura leída con IA (${String(p?.source ?? "documento").slice(0, 120)}): ${what}`, "activity");
   return done(imp.id, `Agregados ${what}.`);
 }

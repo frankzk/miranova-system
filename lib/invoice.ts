@@ -39,8 +39,8 @@ export function unitUsd(l: Pick<InvoiceLine, "unit_price" | "line_total" | "quan
   return Math.round((price / rate) * 10_000) / 10_000;
 }
 
-/** Reparto por defecto de un cargo de la factura (igual que al agregar un costo a mano). */
-export const chargeAllocation = (kind: InvoiceCharge["kind"]) => (kind === "shipping" ? "weight" : "value");
+/** Reparto por defecto de un cargo de la factura (igual que al agregar un costo a mano): el flete, por unidades. */
+export const chargeAllocation = (kind: InvoiceCharge["kind"]) => (kind === "shipping" ? "units" : "value");
 
 /** Cantidad entera (las facturas a veces traen 120.0). */
 export const wholeQty = (q: number) => Math.max(0, Math.round(q));

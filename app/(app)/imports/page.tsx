@@ -136,7 +136,7 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                     <RowLink key={r.id} href={`/imports/${r.id}`}>
                       <td data-slot="id">
                         <Link className="order-no" href={`/imports/${r.id}`}>{r.code}</Link>
-                        <div className="sub clip">{r.supplier ?? "Sin proveedor"}</div>
+                        <div className="sub clip">{r.supplier ?? "Sin proveedor"}{r.order_ref && <> · orden {r.order_ref}</>}</div>
                       </td>
                       <td className="nowrap">{countryByCode(r.dest_country)?.name ?? r.dest_country}</td>
                       <td data-slot="status">
