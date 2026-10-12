@@ -172,6 +172,9 @@
 .int-field { gap: 6px; }
 .int-state { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--t-sm); color: var(--ink-3); }
 .int-state[data-on] { color: var(--success); }
+.int-test { display: grid; gap: 8px; }
+.int-test-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.int-test-row .input { flex: 1 1 220px; min-width: 0; }
 .int-clear { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--ink-2); }
 .int-field .hint { font-size: var(--t-xs); color: var(--ink-3); line-height: 1.5; }
 

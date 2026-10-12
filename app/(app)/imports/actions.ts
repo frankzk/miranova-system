@@ -522,7 +522,7 @@ export async function deleteImport(_prev: ImportFormState, form: FormData): Prom
   redirect("/imports");
 }
 
-/** "Actualizar ahora": pregunta a 17TRACK por la guía de esta importación. */
+/** "Actualizar ahora": pregunta por la guía de esta importación (a DHL directo si es DHL, si no a 17TRACK). */
 export async function refreshImportTracking(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
   const auth = await authorizeAction("imports");
   if (!auth.ok) return auth;

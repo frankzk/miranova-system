@@ -14,11 +14,14 @@ import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
   allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
-  isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
+  isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, TRACKED_STATUSES, trackingUrl, transportLabel, whatsappMessage, type DropState,
+  type ImportStatus,
 } from "@/lib/imports";
 import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
+import { trackingProvider } from "@/lib/imports-tracking";
 import { integrationKey } from "@/lib/integrations";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
+import { isDhl } from "@/lib/tracking-dhl";
 import { can } from "@/lib/permissions";
 import {
   addImportCost, addImportItem, addImportPayment, deleteImport, linkImportItem, removeImportCost, removeImportDocument, removeImportItem,
@@ -43,14 +46,15 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const today = todayIn();
   const [prices, choices, drop, suppliers, trackKey, aiKey] = await Promise.all([
     salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
-    integrationKey("track17").then(Boolean), integrationKey("anthropic").then(Boolean),
+    Promise.all([integrationKey("dhl"), integrationKey("track17")]).then(([d, t]) => trackingProvider(imp.carrier, { dhl: Boolean(d), track17: Boolean(t) })),
+    integrationKey("anthropic").then(Boolean),
   ]);
   /** documentos que la IA puede leer: PDF o foto de hasta 20 MB (no fotos de recepción) */
   const readable = (d: (typeof docs)[number]) =>
     aiKey && d.kind !== "photo" && ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(d.content_type) && (d.size_bytes ?? 0) <= 20 * 1024 * 1024;
   // seguimiento automático: solo si lo guardado es de la guía actual
   const tracked = imp.tracking_number && imp.track_registered === imp.tracking_number ? imp : null;
-  const trackable = Boolean(imp.tracking_number) && ["ready", "transit", "customs", "released", "to_warehouse"].includes(imp.status);
+  const trackable = Boolean(imp.tracking_number) && TRACKED_STATUSES.includes(imp.status as ImportStatus);
   const stale = staleDays(imp, events.find((e) => isNews(e.kind))?.at ?? null, today);
   // costos y pagos del historial: solo con permiso de Dinero
   const history = events.filter((e) => money || e.kind !== "money");
@@ -178,10 +182,15 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                 {tracked?.track_eta && <p className="im-small">La paquetera estima que llega el <b>{day(tracked.track_eta)}</b>{imp.eta && imp.eta !== tracked.track_eta ? ` (tú pusiste ${day(imp.eta)})` : ""}.</p>}
                 {imp.track_error && <p className="im-alert-text im-small">{imp.track_error}</p>}
                 {!trackKey ? (
-                  <p className="muted im-small">Para que la guía se actualice sola, el dueño agrega la clave de 17TRACK en Ajustes → Integraciones.</p>
+                  <p className="muted im-small">
+                    Para que la guía se actualice sola, el dueño agrega en Ajustes → Integraciones la clave de {isDhl(imp.carrier) ? "DHL (gratis)" : "17TRACK"}.
+                  </p>
                 ) : (
                   <div className="im-track-foot">
-                    <span className="sub">{imp.track_checked_at ? `Revisado ${when(imp.track_checked_at)} · se revisa cada 3 horas` : "Se revisa en la próxima sincronización (cada 3 horas)."}</span>
+                    <span className="sub">
+                      {trackKey === "dhl" ? "Con DHL · " : "Con 17TRACK · "}
+                      {imp.track_checked_at ? `revisado ${when(imp.track_checked_at)} · se revisa cada 3 horas` : "se revisa en la próxima sincronización (cada 3 horas)."}
+                    </span>
                     {trackable && <TrackRefreshForm action={refreshImportTracking} importId={imp.id} />}
                   </div>
                 )}

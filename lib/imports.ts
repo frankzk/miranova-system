@@ -25,6 +25,8 @@ export const statusInfo = (id: string) => IMPORT_STATUSES.find((s) => s.id === i
 export const ARRIVED: ImportStatus[] = ["received", "in_drop", "closed"];
 export const isActive = (s: string) => !ARRIVED.includes(s as ImportStatus) && s !== "cancelled";
 /** Ya se pidió y todavía no entra a Drop: sus productos cuentan como "en camino" en Inventario. */
+/** Con guía y todavía sin llegar: se sigue en la paquetera (aunque la importación aún diga "Cotización"). */
+export const TRACKED_STATUSES: ImportStatus[] = ["quote", "paid", "production", "ready", "transit", "customs", "released", "to_warehouse"];
 export const INBOUND: ImportStatus[] = ["paid", "production", "ready", "transit", "customs", "released", "to_warehouse", "received"];
 /** Ya entró a Drop (o se cerró). */
 export const IN_DROP: ImportStatus[] = ["in_drop", "closed"];

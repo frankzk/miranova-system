@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { IntegrationsForm } from "@/components/integrations-form";
+import { DhlTestForm, IntegrationsForm } from "@/components/integrations-form";
 import { SettingsSubnav } from "@/components/settings-subnav";
 import { PageHead } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { integrationStatus } from "@/lib/integrations";
 import { can } from "@/lib/permissions";
-import { saveIntegrationsAction } from "./actions";
+import { saveIntegrationsAction, testDhlAction } from "./actions";
 import "../../imports/imports.css";
 
 export const metadata = { title: "Integraciones" };
@@ -21,12 +21,20 @@ export default async function IntegrationsPage() {
       <section className="panel" aria-labelledby="int-keys">
         <div className="panel-head"><h2 id="int-keys">Claves</h2></div>
         <div className="panel-body">
-          <IntegrationsForm action={saveIntegrationsAction} track17={status.track17} anthropic={status.anthropic} />
+          <IntegrationsForm action={saveIntegrationsAction} dhl={status.dhl} track17={status.track17} anthropic={status.anthropic} />
         </div>
       </section>
+      {status.dhl.source && (
+        <section className="panel" aria-labelledby="int-test">
+          <div className="panel-head"><h2 id="int-test">Probar DHL</h2></div>
+          <div className="panel-body">
+            <DhlTestForm action={testDhlAction} />
+          </div>
+        </section>
+      )}
       <p className="footnote">
-        Con la clave de 17TRACK, las importaciones con guía se actualizan solas cada pocas horas (estado, última novedad y llegada que
-        estima la paquetera). Con la de Anthropic, en Documentos aparece “Leer con IA” en las facturas (PDF o foto) para proponer los
+        Con la clave de DHL, las guías DHL se actualizan solas cada 3 horas directo con DHL (estado, última novedad y llegada que estima
+        DHL); con la de 17TRACK, las de las demás paqueteras. También se puede pedir al instante con &ldquo;Actualizar ahora&rdquo; en cada importación. Con la de Anthropic, en Documentos aparece “Leer con IA” en las facturas (PDF o foto) para proponer los
         productos, cantidades y precios.
       </p>
     </div>
