@@ -172,7 +172,10 @@
 .int-field { gap: 6px; }
 .int-state { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--t-sm); color: var(--ink-3); }
 .int-state[data-on] { color: var(--success); }
+.int-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 640px) { .int-pair { grid-template-columns: minmax(0, 1fr); } }
 .int-test { display: grid; gap: 8px; }
+.int-test-row .select { flex: none; width: auto; }
 .int-test-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .int-test-row .input { flex: 1 1 220px; min-width: 0; }
 .int-clear { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--ink-2); }

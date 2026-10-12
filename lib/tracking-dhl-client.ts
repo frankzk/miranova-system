@@ -1,5 +1,5 @@
 import "server-only";
-import type { TrackInfo } from "./tracking17";
+import type { CarrierResult } from "./carrier-tracking";
 import { dhlNumber, parseDhlResponse } from "./tracking-dhl";
 
 // Llamada a la API oficial de seguimiento de DHL (Shipment Tracking - Unified). La clave va en el
@@ -10,10 +10,8 @@ const BASE = "https://api-eu.dhl.com/track/shipments";
 /** espera entre consultas seguidas (el plan gratuito permite una cada 5 s) */
 export const DHL_GAP_MS = process.env.MIRANOVA_FIXTURES === "1" ? 0 : 5_500;
 
-export type DhlResult = { found: true; info: TrackInfo } | { found: false; message: string };
-
 /** Estado de una guía en DHL. Lanza error si la clave no sirve o se pasó el límite (vale para todas las guías). */
-export async function dhlTrack(number: string, key: string): Promise<DhlResult> {
+export async function dhlTrack(number: string, key: string): Promise<CarrierResult> {
   const n = dhlNumber(number);
   let status: number;
   let json: unknown;

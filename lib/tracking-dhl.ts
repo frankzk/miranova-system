@@ -3,18 +3,14 @@
 // Se lee con cuidado (todo opcional) y se traduce a los mismos estados que 17TRACK, así el resto
 // del panel (historial, avisos, llegada estimada) funciona igual con cualquiera de los dos.
 
+import { arr, cleanNumber, obj, str, ymd, type Obj } from "./track-json.ts";
 import type { TrackEvent, TrackInfo } from "./tracking17.ts";
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 /** La guía es de DHL (DHL, DHL Express, DHL eCommerce…). */
 export const isDhl = (carrier: string | null | undefined) => /\bdhl\b/i.test(carrier ?? "");
 
 /** Quita espacios y guiones: así la escriben a veces en las facturas. */
-export const dhlNumber = (n: string) => n.replace(/[\s-]+/g, "").toUpperCase();
+export const dhlNumber = cleanNumber;
 
 const OUT_FOR_DELIVERY = /out for delivery|with delivery courier|en reparto|con el mensajero|en ruta de entrega/i;
 const PICKUP = /available for pick ?up|ready for pick ?up|awaiting collection|lista para retir|disponible para retir/i;
@@ -54,12 +50,6 @@ function event(v: unknown): (TrackEvent & { code: string | null }) | null {
   return { text, location: location(e.location), at: new Date(ts).toISOString(), code: str(e.statusCode) };
 }
 
-/** "2026-10-15T23:59:00" → "2026-10-15" (la fecha tal como la da DHL, sin moverla de zona). */
-function day(v: unknown): string | null {
-  const s = str(v);
-  const m = s ? /^(\d{4}-\d{2}-\d{2})/.exec(s) : null;
-  return m ? m[1] : null;
-}
 
 /** La respuesta de /track/shipments para una guía. Null si no trae ningún envío. */
 export function parseDhlResponse(json: unknown, number: string): TrackInfo | null {
@@ -80,7 +70,7 @@ export function parseDhlResponse(json: unknown, number: string): TrackInfo | nul
     status: dhlStatus(code, current?.text ?? null),
     subStatus: code,
     latest: strip(current),
-    eta: code === "delivered" ? null : day(s.estimatedTimeOfDelivery) ?? day(frame?.estimatedThrough) ?? day(frame?.estimatedFrom),
+    eta: code === "delivered" ? null : ymd(s.estimatedTimeOfDelivery) ?? ymd(frame?.estimatedThrough) ?? ymd(frame?.estimatedFrom),
     events: events.map(strip).filter((e): e is TrackEvent => Boolean(e)),
   };
 }
