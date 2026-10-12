@@ -468,6 +468,9 @@ a.metric:hover .foot .go { color: var(--accent); transform: translateX(2px); }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .search { flex: 1 1 260px; max-width: 380px; }
 .toolbar .spacer { flex: 1; }
+/* buscador como formulario propio dentro de la barra, con otros controles al lado (p. ej., el período) */
+.toolbar-search { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1 1 420px; min-width: 0; max-width: 720px; }
+.toolbar .period { flex: none; }
 
 /* buscador de tiendas con sugerencias y selección múltiple (Salud de tiendas) */
 .store-search { position: relative; flex: 1 1 320px; max-width: 560px; }
@@ -837,6 +840,8 @@ details.raw pre { margin: 10px 0 0; padding: 12px; max-height: 360px; overflow: 
 .constancy .bars { display: inline-flex; gap: 2px; }
 .constancy .bars i { width: 4px; height: 12px; border-radius: 1px; background: var(--line); }
 .constancy .bars i[data-on] { background: var(--accent); }
+.constancy .meter { display: inline-block; width: 42px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.constancy .meter i { display: block; height: 100%; background: var(--accent); }
 .spark { display: block; width: 84px; height: 24px; }
 .spark rect { fill: #cdcaff; }
 .spark rect[data-today] { fill: var(--accent); }
@@ -993,6 +998,9 @@ html[data-drawer-loading] .drawer:not(.drawer-loading), html[data-drawer-loading
   .store-search-pop li { grid-template-columns: 18px minmax(0, 1fr); row-gap: 1px; }
   .store-search-pop li .m { grid-column: 2; }
   .toolbar { position: relative; }
+  /* el panel del rango se abre a lo ancho de la barra, para que no se salga de la pantalla */
+  .toolbar .range-pick { position: static; }
+  .toolbar .range-panel { left: 0; right: auto; }
   .more-filters { position: static; }
   .more-panel { left: 0; right: 0; width: auto; }
   .kv { grid-template-columns: 110px minmax(0, 1fr); }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addDays, customDays, customLabels, MAX_CUSTOM_DAYS, parseYmd, rangeQuery, resolveRange } from "./ranges.ts";
+import { addDays, customDays, customLabels, MAX_CUSTOM_DAYS, parseYmd, previousWindow, rangeDays, rangeQuery, resolveRange } from "./ranges.ts";
 
 const TODAY = "2026-09-28";
 
@@ -62,4 +62,24 @@ test("resolveRange: sin fechas propias usa los períodos de siempre", () => {
   assert.equal(resolveRange("7", tz, { from: "", to: "" }).id, "7");
   assert.equal(rangeQuery(resolveRange("30", tz)), "");
   assert.equal(rangeQuery(resolveRange("ayer", tz)), "r=ayer");
+});
+
+test("días del rango y período anterior del mismo largo", () => {
+  const tz = "America/Tegucigalpa";
+  assert.equal(rangeDays(resolveRange("hoy", tz)), 1);
+  assert.equal(rangeDays(resolveRange("ayer", tz)), 1);
+  assert.equal(rangeDays(resolveRange("30", tz)), 30);
+  const r = resolveRange(undefined, tz, { from: "2026-09-01", to: "2026-09-15" });
+  assert.equal(rangeDays(r), 15);
+  // del 1 al 15 sep → del 17 al 31 ago, y termina justo antes de que empiece el rango
+  const p = previousWindow(r);
+  assert.equal(p.from.toISOString(), "2026-08-17T06:00:00.000Z");
+  assert.equal(p.to.toISOString(), "2026-09-01T05:59:59.999Z");
+  assert.ok(p.to < r.from);
+  // "ayer" → anteayer completo
+  const y = resolveRange("ayer", tz);
+  assert.equal(previousWindow(y).to.getTime(), y.from.getTime() - 1);
+  // otro valor por defecto en la URL (Salud de tiendas usa 7 días)
+  assert.equal(rangeQuery(resolveRange("7", tz), "7"), "");
+  assert.equal(rangeQuery(resolveRange("30", tz), "7"), "r=30");
 });

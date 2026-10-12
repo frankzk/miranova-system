@@ -6,6 +6,7 @@ import { ContactQuick } from "@/components/contact-quick";
 import { IconChat, IconDownload } from "@/components/icons";
 import { StoreDrawerLink } from "@/components/store-drawer-link";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
+import { RangePicker } from "@/components/range-picker";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
@@ -13,12 +14,14 @@ import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { storeHealthRecent } from "@/lib/queries";
+import { storeHealthRecent, storePeriod } from "@/lib/queries";
+import { RANGES } from "@/lib/ranges";
+import { periodParams, periodUnit, prevPhrase, STORES_RANGE, storePeriodChoice } from "@/lib/store-period";
 import { getScope } from "@/lib/scope";
 import { daysBetween, fmtDay } from "@/lib/store-metrics";
 import {
-  change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, sortStores, STORE_SORTS, storeKey, toContact, typicalTickets,
-  type Health, type Opportunity, type StoreRow, type StoreSort,
+  change, classify, deliveryRate, filterStores, HEALTH, HEALTH_ORDER, opportunities, periodView, sortLabel, sortStores, STORE_SORTS, storeKey, toContact,
+  typicalTickets, withPeriodStores, type Health, type Opportunity, type StoreRow, type StoreSort,
 } from "@/lib/stores";
 import { StoresSubnav } from "@/components/stores-subnav";
 import { loadDrawer, parseFicha, StoreDrawerSlot } from "./store-drawer-panel";
@@ -46,7 +49,21 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const drawerData = loadDrawer(ficha);
   // el correo detectado del panel (~0.5 s) queda en memoria desde ya, antes del primer clic
   storeProfiles().catch(() => {});
-  const [all, contacts, followups] = await Promise.all([storeHealthRecent(scope.account), contactIndex(), followupIndex()]);
+  // período de la tabla: por defecto 7 días vs. los 7 anteriores; con otro (?r= o ?from=&to=) las
+  // cifras salen de store_period, y el estado, los avisos y "Contactar hoy" siguen mirando la semana
+  const pc = storePeriodChoice(sp, scope.tz);
+  const { range, custom, days } = pc;
+  const [healthRows, contacts, followups, period] = await Promise.all([
+    storeHealthRecent(scope.account),
+    contactIndex(),
+    followupIndex(),
+    custom ? storePeriod({ account: scope.account, from: range.from, to: range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,
+  ]);
+  const all = period ? withPeriodStores(healthRows, period) : healthRows;
+  // lo que muestra y ordena la tabla (las cifras del período); el estado se mira siempre en la fila de salud
+  const view = period ? periodView(period) : (s: StoreRow) => s;
+  const byKey = new Map(all.map((s) => [storeKey(s), s]));
+  const base = (s: StoreRow) => byKey.get(storeKey(s)) ?? s;
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
   const hParam = one(sp, "h");
@@ -64,16 +81,17 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const found = filterStores(all, { keys: picked, q });
   const withGroup = found.filter((s) => groupOf(s)).length;
 
-  const health = new Map(all.map((s) => [s, classify(s)]));
+  const health = new Map(all.map((s) => [storeKey(s), classify(s)]));
+  const healthOf = (s: StoreRow) => health.get(storeKey(s))!;
   const pool = found.filter(byGroup);
-  const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, pool.filter((s) => health.get(s) === k).length]));
-  const rows = sortStores(pool.filter((s) => !h || health.get(s) === h), sort);
+  const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, pool.filter((s) => healthOf(s) === k).length]));
+  const rows = sortStores(pool.filter((s) => !h || healthOf(s) === h).map(view), sort);
   const typical = typicalTickets(all);
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
   const contact = toContact(all);
   const showAccount = !scope.account && accounts.length > 1;
-  // sugerencias del buscador: todas las tiendas de la vista, las que más venden primero
-  const options: StoreOption[] = sortStores(all, "d7_desc").map((s) => ({
+  // sugerencias del buscador: todas las tiendas de la vista, las que más venden (en el período) primero
+  const options: StoreOption[] = sortStores(all.map(view), "d7_desc").map((s) => ({
     key: storeKey(s),
     name: s.name,
     account: showAccount ? s.account_name : null,
@@ -82,7 +100,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { q, h, g, sort: sort === "d7_desc" ? undefined : sort, ...patch };
+    const merged = { q, h, g, sort: sort === "d7_desc" ? undefined : sort, ...periodParams(pc), ...patch };
     for (const [k, v] of Object.entries(merged)) if (v && k !== "t") p.set(k, v);
     // las tiendas elegidas se conservan salvo que el cambio las quite ({ t: undefined })
     if (!("t" in patch)) for (const k of picked) p.append("t", k);
@@ -92,6 +110,15 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
     const s = qs(patch);
     return s ? `/stores?${s}` : "/stores";
   };
+  // textos del período: columna ("30 días", "15 – 28 sep") y comparación ("vs. los 30 días anteriores")
+  const periodShort = custom ? range.label : "7 días";
+  const periodLong = custom ? range.during : "en los últimos 7 días";
+  const vsPrev = custom ? prevPhrase(days) : "vs. los 7 anteriores";
+  // promedios (ticket, unidades, te toca, productos): del período elegido; por defecto, de 30 días
+  const avgLong = custom ? periodLong : "últimos 30 días";
+  // los otros filtros, para que elegir un período no los pierda
+  const withoutPeriod = { r: undefined, from: undefined, to: undefined };
+  const keep = [...new URLSearchParams(qs(withoutPeriod)).entries()];
   const sortCol = (label: string, keys: StoreSort[], align: "left" | "right" = "right", title?: string) => (
     <ColumnFilter
       path="/stores"
@@ -100,8 +127,8 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       align={align}
       query={qs({ sort: undefined })}
       current={keys.includes(sort) && sort !== "d7_desc" ? sort : undefined}
-      allLabel={STORE_SORTS.d7_desc}
-      options={keys.filter((k) => k !== "d7_desc").map((k): FilterOption => ({ value: k, label: STORE_SORTS[k] }))}
+      allLabel={sortLabel("d7_desc", periodShort)}
+      options={keys.filter((k) => k !== "d7_desc").map((k): FilterOption => ({ value: k, label: sortLabel(k, periodShort) }))}
       title={title}
     />
   );
@@ -126,7 +153,11 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
     <div className="page">
       <PageHead
         title="Salud de tiendas"
-        sub={<>{fmtInt(all.length)} tiendas con pedidos en 60 días · {scope.label} · ritmo de los últimos 7 días vs. los 7 anteriores</>}
+        sub={
+          custom
+            ? <>{fmtInt(all.length)} tiendas · {scope.label} · cifras {periodLong} {vsPrev} · estado y alertas de los últimos 7 días</>
+            : <>{fmtInt(all.length)} tiendas con pedidos en 60 días · {scope.label} · ritmo de los últimos 7 días vs. los 7 anteriores</>
+        }
         actions={
           <nav className="segmented" aria-label="Grupo de WhatsApp">
             <Link href={href({ g: undefined })} aria-current={!g}>Todas</Link>
@@ -143,24 +174,36 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <StoresSubnav />
       <AccountChips accounts={accounts} current={scope.account} next={href({})} />
 
-      <GetForm className="toolbar" role="search" action="/stores">
-        {h && <input type="hidden" name="h" value={h} />}
-        {g && <input type="hidden" name="g" value={g} />}
-        {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
-        {/* key: al cambiar la búsqueda en la URL (Limpiar, pestañas) el buscador vuelve a empezar desde ella */}
-        <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} />
-        <button className="btn" type="submit">Buscar</button>
-        {searching && <Link className="btn btn-ghost" href={href({ q: undefined, t: undefined })}>Limpiar</Link>}
+      <div className="toolbar">
+        <GetForm className="toolbar-search" role="search" action="/stores">
+          {h && <input type="hidden" name="h" value={h} />}
+          {g && <input type="hidden" name="g" value={g} />}
+          {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
+          {Object.entries(periodParams(pc)).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
+          {/* key: al cambiar la búsqueda en la URL (Limpiar, pestañas) el buscador vuelve a empezar desde ella */}
+          <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} unit={periodUnit(pc)} />
+          <button className="btn" type="submit">Buscar</button>
+          {searching && <Link className="btn btn-ghost" href={href({ q: undefined, t: undefined })}>Limpiar</Link>}
+        </GetForm>
+        {/* período de las cifras de la tabla (fuera del formulario de búsqueda: el rango trae el suyo) */}
+        <nav className="segmented period" aria-label="Período">
+          {RANGES.map((r) => (
+            <Link key={r.id} href={href({ ...withoutPeriod, r: r.id === STORES_RANGE ? undefined : r.id })} aria-current={r.id === range.id}>
+              {r.label}
+            </Link>
+          ))}
+          <RangePicker range={range} today={today} path="/stores" keep={keep} clearHref={href(withoutPeriod)} />
+        </nav>
         {can(user, "export") && (
           <>
             <span className="spacer" />
-            {/* el mismo listado (filtros y orden) con el contacto y el seguimiento de cada tienda */}
+            {/* el mismo listado (filtros, período y orden) con el contacto y el seguimiento de cada tienda */}
             <a className="btn" href={`/api/export/stores${qs({}) ? `?${qs({})}` : ""}`} download title="Descargar este listado en Excel, con los datos de contacto">
               <IconDownload /> Exportar a Excel
             </a>
           </>
         )}
-      </GetForm>
+      </div>
 
       {contact.length > 0 && !h && !g && !searching && (
         <section className="panel contact-today">
@@ -175,7 +218,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 <li key={`${s.account_id}:${s.store_id}`} className="row-qc">
                   <StoreDrawerLink href={fichaHref(s)} name={s.name}>
                     <span className="t">{s.name}</span>
-                    <HealthPill h={health.get(s)!} />
+                    <HealthPill h={healthOf(s)} />
                     <span className="s">
                       {fmtInt(s.prev7)} → {fmtInt(s.d7)} pedidos · {lastSale(s)}
                       {showAccount && <> · {s.account_name}</>}
@@ -224,23 +267,23 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                   <div className="top">
                     <StoreDrawerLink className="strong" href={fichaHref(s)} name={s.name}>{s.name}</StoreDrawerLink>
                     <GroupLink url={groupOf(s)} />
-                    <HealthPill h={health.get(s)!} />
+                    <HealthPill h={healthOf(s)} />
                   </div>
                   <div className="sub">{lastSale(s)}{showAccount && <> · {s.account_name}</>}</div>
                   {followupNote(s)}
                   <Spark days={s.daily} />
                   <dl>
                     <div><dt>Hoy</dt><dd>{fmtInt(s.today)}</dd></div>
-                    <div><dt>7 días</dt><dd>{fmtInt(s.d7)}</dd></div>
-                    <div><dt>Ritmo/día</dt><dd>{(s.d7 / 7).toFixed(1)}</dd></div>
+                    <div><dt>{periodShort}</dt><dd>{fmtInt(s.d7)}</dd></div>
+                    <div><dt>Ritmo/día</dt><dd>{(s.d7 / days).toFixed(1)}</dd></div>
                     <div><dt>Variación</dt><dd><Delta s={s} /></dd></div>
-                    <div><dt>Días activos</dt><dd>{s.active7}/7</dd></div>
+                    <div><dt>Días activos</dt><dd>{s.active7}/{days}</dd></div>
                     <div><dt>Ticket</dt><dd>{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</dd></div>
                     <div><dt>Unid./ped.</dt><dd>{s.units_per_order?.toFixed(2) ?? "—"}</dd></div>
                     <div><dt>Productos</dt><dd>{fmtInt(s.skus30)}</dd></div>
                     <div><dt>Te toca</dt><dd>{s.vendor_per_order === null ? "—" : fmtMoney(s.vendor_per_order, s.currency)}</dd></div>
                   </dl>
-                  <Ops ops={opportunities(s, typical[s.account_id], money(s))} />
+                  <Ops ops={opportunities(base(s), typical[s.account_id], money(s))} />
                 </li>
               ))}
             </ul>
@@ -251,21 +294,21 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                   <tr>
                     <th>{sortCol("Tienda", ["d7_desc", "silent"], "left")}</th>
                     <th className="r">{sortCol("Hoy", ["today_desc"])}</th>
-                    <th className="r">{sortCol("7 días", ["d7_desc", "d7_asc"])}</th>
-                    <th className="r" title="Pedidos por día, promedio de los últimos 7 días">Ritmo/día</th>
-                    <th className="r">{sortCol("Variación", ["drop", "rise"], "right", "Ritmo de los últimos 7 días vs. los 7 anteriores")}</th>
-                    <th className="r">{sortCol("Días activos", ["active_desc", "active_asc"], "right", "Días con al menos un pedido, de los últimos 7")}</th>
-                    <th className="r">{sortCol("Ticket", ["ticket_desc", "ticket_asc"], "right", "Venta promedio por pedido, últimos 30 días")}</th>
-                    <th className="r hide-lg">{sortCol("Unid./pedido", ["units_asc", "units_desc"], "right", "Productos promedio por pedido, últimos 30 días")}</th>
-                    <th className="r hide-lg">{sortCol("Te toca/pedido", ["vendor_desc"], "right", "Lo que te toca en promedio por pedido, últimos 30 días")}</th>
-                    <th className="r hide-lg">{sortCol("Productos", ["skus_desc", "skus_asc"], "right", "Productos distintos con pedidos en 30 días")}</th>
+                    <th className="r">{sortCol(periodShort, ["d7_desc", "d7_asc"], "right", `Pedidos ${periodLong}`)}</th>
+                    <th className="r" title={`Pedidos por día, promedio ${periodLong}`}>Ritmo/día</th>
+                    <th className="r">{sortCol("Variación", ["drop", "rise"], "right", `Pedidos ${periodLong} ${vsPrev}`)}</th>
+                    <th className="r">{sortCol("Días activos", ["active_desc", "active_asc"], "right", `Días con al menos un pedido, de ${days === 1 ? "1 día" : `${days} días`}`)}</th>
+                    <th className="r">{sortCol("Ticket", ["ticket_desc", "ticket_asc"], "right", `Venta promedio por pedido, ${avgLong}`)}</th>
+                    <th className="r hide-lg">{sortCol("Unid./pedido", ["units_asc", "units_desc"], "right", `Productos promedio por pedido, ${avgLong}`)}</th>
+                    <th className="r hide-lg">{sortCol("Te toca/pedido", ["vendor_desc"], "right", `Lo que te toca en promedio por pedido, ${avgLong}`)}</th>
+                    <th className="r hide-lg">{sortCol("Productos", ["skus_desc", "skus_asc"], "right", `Productos distintos con pedidos, ${avgLong}`)}</th>
                     <th className="hide-md">14 días</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((s) => {
-                    const ops = opportunities(s, typical[s.account_id], money(s));
+                    const ops = opportunities(base(s), typical[s.account_id], money(s));
                     const dr = deliveryRate(s);
                     return (
                       <tr key={`${s.account_id}:${s.store_id}`}>
@@ -282,17 +325,17 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                         </td>
                         <td className="num">{fmtInt(s.today)}</td>
                         <td className="num strong">{fmtInt(s.d7)}</td>
-                        <td className="num">{(s.d7 / 7).toFixed(1)}</td>
+                        <td className="num">{(s.d7 / days).toFixed(1)}</td>
                         <td className="num"><Delta s={s} /></td>
-                        <td className="num"><Constancy n={s.active7} /></td>
+                        <td className="num"><Constancy n={s.active7} of={days} /></td>
                         <td className="num">{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</td>
                         <td className="num hide-lg">{s.units_per_order?.toFixed(2) ?? "—"}</td>
                         <td className="num hide-lg">{s.vendor_per_order === null ? "—" : fmtMoney(s.vendor_per_order, s.currency)}</td>
-                        <td className="num hide-lg" title={s.top_product ? `Principal: ${s.top_product} (${Math.round((s.top_share ?? 0) * 100)}% de sus pedidos)` : undefined}>
+                        <td className="num hide-lg" title={s.top_product ? `Principal: ${s.top_product} (${Math.round((s.top_share ?? 0) * 100)}% de sus pedidos, ${avgLong})` : undefined}>
                           {fmtInt(s.skus30)}
                         </td>
                         <td className="hide-md"><Spark days={s.daily} /></td>
-                        <td><HealthPill h={health.get(s)!} /></td>
+                        <td><HealthPill h={healthOf(s)} /></td>
                       </tr>
                     );
                   })}
@@ -316,8 +359,17 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       )}
 
       <p className="footnote">
-        Sin órdenes canceladas ni rechazadas. Ticket, unidades y &ldquo;te toca&rdquo; son promedios de los últimos 30 días; el ticket bajo se compara con la
-        mediana de las tiendas de la misma cuenta.
+        {custom ? (
+          <>
+            Sin órdenes canceladas ni rechazadas. Las cifras de la tabla son {periodLong} ({vsPrev} para la variación). El estado, los avisos, la
+            entrega y la gráfica de 14 días miran la situación actual: los últimos 7 días vs. los 7 anteriores y los promedios de 30 días.
+          </>
+        ) : (
+          <>
+            Sin órdenes canceladas ni rechazadas. Ticket, unidades y &ldquo;te toca&rdquo; son promedios de los últimos 30 días; el ticket bajo se compara con la
+            mediana de las tiendas de la misma cuenta.
+          </>
+        )}
       </p>
     </div>
   );
@@ -353,13 +405,18 @@ function Delta({ s }: { s: StoreRow }) {
   return <span className="delta" data-tone={tone}>{pct > 0 ? "↑" : pct < 0 ? "↓" : ""} {Math.abs(pct)}%</span>;
 }
 
-function Constancy({ n }: { n: number }) {
+/** Días con pedidos de los del período: una barrita por día hasta 14; en períodos más largos, una barra de proporción. */
+function Constancy({ n, of }: { n: number; of: number }) {
   return (
-    <span className="constancy" title={`${n} de 7 días con pedidos`}>
-      <span className="bars" aria-hidden>
-        {Array.from({ length: 7 }, (_, i) => <i key={i} data-on={i < n || undefined} />)}
-      </span>
-      {n}/7
+    <span className="constancy" title={`${n} de ${of} ${of === 1 ? "día" : "días"} con pedidos`}>
+      {of <= 14 ? (
+        <span className="bars" aria-hidden>
+          {Array.from({ length: of }, (_, i) => <i key={i} data-on={i < n || undefined} />)}
+        </span>
+      ) : (
+        <span className="meter" aria-hidden><i style={{ width: `${Math.round((Math.min(n, of) / of) * 100)}%` }} /></span>
+      )}
+      {n}/{of}
     </span>
   );
 }

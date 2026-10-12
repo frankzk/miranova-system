@@ -370,6 +370,19 @@ export async function storeHealth(account?: string): Promise<import("./stores").
   return (data ?? []) as import("./stores").StoreRow[];
 }
 
+/** Cifras de cada tienda en un período elegido y el anterior del mismo largo (store_period). */
+export async function storePeriod(opts: { account?: string; from: Date; to: Date; prevFrom: Date; prevTo: Date }): Promise<import("./stores").StorePeriod[]> {
+  const { data, error } = await db().rpc("store_period", {
+    p_account: opts.account ?? null,
+    p_from: opts.from.toISOString(),
+    p_to: opts.to.toISOString(),
+    p_prev_from: opts.prevFrom.toISOString(),
+    p_prev_to: opts.prevTo.toISOString(),
+  });
+  if (error) throw error;
+  return (data ?? []) as import("./stores").StorePeriod[];
+}
+
 /**
  * Salud de tiendas con memoria de 1 minuto (la consulta tarda ~0.4 s y los pedidos se
  * sincronizan cada 10 min): abrir y cerrar el panel de varias tiendas no la repite.

@@ -85,7 +85,15 @@ const items = (rows: ImportItem[]) =>
   }));
 const costs = (rows: ImportCost[]) => rows.map((c) => ({ ...c, amount: Number(c.amount) }));
 
-export type ImportSummary = ImportRow & { lines: number; units: number; total: number; paid: number; last_event_at: string | null };
+export type ImportSummary = ImportRow & {
+  lines: number;
+  units: number;
+  total: number;
+  paid: number;
+  last_event_at: string | null;
+  /** productos de la importación en su orden (para verlos en la lista) */
+  products: { name: string; qty: number }[];
+};
 
 /** Última novedad (cambio de estado, nota, aviso) de cada importación. */
 async function lastEvents(): Promise<Map<string, string>> {
@@ -103,7 +111,7 @@ async function lastEvents(): Promise<Map<string, string>> {
 export async function listImports(): Promise<ImportSummary[]> {
   const [imp, it, co, pa, last] = await Promise.all([
     db().from("imports").select("*").order("created_at", { ascending: false }),
-    db().from("import_items").select("id, import_id, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty"),
+    db().from("import_items").select("id, import_id, name, position, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty").order("position"),
     db().from("import_costs").select("import_id, kind, amount, allocation, item_id"),
     db().from("import_payments").select("import_id, amount"),
     lastEvents(),
@@ -128,6 +136,7 @@ export async function listImports(): Promise<ImportSummary[]> {
       total: lc.totals.total,
       paid: (byPaid.get(r.id) ?? []).reduce((t, p) => t + Number(p.amount), 0),
       last_event_at: last.get(r.id) ?? null,
+      products: li.map((i) => ({ name: i.name, qty: i.qty })),
     };
   });
 }

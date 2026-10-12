@@ -21,7 +21,7 @@ const MAX_SHOWN = 80;
  * escribe y permite marcar varias (quedan como etiquetas). Va dentro de un formulario GET: cada
  * tienda marcada es un `t` y el texto escrito un `q`. Sin el autocompletado del navegador.
  */
-export function StoreSearch({ options, selected, q }: { options: StoreOption[]; selected: string[]; q?: string }) {
+export function StoreSearch({ options, selected, q, unit = "7 d" }: { options: StoreOption[]; selected: string[]; q?: string; unit?: string }) {
   const [text, setText] = useState(q ?? "");
   const [sel, setSel] = useState<string[]>(selected);
   const [open, setOpen] = useState(false);
@@ -173,7 +173,7 @@ export function StoreSearch({ options, selected, q }: { options: StoreOption[]; 
                     <span className="n">{o.name}</span>
                     <span className="m">
                       {o.account && <>{o.account} · </>}
-                      {o.d7} ped. 7 d
+                      {o.d7} ped. {unit}
                     </span>
                   </li>
                 );

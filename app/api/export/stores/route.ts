@@ -3,13 +3,15 @@ import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeDirectory, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
-import { storeHealthRecent } from "@/lib/queries";
+import { storeHealthRecent, storePeriod } from "@/lib/queries";
+import { prevPhrase, storePeriodChoice } from "@/lib/store-period";
 import { getScope } from "@/lib/scope";
 import { formatPhone, storeEmail, whatsappChat } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
 import type { FollowupSummary } from "@/lib/store-metrics";
 import {
-  applyStoreFilters, change, classify, deliveryRate, filterStores, HEALTH, opportunities, parseStoreFilters, typicalTickets,
+  applyStoreFilters, change, classify, deliveryRate, filterStores, HEALTH, opportunities, parseStoreFilters, periodView, storeKey, typicalTickets,
+  withPeriodStores, type StoreRow,
 } from "@/lib/stores";
 import { buildXlsx, XLSX_TYPE, type Cell } from "@/lib/xlsx";
 
@@ -58,10 +60,16 @@ export async function GET(req: NextRequest) {
   const params: Record<string, string | string[]> = {};
   for (const k of new Set(req.nextUrl.searchParams.keys())) params[k] = req.nextUrl.searchParams.getAll(k);
   const f = parseStoreFilters(params);
+  // el período de la página: sus cifras van en las columnas de pedidos, variación, días activos y promedios
+  const pc = storePeriodChoice(params, scope.tz);
 
-  const [all, contacts, directory, followups, profiles] = await Promise.all([
+  const [healthRows, contacts, directory, followups, profiles, period] = await Promise.all([
     storeHealthRecent(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account), storeProfiles(),
+    pc.custom ? storePeriod({ account: scope.account, from: pc.range.from, to: pc.range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,
   ]);
+  const all = period ? withPeriodStores(healthRows, period) : healthRows;
+  const view = period ? periodView(period) : (s: StoreRow) => s;
+  const byKey = new Map(all.map((s) => [storeKey(s), s]));
   const person = new Map(directory.map((d) => [contactKey(d), d.person]));
   const detected = new Map(profiles.map((p) => [contactKey(p), p.email]));
   const hasGroup = (s: { account_id: string; store_id: string }) => !!contacts.get(contactKey(s))?.whatsapp_group_url;
@@ -91,22 +99,24 @@ export async function GET(req: NextRequest) {
   };
 
   // hoja 1: el listado, tal como se ve
-  const rows = applyStoreFilters(all, f, hasGroup);
+  const rows = applyStoreFilters(all, f, hasGroup, view);
   const typical = typicalTickets(all);
   const listed = rows.map((s): Cell[] => {
-    const ops = opportunities(s, typical[s.account_id], (n) => String(Math.round(n)));
+    // estado y avisos con la fila de salud (la semana actual); las cifras, del período
+    const h = byKey.get(storeKey(s)) ?? s;
+    const ops = opportunities(h, typical[s.account_id], (n) => String(Math.round(n)));
     const c = change(s);
     const dr = deliveryRate(s);
     return [
       s.name,
       s.account_name,
-      HEALTH[classify(s)].label,
+      HEALTH[classify(h)].label,
       ops[0] ? `${ops[0].text} → ${ops[0].action}` : null,
       s.today,
       s.d7,
       s.prev7,
       c === null ? null : Math.round(c * 100),
-      round(s.d7 / 7, 1),
+      round(s.d7 / pc.days, 1),
       s.active7,
       s.n30,
       round(s.sales30, 2),
@@ -141,6 +151,8 @@ export async function GET(req: NextRequest) {
     ...contactCells(d),
   ]);
 
+  const periodShort = pc.custom ? pc.range.label : "7 días";
+  const avgShort = pc.custom ? pc.range.label : "30 días";
   const book = buildXlsx([
     {
       name: "Tiendas",
@@ -150,17 +162,17 @@ export async function GET(req: NextRequest) {
         { header: "Estado", width: 13 },
         { header: "Qué hacer", width: 60 },
         { header: "Pedidos hoy", width: 11 },
-        { header: "Pedidos 7 días", width: 13 },
-        { header: "Pedidos 7 días anteriores", width: 15 },
-        { header: "Variación 7 días (%)", width: 13 },
+        { header: `Pedidos ${periodShort}`, width: 13 },
+        { header: pc.custom ? "Pedidos período anterior" : "Pedidos 7 días anteriores", width: 15 },
+        { header: pc.custom ? `Variación (%) ${prevPhrase(pc.days)}` : "Variación 7 días (%)", width: 13 },
         { header: "Ritmo por día", width: 11 },
-        { header: "Días activos (de 7)", width: 12 },
+        { header: `Días activos (de ${pc.days})`, width: 12 },
         { header: "Pedidos 30 días", width: 13 },
         { header: "Venta 30 días", width: 14 },
-        { header: "Ticket promedio 30 días", width: 14 },
-        { header: "Unidades por pedido", width: 12 },
-        { header: "Te toca por pedido", width: 13 },
-        { header: "Productos 30 días", width: 12 },
+        { header: `Ticket promedio ${avgShort}`, width: 14 },
+        { header: `Unidades por pedido ${avgShort}`, width: 12 },
+        { header: `Te toca por pedido ${avgShort}`, width: 13 },
+        { header: `Productos ${avgShort}`, width: 12 },
         { header: "Producto principal", width: 36 },
         { header: "% pedidos del producto principal", width: 14 },
         { header: "Entrega 30 días (%)", width: 12 },

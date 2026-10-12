@@ -127,8 +127,24 @@ export function resolveRange(id: string | undefined, tz: string, custom?: { from
   return { ...r, during: `en ${r.short}`, from: startOfDay(tz, n - 1), to: now, bucket: "day" };
 }
 
-/** Parámetros de la URL de Inicio para un rango ("" = el de siempre, 30 días). */
-export function rangeQuery(r: Pick<Range, "id" | "days">): string {
+/** Parámetros de la URL para un rango ("" = el de siempre de la página; en Inicio, 30 días). */
+export function rangeQuery(r: Pick<Range, "id" | "days">, def: PresetId = DEFAULT_RANGE): string {
   if (r.id === "custom" && r.days) return new URLSearchParams({ from: r.days.from, to: r.days.to }).toString();
-  return r.id === DEFAULT_RANGE ? "" : new URLSearchParams({ r: r.id }).toString();
+  return r.id === def ? "" : new URLSearchParams({ r: r.id }).toString();
+}
+
+/** Días de calendario que cubre un rango (hoy o ayer = 1). */
+export function rangeDays(r: Pick<Range, "id" | "days">): number {
+  if (r.id === "custom" && r.days) return daysBetween(r.days.from, r.days.to) + 1;
+  if (r.id === "hoy" || r.id === "ayer") return 1;
+  return Number(r.id) || 1;
+}
+
+/**
+ * El período anterior del mismo largo, para comparar: los mismos días corridos hacia atrás (con
+ * "hoy", ayer hasta la misma hora; con "30 días", los 30 anteriores).
+ */
+export function previousWindow(r: Pick<Range, "id" | "days" | "from" | "to">): { from: Date; to: Date } {
+  const ms = rangeDays(r) * 86_400_000;
+  return { from: new Date(r.from.getTime() - ms), to: new Date(r.to.getTime() - ms) };
 }
