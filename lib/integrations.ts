@@ -4,13 +4,23 @@ import { db } from "./supabase";
 
 // Ajustes → Integraciones: claves de servicios externos, cifradas con ENCRYPTION_KEY (como la
 // contraseña de Gmail). Tabla app_settings, clave "integrations". Si no hay clave guardada en el
-// panel, se usa la de Vercel (DHL_API_KEY / TRACK17_API_KEY / ANTHROPIC_API_KEY).
+// panel, se usa la de Vercel (DHL_API_KEY, FEDEX_API_KEY y FEDEX_SECRET_KEY, UPS_CLIENT_ID y
+// UPS_CLIENT_SECRET, TRACK17_API_KEY, ANTHROPIC_API_KEY).
 
 const KEY = "integrations";
-export type IntegrationName = "dhl" | "track17" | "anthropic";
+export type IntegrationName = "dhl" | "fedex_id" | "fedex_secret" | "ups_id" | "ups_secret" | "track17" | "anthropic";
 type Stored = Partial<Record<IntegrationName, string | null>>;
 
-const ENV: Record<IntegrationName, string> = { dhl: "DHL_API_KEY", track17: "TRACK17_API_KEY", anthropic: "ANTHROPIC_API_KEY" };
+const ENV: Record<IntegrationName, string> = {
+  dhl: "DHL_API_KEY",
+  fedex_id: "FEDEX_API_KEY",
+  fedex_secret: "FEDEX_SECRET_KEY",
+  ups_id: "UPS_CLIENT_ID",
+  ups_secret: "UPS_CLIENT_SECRET",
+  track17: "TRACK17_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+const NAMES = Object.keys(ENV) as IntegrationName[];
 const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === "PGRST205";
 
 async function stored(): Promise<Stored> {
@@ -46,7 +56,7 @@ export async function integrationStatus(): Promise<Record<IntegrationName, { sou
     const key = panel || env;
     return { source: panel ? ("panel" as const) : env ? ("vercel" as const) : null, tail: key ? key.slice(-4) : null };
   };
-  return { dhl: one("dhl"), track17: one("track17"), anthropic: one("anthropic") };
+  return Object.fromEntries(NAMES.map((n) => [n, one(n)])) as Record<IntegrationName, { source: "panel" | "vercel" | null; tail: string | null }>;
 }
 
 /** Guarda las claves: vacío conserva la guardada; `clear` la borra. */

@@ -18,10 +18,9 @@ import {
   type ImportStatus,
 } from "@/lib/imports";
 import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
-import { trackingProvider } from "@/lib/imports-tracking";
+import { available, carrierOf, PROVIDER_LABEL, trackingKeys, trackingProvider } from "@/lib/carrier-tracking";
 import { integrationKey } from "@/lib/integrations";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
-import { isDhl } from "@/lib/tracking-dhl";
 import { can } from "@/lib/permissions";
 import {
   addImportCost, addImportItem, addImportPayment, deleteImport, linkImportItem, removeImportCost, removeImportDocument, removeImportItem,
@@ -46,7 +45,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const today = todayIn();
   const [prices, choices, drop, suppliers, trackKey, aiKey] = await Promise.all([
     salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
-    Promise.all([integrationKey("dhl"), integrationKey("track17")]).then(([d, t]) => trackingProvider(imp.carrier, { dhl: Boolean(d), track17: Boolean(t) })),
+    trackingKeys().then((k) => trackingProvider(imp.carrier, available(k))),
     integrationKey("anthropic").then(Boolean),
   ]);
   /** documentos que la IA puede leer: PDF o foto de hasta 20 MB (no fotos de recepción) */
@@ -183,12 +182,13 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                 {imp.track_error && <p className="im-alert-text im-small">{imp.track_error}</p>}
                 {!trackKey ? (
                   <p className="muted im-small">
-                    Para que la guía se actualice sola, el dueño agrega en Ajustes → Integraciones la clave de {isDhl(imp.carrier) ? "DHL (gratis)" : "17TRACK"}.
+                    Para que la guía se actualice sola, el dueño agrega en Ajustes → Integraciones la clave de{" "}
+                    {carrierOf(imp.carrier) ? `${PROVIDER_LABEL[carrierOf(imp.carrier)!]} (gratis)` : "17TRACK"}.
                   </p>
                 ) : (
                   <div className="im-track-foot">
                     <span className="sub">
-                      {trackKey === "dhl" ? "Con DHL · " : "Con 17TRACK · "}
+                      Con {PROVIDER_LABEL[trackKey]} ·{" "}
                       {imp.track_checked_at ? `revisado ${when(imp.track_checked_at)} · se revisa cada 3 horas` : "se revisa en la próxima sincronización (cada 3 horas)."}
                     </span>
                     {trackable && <TrackRefreshForm action={refreshImportTracking} importId={imp.id} />}

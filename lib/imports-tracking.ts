@@ -1,20 +1,18 @@
 import "server-only";
+import { available, carrierOf, carrierTracker, CARRIERS_OFFICIAL, PROVIDER_LABEL, trackingKeys, trackingProvider, type CarrierResult, type Provider } from "./carrier-tracking";
 import { TRACKED_STATUSES } from "./imports";
-import { integrationKey } from "./integrations";
 import { db } from "./supabase";
 import { newEvents, type TrackInfo } from "./tracking17";
 import { registerNumbers, trackNumbers } from "./tracking17-client";
-import { isDhl } from "./tracking-dhl";
-import { DHL_GAP_MS, dhlTrack } from "./tracking-dhl-client";
 
-// Seguimiento automático de las guías: las de DHL con su API oficial (si hay clave de DHL) y las
-// demás con 17TRACK (que registra la guía una vez). Cada pocas horas guarda el estado, la última
-// novedad y la llegada estimada; las novedades nuevas van al historial.
+// Seguimiento automático de las guías: las de DHL, FedEx y UPS con la API oficial de cada una (si
+// hay clave) y las demás con 17TRACK (que registra la guía una vez). Cada pocas horas guarda el
+// estado, la última novedad y la llegada estimada; las novedades nuevas van al historial.
 
 const EVERY_MS = 3 * 3_600_000;
 const PER_RUN = 40;
 /** DHL gratis: una consulta cada 5 s, así que pocas por vuelta (las demás, en la siguiente) */
-const DHL_PER_RUN = 6;
+const PER_RUN_OF: Record<Provider, number> = { dhl: 6, fedex: 20, ups: 20, track17: PER_RUN };
 
 type Row = {
   id: string; carrier: string | null; tracking_number: string | null; status: string;
@@ -24,12 +22,6 @@ type Row = {
 };
 
 export type TrackRun = { ok: true; checked: number; updated: number } | { ok: false; error: string };
-
-/** Quién sigue esta guía: DHL directo (si es DHL y hay clave) o 17TRACK. */
-export function trackingProvider(carrier: string | null, keys: { dhl: boolean; track17: boolean }): "dhl" | "track17" | null {
-  if (keys.dhl && isDhl(carrier)) return "dhl";
-  return keys.track17 ? "track17" : null;
-}
 
 const RESET = { track_status: null, track_sub_status: null, track_event: null, track_event_at: null, track_eta: null };
 
@@ -51,17 +43,18 @@ async function save(r: Row, info: TrackInfo, now: string): Promise<boolean> {
   return fresh.length > 0;
 }
 
-async function viaDhl(rows: Row[], key: string, now: string): Promise<number> {
+/** DHL, FedEx o UPS: una consulta por guía (sin registrarla antes). */
+async function viaCarrier(rows: Row[], tracker: { track: (n: string) => Promise<CarrierResult>; gapMs: number }, now: string): Promise<number> {
   let updated = 0;
   for (const [i, r] of rows.entries()) {
-    if (i > 0 && DHL_GAP_MS) await new Promise((ok) => setTimeout(ok, DHL_GAP_MS));
-    // guía nueva o cambiada: lo de antes ya no corresponde (DHL no necesita registrarla)
+    if (i > 0 && tracker.gapMs) await new Promise((ok) => setTimeout(ok, tracker.gapMs));
+    // guía nueva o cambiada: lo de antes ya no corresponde
     if (r.track_registered !== r.tracking_number) {
       await db().from("imports").update({ ...RESET, track_registered: r.tracking_number, track_error: null }).eq("id", r.id);
       r.track_registered = r.tracking_number;
       r.track_event_at = null;
     }
-    const res = await dhlTrack(r.tracking_number!, key);
+    const res = await tracker.track(r.tracking_number!);
     if (!res.found) {
       await db().from("imports").update({ track_error: res.message, track_checked_at: now }).eq("id", r.id);
       r.done = true;
@@ -106,8 +99,11 @@ async function via17track(rows: Row[], key: string, now: string): Promise<number
 }
 
 export async function refreshTracking({ ids, force = false }: { ids?: string[]; force?: boolean } = {}): Promise<TrackRun> {
-  const [dhlKey, k17] = await Promise.all([integrationKey("dhl"), integrationKey("track17")]);
-  if (!dhlKey && !k17) return { ok: false, error: "Falta la clave de seguimiento: DHL (gratis) o 17TRACK, en Ajustes → Integraciones." };
+  const keys = await trackingKeys();
+  const has = available(keys);
+  if (!Object.values(has).some(Boolean)) {
+    return { ok: false, error: "Falta la clave de seguimiento: DHL, FedEx o UPS (gratis) o 17TRACK, en Ajustes → Integraciones." };
+  }
   let q = db()
     .from("imports")
     .select("id, carrier, tracking_number, status, track_registered, track_event_at, track_checked_at")
@@ -120,24 +116,27 @@ export async function refreshTracking({ ids, force = false }: { ids?: string[]; 
     .sort((a, b) => (a.track_checked_at ?? "").localeCompare(b.track_checked_at ?? ""));
   if (!due.length) return { ok: true, checked: 0, updated: 0 };
 
-  const keys = { dhl: Boolean(dhlKey), track17: Boolean(k17) };
-  const dhlRows = due.filter((r) => trackingProvider(r.carrier, keys) === "dhl").slice(0, DHL_PER_RUN);
-  const rows17 = due.filter((r) => trackingProvider(r.carrier, keys) === "track17").slice(0, PER_RUN);
-  if (!dhlRows.length && !rows17.length) {
-    const carrier = due[0].carrier || "esta paquetera";
-    return { ok: false, error: `Para guías de ${carrier} hace falta la clave de 17TRACK (la de DHL solo sirve para guías DHL).` };
+  const groups = new Map<Provider, Row[]>();
+  for (const r of due) {
+    const p = trackingProvider(r.carrier, has);
+    if (p && (groups.get(p)?.length ?? 0) < PER_RUN_OF[p]) groups.set(p, [...(groups.get(p) ?? []), r]);
+  }
+  if (!groups.size) {
+    const c = carrierOf(due[0].carrier);
+    const who = c ? PROVIDER_LABEL[c] : due[0].carrier || "esta paquetera";
+    return { ok: false, error: c ? `Para guías de ${who} falta la clave de ${who} (gratis) o la de 17TRACK, en Ajustes → Integraciones.` : `Para guías de ${who} hace falta la clave de 17TRACK.` };
   }
   const now = new Date().toISOString();
   let updated = 0;
+  let checked = 0;
   const errors: string[] = [];
-  // cada servicio por su lado: si uno falla (clave mala, límite), el otro sigue
-  for (const [rows, run] of [
-    [dhlRows, () => viaDhl(dhlRows, dhlKey!, now)],
-    [rows17, () => via17track(rows17, k17!, now)],
-  ] as const) {
-    if (!rows.length) continue;
+  // cada servicio por su lado: si uno falla (clave mala, límite), los otros siguen
+  for (const p of [...CARRIERS_OFFICIAL, "track17"] as Provider[]) {
+    const rows = groups.get(p);
+    if (!rows?.length) continue;
+    checked += rows.length;
     try {
-      updated += await run();
+      updated += p === "track17" ? await via17track(rows, keys.track17!, now) : await viaCarrier(rows, carrierTracker(p, keys), now);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       errors.push(msg);
@@ -146,5 +145,5 @@ export async function refreshTracking({ ids, force = false }: { ids?: string[]; 
     }
   }
   if (errors.length) return { ok: false, error: errors.join(" · ") };
-  return { ok: true, checked: dhlRows.length + rows17.length, updated };
+  return { ok: true, checked, updated };
 }
