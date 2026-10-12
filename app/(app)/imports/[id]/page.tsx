@@ -14,7 +14,7 @@ import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
   allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
-  receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
+  isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, trackingUrl, transportLabel, whatsappMessage, type DropState, type ImportStatus,
 } from "@/lib/imports";
 import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
 import { integrationKey } from "@/lib/integrations";
@@ -51,7 +51,9 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   // seguimiento automático: solo si lo guardado es de la guía actual
   const tracked = imp.tracking_number && imp.track_registered === imp.tracking_number ? imp : null;
   const trackable = Boolean(imp.tracking_number) && ["ready", "transit", "customs", "released", "to_warehouse"].includes(imp.status);
-  const stale = staleDays(imp, events[0]?.at ?? null, today);
+  const stale = staleDays(imp, events.find((e) => isNews(e.kind))?.at ?? null, today);
+  // costos y pagos del historial: solo con permiso de Dinero
+  const history = events.filter((e) => money || e.kind !== "money");
   const supplier = imp.supplier_id ? suppliers.find((x) => x.id === imp.supplier_id) : undefined;
 
   const landed = landedCosts(items, costs);
@@ -146,6 +148,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
             <dl className="im-facts">
               <div><dt>Transporte</dt><dd>{transportLabel(imp.transport)}{imp.carrier ? ` · ${imp.carrier}` : ""}</dd></div>
               <div><dt>Guía</dt><dd>{imp.tracking_number ? (link ? <a href={link} target="_blank" rel="noreferrer">{imp.tracking_number}</a> : imp.tracking_number) : "—"}</dd></div>
+              {imp.order_ref && <div><dt>N.º de orden</dt><dd className="im-copy">{imp.order_ref}</dd></div>}
               <div><dt>Pedido</dt><dd>{day(imp.ordered_at)}</dd></div>
               <div><dt>Llegada estimada</dt><dd className={late ? "im-alert-text" : undefined}>{day(imp.eta)}{late ? " · atrasada" : ""}</dd></div>
               {imp.arrived_at && <div><dt>Llegó</dt><dd>{day(imp.arrived_at)}</dd></div>}
@@ -453,9 +456,9 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
           <div className="panel-head"><h2 id="im-hist">Historial</h2></div>
           <div className="panel-body">
             <ol className="im-timeline">
-              {events.map((e) => (
-                <li key={e.id}>
-                  <span className="dot" data-tone={e.status ? statusInfo(e.status).tone : "neutral"} aria-hidden />
+              {history.map((e) => (
+                <li key={e.id} data-kind={e.kind ?? "status"}>
+                  <span className="dot" data-tone={e.status ? statusInfo(e.status).tone : e.kind === "tracking" ? "info" : "neutral"} aria-hidden />
                   <div>
                     <div><b>{e.status ? statusInfo(e.status).label : e.note}</b>{e.status && e.note ? <span className="muted"> · {e.note}</span> : null}</div>
                     <div className="sub">{when(e.at)}{e.by_user && people[e.by_user] ? ` · ${people[e.by_user]}` : ""}</div>

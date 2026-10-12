@@ -1,6 +1,6 @@
 import "server-only";
 import {
-  allInDrop, dropState, IMPORT_FILE_TYPES, INBOUND, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
+  allInDrop, dropState, IMPORT_FILE_TYPES, INBOUND, isNews, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
   type DropState,
 } from "./imports";
 import type { RCost, RImport, RItem, RPayment } from "./import-reports";
@@ -18,6 +18,8 @@ export type ImportRow = {
   code: string;
   supplier: string | null;
   supplier_id: string | null;
+  /** n.º de orden en Alibaba u otra plataforma */
+  order_ref?: string | null;
   origin: string | null;
   dest_country: string;
   status: string;
@@ -71,7 +73,7 @@ export type ImportItem = {
 export type ImportCost = { id: string; import_id: string; kind: CostKind; label: string; amount: number; allocation: Allocation; item_id: string | null; created_at: string };
 export type ImportDoc = { id: string; import_id: string; kind: DocKind; storage_path: string; filename: string | null; content_type: string; size_bytes: number | null; uploaded_by: string | null; created_at: string };
 export type ImportPayment = { id: string; import_id: string; paid_at: string; amount: number; method: string; note: string | null; document_id: string | null; created_at: string };
-export type ImportEvent = { id: string; import_id: string; status: string | null; note: string | null; by_user: string | null; at: string };
+export type ImportEvent = { id: string; import_id: string; status: string | null; note: string | null; by_user: string | null; at: string; kind?: string | null };
 
 const ITEM_COLS =
   "id, import_id, account_id, product_external_id, name, sku, image_url, photo_path, qty, unit_cost, unit_weight_kg, sale_price_usd, position, received_qty, damaged_qty, received_note, received_at, received_by";
@@ -87,10 +89,13 @@ export type ImportSummary = ImportRow & { lines: number; units: number; total: n
 
 /** Última novedad (cambio de estado, nota, aviso) de cada importación. */
 async function lastEvents(): Promise<Map<string, string>> {
-  const { data, error } = await db().from("import_events").select("import_id, at");
+  const { data, error } = await db().from("import_events").select("import_id, at, kind");
   if (error) throw error;
   const out = new Map<string, string>();
-  for (const e of (data ?? []) as { import_id: string; at: string }[]) if (!out.has(e.import_id) || e.at > out.get(e.import_id)!) out.set(e.import_id, e.at);
+  for (const e of (data ?? []) as { import_id: string; at: string; kind?: string | null }[]) {
+    if (!isNews(e.kind)) continue; // agregar productos o pagos no es una novedad del envío
+    if (!out.has(e.import_id) || e.at > out.get(e.import_id)!) out.set(e.import_id, e.at);
+  }
   return out;
 }
 
@@ -392,7 +397,7 @@ export async function linkNewProducts(accountId: string, country: string): Promi
       .is("product_external_id", null)
       .select("id");
     if (!done?.length) continue;
-    await db().from("import_events").insert({ import_id: it.import_id, status: null, note: `${it.name}: enlazado con el producto de Drop "${p.name}"`, by_user: null, at: new Date().toISOString() });
+    await db().from("import_events").insert({ import_id: it.import_id, status: null, note: `${it.name}: enlazado con el producto de Drop "${p.name}"`, by_user: null, at: new Date().toISOString(), kind: "activity" });
     linked++;
   }
   return linked;

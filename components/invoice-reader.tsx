@@ -159,7 +159,7 @@ export function InvoiceReader({ docId, docName, importId, money, action }: { doc
               <span className="sub">{currency}</span>
             </label>
           ))}
-          <span className="hint">Se agregan como costos: el envío se reparte por peso y el resto por valor (puedes cambiarlo después).</span>
+          <span className="hint">Se agregan como costos: el envío se reparte por unidades y el resto por valor (puedes cambiarlo después).</span>
         </div>
       )}
       {money && (nLines > 0 || nCharges > 0) && !badRate && <p className="im-ai-total">Total a agregar: <b>{usd(totalUsd)}</b>{p.total !== null && foreign && <span className="sub"> · factura: {p.total.toLocaleString("en-US")} {currency}</span>}</p>}

@@ -34,6 +34,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Código", imp.code],
     ["Estado", statusInfo(imp.status).label],
     ["Proveedor", imp.supplier],
+    ["N.º de orden", imp.order_ref ?? null],
     ["Origen", imp.origin],
     ["Destino", countryByCode(imp.dest_country)?.name ?? imp.dest_country],
     ["Transporte", transportLabel(imp.transport)],

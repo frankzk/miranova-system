@@ -66,7 +66,7 @@ export async function refreshTracking({ ids, force = false }: { ids?: string[]; 
       const fresh = newEvents(info, r.track_event_at);
       for (const e of fresh) {
         await db().from("import_events").insert({
-          import_id: r.id, status: null, by_user: null, at: e.at,
+          import_id: r.id, status: null, by_user: null, at: e.at, kind: "tracking",
           note: `${r.carrier ?? "Paquetera"}: ${e.text}${e.location ? ` (${e.location})` : ""}`,
         });
       }

@@ -46,6 +46,7 @@ export type ImportHeader = {
   id?: string;
   supplier?: string | null;
   supplier_id?: string | null;
+  order_ref?: string | null;
   origin?: string | null;
   dest_country?: string;
   ordered_at?: string | null;
@@ -86,6 +87,10 @@ function HeaderFields({ v, countries, edit, suppliers }: { v: ImportHeader; coun
       <label className="field">
         <span>Origen <span className="hint">país o ciudad</span></span>
         <input className="input" name="origin" value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={80} placeholder="China, Yiwu…" />
+      </label>
+      <label className="field">
+        <span>N.º de orden <span className="hint">Alibaba u otra plataforma</span></span>
+        <input className="input" name="order_ref" defaultValue={v.order_ref ?? ""} maxLength={60} spellCheck={false} placeholder="Ej.: 240512345678901234" />
       </label>
       {adding && (
         <NewSupplierPopup
@@ -579,10 +584,13 @@ export function RemoveButton({ action, name, value, label = "Quitar", confirmTex
 export function AddCostForm({ action, importId, items }: { action: Action; importId: string; items: { id: string; name: string }[] }) {
   const [state, run] = useActionState(action, null);
   const [kind, setKind] = useState("shipping");
-  const [allocation, setAllocation] = useState("weight");
+  const [allocation, setAllocation] = useState("units");
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (state?.ok) form.current?.reset();
+    if (!state?.ok) return;
+    form.current?.reset();
+    setKind("shipping");
+    setAllocation("units");
   }, [state]);
   return (
     <StickyForm state={state} ref={form} action={run} className="im-form im-cost-form">
@@ -592,8 +600,8 @@ export function AddCostForm({ action, importId, items }: { action: Action; impor
           <span>Tipo</span>
           <select className="select" name="kind" value={kind} onChange={(e) => {
             setKind(e.target.value);
-            // lo normal: el flete por peso; impuestos y adicionales por valor
-            setAllocation(e.target.value === "shipping" ? "weight" : "value");
+            // por defecto: el flete por unidades; impuestos y adicionales por valor
+            setAllocation(e.target.value === "shipping" ? "units" : "value");
           }}>
             {COST_KINDS.map((k) => <option key={k.id} value={k.id} title={k.hint}>{k.label}</option>)}
           </select>
@@ -649,7 +657,7 @@ export function AddPaymentForm({ action, importId }: { action: Action; importId:
       const start = await startImportUpload(importId, "docs", "payment", file.name, file.type, file.size);
       if (!start.ok) return setUpErr(start.msg);
       await put(start.url, file, start.type);
-      const reg = await registerImportDocument(importId, start.path, "payment", file.name);
+      const reg = await registerImportDocument(importId, start.path, "payment", file.name, true);
       if (!reg.ok) return setUpErr(reg.msg);
       setDoc({ id: reg.id, name: file.name });
     } catch {

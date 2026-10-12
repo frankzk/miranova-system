@@ -29,7 +29,7 @@ test("precio en USD con el tipo de cambio; si falta el unitario, total ÷ cantid
   assert.equal(unitUsd(inv.lines[1], 7), 3); // 2520 / 120 / 7
   assert.equal(unitUsd({ unit_price: null, line_total: null, quantity: 3 }, 1), null);
   assert.equal(unitUsd(inv.lines[0], 0), null);
-  assert.equal(chargeAllocation("shipping"), "weight");
+  assert.equal(chargeAllocation("shipping"), "units");
   assert.equal(chargeAllocation("import"), "value");
   assert.equal(wholeQty(120.0000001), 120);
 });
