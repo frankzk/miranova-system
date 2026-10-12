@@ -137,6 +137,14 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                       <td data-slot="id">
                         <Link className="order-no" href={`/imports/${r.id}`}>{r.code}</Link>
                         <div className="sub clip">{r.supplier ?? "Sin proveedor"}{r.order_ref && <> · orden {r.order_ref}</>}</div>
+                        {r.products.length > 0 && (
+                          <ul className="im-prods" aria-label="Productos">
+                            {r.products.slice(0, 3).map((p, i) => (
+                              <li key={i} title={`${p.name} · ${fmtInt(p.qty)} u.`}><span className="q">{fmtInt(p.qty)} u.</span> {p.name}</li>
+                            ))}
+                            {r.products.length > 3 && <li className="more">+{r.products.length - 3} más</li>}
+                          </ul>
+                        )}
                       </td>
                       <td className="nowrap">{countryByCode(r.dest_country)?.name ?? r.dest_country}</td>
                       <td data-slot="status">
