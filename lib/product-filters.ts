@@ -32,7 +32,8 @@ export const VARIANTS = { con: "Con variantes", sin: "Sin variantes" } as const;
 export const PHOTOS = { con: "Con fotos reales", sin: "Sin fotos reales" } as const;
 
 export type ProductFilters = { q: string; tab: string; status?: string; variants?: keyof typeof VARIANTS; photos?: keyof typeof PHOTOS; sort?: ProductSort };
-export type Sales = Record<string, { units: number; orders: number }>;
+/** Por producto: unidades, pedidos y (si la base ya lo da) cuántas tiendas distintas lo vendieron. */
+export type Sales = Record<string, { units: number; orders: number; stores?: number }>;
 
 export function parseProductFilters(sp: Record<string, string | string[] | undefined>): ProductFilters {
   const one = (k: string) => {

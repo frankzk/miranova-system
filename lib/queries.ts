@@ -353,14 +353,31 @@ export async function listProducts(account?: string): Promise<Product[]> {
   return out;
 }
 
-/** Unidades y órdenes por "cuenta:id:<id del producto>", "cuenta:SKU" o "cuenta:nombre" desde una fecha. */
-export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number }>> {
+/** Unidades, órdenes y tiendas por "cuenta:id:<id del producto>", "cuenta:SKU" o "cuenta:nombre" desde una fecha. */
+export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number; stores?: number }>> {
   const { data, error } = await db().rpc("product_sales", {
     p_account: account ?? null,
     p_from: new Date(Date.now() - days * 86_400_000).toISOString(),
   });
   if (error) throw error;
-  return (data ?? {}) as Record<string, { units: number; orders: number }>;
+  return (data ?? {}) as Record<string, { units: number; orders: number; stores?: number }>;
+}
+
+export type ProductStore = { store_id: string; name: string; units: number; orders: number; last_at: string };
+export type ProductStores = { units: number; orders: number; stores: ProductStore[] };
+
+/** Las tiendas que venden un producto del catálogo en los últimos `days` días (product_stores). */
+export async function productStores(p: Pick<Product, "account_id" | "external_id" | "sku" | "name">, days: number): Promise<ProductStores> {
+  const { data, error } = await db().rpc("product_stores", {
+    p_account: p.account_id,
+    p_external_id: p.external_id,
+    p_sku: p.sku,
+    p_name: p.name,
+    p_from: new Date(Date.now() - days * 86_400_000).toISOString(),
+  });
+  if (error) throw error;
+  const d = (data ?? {}) as Partial<ProductStores>;
+  return { units: Number(d.units ?? 0), orders: Number(d.orders ?? 0), stores: (d.stores ?? []).map((s) => ({ ...s, units: Number(s.units), orders: Number(s.orders) })) };
 }
 
 /** Salud de tiendas: métricas por dropshipper (ver supabase/migrations/0010_store_health.sql). */

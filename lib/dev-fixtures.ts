@@ -334,11 +334,38 @@ export function fixtureClient(): any {
       if (name === "money_by_month") return { data: months(args), error: null };
       if (name === "product_sales") {
         const out: Row = {};
-        for (const o of ORDERS) for (const it of o.order_items) {
-          const k = `${o.account_id}:${it.sku ?? it.product_name}`;
-          out[k] = { units: (out[k]?.units ?? 0) + it.quantity, orders: (out[k]?.orders ?? 0) + 1 };
+        const stores = new Map<string, Set<string>>();
+        const from = args.p_from ? Date.parse(args.p_from) : 0;
+        // como la función real: desde p_from, sin cancelados
+        for (const o of ORDERS) for (const it of Date.parse(o.ordered_at) >= from && groupOf(o.status_code) !== "cancelled" && (!args.p_account || o.account_id === args.p_account) ? o.order_items : []) {
+          // en la simulación los SKU de las líneas no son los del catálogo: también por nombre
+          for (const k of new Set([`${o.account_id}:${it.sku ?? it.product_name}`, `${o.account_id}:${it.product_name}`])) {
+            out[k] = { units: (out[k]?.units ?? 0) + it.quantity, orders: (out[k]?.orders ?? 0) + 1 };
+            if (o.dropshipper) stores.set(k, (stores.get(k) ?? new Set()).add(o.dropshipper));
+          }
         }
+        for (const [k, v] of stores) out[k].stores = v.size;
         return { data: out, error: null };
+      }
+      if (name === "product_stores") {
+        // como product_sales: por SKU o nombre (en la simulación las líneas no traen el ID del producto ni su SKU real)
+        const from = Date.parse(args.p_from);
+        const want = new Set([args.p_sku || args.p_name, args.p_name]);
+        const per = new Map<string, Row>();
+        let orders = 0;
+        for (const o of ORDERS) {
+          if (o.account_id !== args.p_account || !o.dropshipper || groupOf(o.status_code) === "cancelled" || Date.parse(o.ordered_at) < from) continue;
+          const lines = o.order_items.filter((it: Row) => want.has(it.sku ?? it.product_name) || it.product_name === args.p_name);
+          if (!lines.length) continue;
+          orders++;
+          const s = per.get(o.dropshipper) ?? { store_id: `name:${o.dropshipper}`, name: o.dropshipper, units: 0, orders: 0, last_at: o.ordered_at };
+          s.units += lines.reduce((t: number, it: Row) => t + it.quantity, 0);
+          s.orders += 1;
+          if (o.ordered_at > s.last_at) s.last_at = o.ordered_at;
+          per.set(o.dropshipper, s);
+        }
+        const stores = [...per.values()].sort((a, b) => b.units - a.units || b.orders - a.orders);
+        return { data: { units: stores.reduce((t, s) => t + s.units, 0), orders, stores }, error: null };
       }
       if (name === "owner_alerts") {
         const hn = ACCOUNTS[0];

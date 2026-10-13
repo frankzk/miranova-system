@@ -5,6 +5,7 @@ import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { FilterSelect } from "@/components/filter-select";
 import { IconClose, IconDownload, IconFilter, IconSearch } from "@/components/icons";
 import { ProductPhotos } from "@/components/product-photos";
+import { ProductStores } from "@/components/product-stores";
 import { ProductsSubnav } from "@/components/products-subnav";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
@@ -219,6 +220,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                               {p.variants_count > 0 && <> · {p.variants_count} variantes</>}
                               {showAccount && p.accounts && <> · {p.accounts.name}</>}
                             </div>
+                            {/* en el teléfono la columna "Vendido" no se ve: lo mismo, aquí */}
+                            {sold?.units ? (
+                              <ProductStores compact productId={p.id} name={p.name} units={sold.units} stores={sold.stores ?? null} sub={[p.accounts?.name, p.code].filter(Boolean).join(" · ")} />
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -235,7 +240,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                           {p.stock === null ? "—" : `${fmtInt(p.stock)} u.`}
                         </span>
                       </td>
-                      <td className="num hide-md hide-sm">{sold ? `${fmtInt(sold.units)} u.` : <span className="subtle">0</span>}</td>
+                      <td className="num hide-md hide-sm">
+                        {sold?.units ? (
+                          <ProductStores productId={p.id} name={p.name} units={sold.units} stores={sold.stores ?? null} sub={[p.accounts?.name, p.code].filter(Boolean).join(" · ")} />
+                        ) : (
+                          <span className="subtle">0</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
