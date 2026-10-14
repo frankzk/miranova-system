@@ -46,17 +46,20 @@ export async function POST(req: NextRequest) {
 
   const captures = Array.isArray(body.batch) ? body.batch : [body];
   let saved = 0;
+  let changed = 0;
   try {
     for (const c of captures) {
       if (c.payload === undefined) continue;
-      saved += await ingestPayload(c.payload, "extension", c.url ?? null, account);
+      const r = await ingestPayload(c.payload, "extension", c.url ?? null, account);
+      saved += r.found;
+      changed += r.changed;
     }
   } catch (e) {
     console.error("ingest error", e);
     return NextResponse.json({ error: "Error guardando pedidos" }, { status: 500, headers: CORS });
   }
 
-  // pedidos nuevos o actualizados: las cifras guardadas en caché ya no corresponden
-  if (saved) refreshSynced();
-  return NextResponse.json({ ok: true, saved }, { headers: CORS });
+  // pedidos nuevos o con cambios: las cifras guardadas en caché ya no corresponden
+  if (changed) refreshSynced();
+  return NextResponse.json({ ok: true, saved, changed }, { headers: CORS });
 }
