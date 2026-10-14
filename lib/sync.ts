@@ -98,20 +98,24 @@ async function loadSession(acc: Account): Promise<Session> {
   return freshSession(acc);
 }
 
-export type SyncResult = { ok: boolean; message: string; saved: number };
+/** `saved`: pedidos revisados; `changed`: pedidos, productos y movimientos que llegaron con cambios. */
+export type SyncResult = { ok: boolean; message: string; saved: number; changed: number };
 
-/** Sincroniza una cuenta y descarta la caché de lo sincronizado (los datos acaban de cambiar). */
+/** Sincroniza una cuenta; si algo cambió, descarta la caché de lo sincronizado. */
 export async function syncAccount(accountId: string, deadline = Date.now() + TIME_BUDGET_MS): Promise<SyncResult> {
+  let changed = true; // ante un error inesperado, mejor descartarla
   try {
-    return await syncAccountData(accountId, deadline);
+    const r = await syncAccountData(accountId, deadline);
+    changed = r.changed > 0;
+    return r;
   } finally {
-    refreshSynced();
+    if (changed) refreshSynced();
   }
 }
 
 async function syncAccountData(accountId: string, deadline: number): Promise<SyncResult> {
   const acc = await getAccount(accountId);
-  if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0 };
+  if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0, changed: 0 };
 
   // Cuenta de dropshipper dedicada a espiar el catálogo: baja solo el catálogo, no órdenes.
   if (acc.catalog_only) return syncCatalogAccount(acc, deadline);
@@ -119,6 +123,8 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
   const c = connectorFor(acc.platform, acc.country, acc.timezone);
   const pageSize = c.pageSize ?? SOYDROP_PAGE_SIZE;
   let saved = 0;
+  let ordersChanged = 0;
+  let changed = 0;
 
   try {
     let session = await loadSession(acc);
@@ -175,7 +181,10 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
         const rows = res.rows ?? found;
         if (rows === 0) break;
         count += found;
-        saved += await ingestPayload(res.payload, "sync", res.url, ctx);
+        const r = await ingestPayload(res.payload, "sync", res.url, ctx);
+        saved += r.found;
+        ordersChanged += r.changed;
+        changed += r.changed;
         if (rows < pageSize) break;
       }
       return count;
@@ -208,15 +217,22 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
           ppath = probe.path;
         }
         let total = 0;
+        let productsChanged = 0;
         for (let page = 1; page <= MAX_PRODUCT_PAGES; page++) {
           const res = await withSession((s) => c.fetchProducts!(s, ppath!, page));
           const items = extractProducts(res.payload);
           if (items.length === 0) break;
-          total += await saveProducts(acc.id, acc.currency, items);
+          const r = await saveProducts(acc.id, acc.currency, items);
+          total += r.found;
+          productsChanged += r.changed;
           if (items.length < SOYDROP_PRODUCTS_PAGE_SIZE) break;
         }
+        changed += productsChanged;
         productsNote = ` · ${total} productos`;
-        await updateAccount(acc.id, { products_sync_at: new Date().toISOString(), products_sync_msg: `${total} productos actualizados` });
+        await updateAccount(acc.id, {
+          products_sync_at: new Date().toISOString(),
+          products_sync_msg: `${total} productos revisados · ${productsChanged} con cambios`,
+        });
         // productos nuevos de importaciones que ya aparecen en el catálogo: se enlazan solos
         await linkNewProducts(acc.id, acc.country).catch((e) => console.error(`importaciones: enlazar productos ${acc.name}`, e));
       } catch (e) {
@@ -242,6 +258,7 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
     if (c.fetchStockMovements && Date.now() < deadline - 60_000) {
       try {
         const added = await syncStockMovements(acc, (fn) => withSession(fn), c.fetchStockMovements.bind(c), deadline - 45_000);
+        changed += added;
         if (added > 0) movesNote = ` · ${added} movimientos de inventario`;
       } catch (e) {
         if (e instanceof SessionExpired) throw e;
@@ -267,18 +284,19 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
       await updateAccount(acc.id, { backfill_cursor: cursor?.toISOString() ?? null });
     }
 
+    const orders = `${saved} pedidos revisados · ${ordersChanged} con cambios`;
     const message = cursor
-      ? `${saved} pedidos actualizados${productsNote} · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
-      : `${saved} pedidos actualizados${productsNote}`;
+      ? `${orders}${productsNote} · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
+      : `${orders}${productsNote}`;
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message });
-    return { ok: true, message, saved };
+    return { ok: true, message, saved, changed };
   } catch (e) {
     const message = e instanceof PlatformError || e instanceof SessionExpired
       ? e.message
       : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
     console.error(`sync ${acc.name}`, e);
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
-    return { ok: false, message, saved };
+    return { ok: false, message, saved, changed };
   }
 }
 
@@ -292,7 +310,7 @@ async function syncCatalogAccount(acc: Account, deadline: number): Promise<SyncR
   if (!c.discoverCatalogPath || !c.fetchCatalog) {
     const message = "Esta plataforma todavía no trae el catálogo de dropshipping.";
     await updateAccount(acc.id, { catalog_sync_msg: message, last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
-    return { ok: false, message, saved: 0 };
+    return { ok: false, message, saved: 0, changed: 0 };
   }
 
   try {
@@ -343,14 +361,14 @@ async function syncCatalogAccount(acc: Account, deadline: number): Promise<SyncR
       last_sync_ok: true,
       last_sync_msg: message,
     });
-    return { ok: true, message, saved: total };
+    return { ok: true, message, saved: total, changed: 0 }; // el catálogo de la competencia no está en la caché
   } catch (e) {
     const message = e instanceof PlatformError || e instanceof SessionExpired
       ? e.message
       : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
     console.error(`catalog sync ${acc.name}`, e);
     await updateAccount(acc.id, { catalog_sync_msg: message, last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
-    return { ok: false, message, saved: 0 };
+    return { ok: false, message, saved: 0, changed: 0 };
   }
 }
 

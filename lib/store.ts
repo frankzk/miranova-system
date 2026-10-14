@@ -3,15 +3,25 @@ import { db } from "./supabase";
 import { extractOrders, normalizeOrder, type NormalizedOrder, type NormalizeOptions } from "./normalize";
 import { extractProducts } from "./products";
 import { pickVendor } from "./catalog";
+import { changedSince } from "./sync-hash";
 
 export type AccountCtx = { id: string; currency: string; timezone: string; geo?: Record<string, string> | null };
 
-/** Guarda (o actualiza) pedidos de una cuenta y reemplaza sus líneas de producto. */
-export async function saveOrders(accountId: string, orders: NormalizedOrder[]): Promise<number> {
+/**
+ * Guarda (o actualiza) pedidos de una cuenta y reemplaza sus líneas de producto. `hashes` es la
+ * huella de lo recibido de Drop por orden; sin ella (al reprocesar) se borra, y la siguiente
+ * sincronización vuelve a escribir esas órdenes una vez.
+ */
+export async function saveOrders(accountId: string, orders: NormalizedOrder[], hashes?: Map<string, string>): Promise<number> {
   if (orders.length === 0) return 0;
   const now = new Date().toISOString();
 
-  const rows = orders.map(({ items: _items, ...o }) => ({ ...o, account_id: accountId, updated_at: now }));
+  const rows = orders.map(({ items: _items, ...o }) => ({
+    ...o,
+    account_id: accountId,
+    updated_at: now,
+    sync_hash: hashes?.get(o.external_id) ?? null,
+  }));
   const { data, error } = await db()
     .from("orders")
     .upsert(rows, { onConflict: "account_id,external_id" })
@@ -66,27 +76,48 @@ async function mergeWithExisting(accountId: string, orders: NormalizedOrder[]): 
 
 const opts = (a: AccountCtx): NormalizeOptions => ({ currency: a.currency, timezone: a.timezone, geo: a.geo });
 
-/** Procesa una respuesta de la plataforma y devuelve cuántos pedidos traía. */
+/**
+ * Las órdenes que llegaron distintas a la última vez (o son nuevas), con su huella. Las demás
+ * no se tocan: cada sincronización revisa ~45 días de pedidos y casi todos siguen igual.
+ */
+async function changedOrders(accountId: string, orders: NormalizedOrder[]): Promise<{ changed: NormalizedOrder[]; hashes: Map<string, string> }> {
+  if (orders.length === 0) return { changed: [], hashes: new Map() };
+  const stored = await storedHashes("orders", accountId, orders.map((o) => o.external_id));
+  return changedSince(orders, (o) => o.external_id, stored);
+}
+
+/** Huella guardada de cada fila (por su id en Drop) de una cuenta. */
+async function storedHashes(table: "orders" | "products", accountId: string, externalIds: string[]): Promise<Map<string, string | null>> {
+  const { data, error } = await db().from(table).select("external_id, sync_hash").eq("account_id", accountId).in("external_id", externalIds);
+  if (error) throw error;
+  return new Map(data.map((r) => [r.external_id as string, r.sync_hash as string | null]));
+}
+
+export type IngestResult = { found: number; changed: number };
+
+/** Procesa una respuesta de la plataforma: cuántos pedidos traía y cuántos cambiaron. */
 export async function ingestPayload(
   payload: unknown,
   source: "extension" | "sync",
   sourceUrl: string | null,
   account: AccountCtx,
-): Promise<number> {
-  const orders = await mergeWithExisting(account.id, extractOrders(payload, opts(account)));
-  const saved = await saveOrders(account.id, orders);
+): Promise<IngestResult> {
+  const found = extractOrders(payload, opts(account));
+  const fresh = await changedOrders(account.id, found);
+  const orders = await mergeWithExisting(account.id, fresh.changed);
+  const changed = await saveOrders(account.id, orders, fresh.hashes);
 
   // la respuesta completa solo se guarda desde la extensión (para revisar el mapeo); la de cada
   // página de la sincronización llegó a ocupar casi toda la base y nadie la lee
   const log = await db().from("ingest_log").insert({
     source,
     source_url: sourceUrl,
-    orders_found: saved,
+    orders_found: found.length,
     payload: source === "sync" ? null : payload,
     account_id: account.id,
   });
   if (log.error) console.error("ingest_log", log.error);
-  return saved;
+  return { found: found.length, changed };
 }
 
 const INGEST_LOG_DAYS = 14;
@@ -126,18 +157,23 @@ export async function reprocessAll(): Promise<number> {
   return total;
 }
 
-/** Guarda (o actualiza) el catálogo de productos de una cuenta. */
+/** Guarda (o actualiza) el catálogo de productos de una cuenta; solo escribe los que cambiaron. */
 export async function saveProducts(
   accountId: string,
   currency: string,
   products: import("./products").NormalizedProduct[],
-): Promise<number> {
-  if (products.length === 0) return 0;
+): Promise<IngestResult> {
+  if (products.length === 0) return { found: 0, changed: 0 };
   const now = new Date().toISOString();
-  const rows = products.map((p) => ({ ...p, account_id: accountId, currency: p.currency ?? currency, updated_at: now }));
-  const { error } = await db().from("products").upsert(rows, { onConflict: "account_id,external_id" });
-  if (error) throw error;
-  return products.length;
+  const rows = products.map((p) => ({ ...p, account_id: accountId, currency: p.currency ?? currency }));
+  const stored = await storedHashes("products", accountId, rows.map((r) => r.external_id));
+  const { changed, hashes } = changedSince(rows, (r) => r.external_id, stored);
+  if (changed.length) {
+    const upd = changed.map((r) => ({ ...r, sync_hash: hashes.get(r.external_id), updated_at: now }));
+    const { error } = await db().from("products").upsert(upd, { onConflict: "account_id,external_id" });
+    if (error) throw error;
+  }
+  return { found: products.length, changed: changed.length };
 }
 
 const numOrNull = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
