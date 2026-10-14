@@ -2,13 +2,15 @@ import "server-only";
 import { IN_DROP, INBOUND, importOrders, type SupplyImport, type SupplyItem } from "./imports";
 import { NO_SUPPLY, productKey, type InventoryRow, type Restock, type RestockOrder, type Supply } from "./inventory";
 import { db } from "./supabase";
+import { synced } from "./synced-cache";
 
 /** Inventario por producto (ver supabase/migrations/0018_inventory_status.sql). */
-export async function inventoryStatus(account?: string): Promise<InventoryRow[]> {
+async function inventoryStatusQuery(account?: string): Promise<InventoryRow[]> {
   const { data, error } = await db().rpc("inventory_status", { p_account: account ?? null });
   if (error) throw error;
   return (data ?? []) as InventoryRow[];
 }
+export const inventoryStatus = synced("inventory_status", inventoryStatusQuery);
 
 // tabla que todavía no existe (migración 0027 sin aplicar): el inventario se ve igual, sin pedidos
 const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === "PGRST205";

@@ -9,6 +9,7 @@ import { extractProducts } from "./products";
 import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
+import { refreshSynced } from "./synced-cache";
 import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
 import { ingestPayload, purgeIngestLog, saveCatalog, saveProducts, type AccountCtx } from "./store";
@@ -99,7 +100,16 @@ async function loadSession(acc: Account): Promise<Session> {
 
 export type SyncResult = { ok: boolean; message: string; saved: number };
 
+/** Sincroniza una cuenta y descarta la caché de lo sincronizado (los datos acaban de cambiar). */
 export async function syncAccount(accountId: string, deadline = Date.now() + TIME_BUDGET_MS): Promise<SyncResult> {
+  try {
+    return await syncAccountData(accountId, deadline);
+  } finally {
+    refreshSynced();
+  }
+}
+
+async function syncAccountData(accountId: string, deadline: number): Promise<SyncResult> {
   const acc = await getAccount(accountId);
   if (!acc) return { ok: false, message: "Cuenta no encontrada", saved: 0 };
 

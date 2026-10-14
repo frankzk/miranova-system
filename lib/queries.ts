@@ -1,6 +1,6 @@
 import "server-only";
-import { memo } from "./memo";
 import { db } from "./supabase";
+import { synced } from "./synced-cache";
 import type { OwnerAlerts } from "./alerts";
 import type { BusinessOverview } from "./business";
 import { groupById, lateDispatchCutoff, UNDISPATCHED_CODES } from "./status";
@@ -111,8 +111,14 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
 // Evita que caracteres del buscador rompan el filtro `or` de PostgREST
 const clean = (s: string) => s.replace(/[,()*%\\]/g, " ").trim();
 
-const ORDER_SELECT =
-  "*, accounts(name, country, timezone), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)";
+const ORDER_EMBEDS = "accounts(name, country, timezone), order_items(product_name, quantity, price, vendor_price, sku, image_url, position)";
+// Las listas no traen `raw` (la respuesta completa de Drop, ~80% de cada fila): solo la usa el detalle.
+const ORDER_COLUMNS =
+  "id, external_id, shopify_order, status, dropshipper, customer_name, customer_email, customer_phone, department, city, address, " +
+  "reference_point, notes, carrier, tracking_number, total, currency, ordered_at, first_seen_at, updated_at, account_id, status_code, " +
+  "tracking_url, label_url, shipping_cost, vendor_amount, vendor_net, cod, paid, store_id";
+const ORDER_LIST_SELECT = `${ORDER_COLUMNS}, ${ORDER_EMBEDS}`;
+const ORDER_SELECT = `*, ${ORDER_EMBEDS}`;
 
 // Filtro por producto: un embed aparte (`pf`, inner) filtra las órdenes sin recortar `order_items`.
 const PRODUCT_EMBED = ", pf:order_items!inner(product_name)";
@@ -144,7 +150,7 @@ function filtered(f: Filters, count = false) {
   const sort = SORTS[f.sort ?? "recent"];
   let query = db()
     .from("orders")
-    .select((ORDER_SELECT + (f.product ? PRODUCT_EMBED : "")) as "*", count ? { count: "exact" } : undefined)
+    .select((ORDER_LIST_SELECT + (f.product ? PRODUCT_EMBED : "")) as "*", count ? { count: "exact" } : undefined)
     .order(sort.col, { ascending: sort.asc, nullsFirst: false })
     .order("id", { ascending: sort.asc });
 
@@ -197,12 +203,14 @@ export type Facets = {
   products: { name: string; n: number }[];
 };
 
-export async function orderFacets(account?: string): Promise<Facets> {
+async function orderFacetsQuery(account?: string): Promise<Facets> {
   const { data, error } = await db().rpc("order_facets", { p_account: account ?? null });
   if (error) throw error;
   const d = data as Partial<Facets>;
   return { dropshippers: [], carriers: [], statuses: [], departments: [], products: [], ...d };
 }
+/** Filtros de Órdenes (tiendas, paqueteras, estados…): cambian solo al sincronizar. */
+export const orderFacets = synced("order_facets", orderFacetsQuery);
 
 export type MoneyRow = {
   currency: string;
@@ -284,7 +292,7 @@ export async function attentionOrders(account?: string, limit = 7) {
 export async function unpaidDelivered(account?: string, limit = 12) {
   let q = db()
     .from("orders")
-    .select(ORDER_SELECT, { count: "exact" })
+    .select(ORDER_LIST_SELECT as "*", { count: "exact" })
     .in("status_code", groupById("delivered")!.codes)
     .or("paid.is.null,paid.eq.false")
     .order("ordered_at", { ascending: true })
@@ -354,7 +362,7 @@ export async function listProducts(account?: string): Promise<Product[]> {
 }
 
 /** Unidades, órdenes y tiendas por "cuenta:id:<id del producto>", "cuenta:SKU" o "cuenta:nombre" desde una fecha. */
-export async function productSales(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number; stores?: number }>> {
+async function productSalesQuery(account: string | undefined, days: number): Promise<Record<string, { units: number; orders: number; stores?: number }>> {
   const { data, error } = await db().rpc("product_sales", {
     p_account: account ?? null,
     p_from: new Date(Date.now() - days * 86_400_000).toISOString(),
@@ -362,6 +370,7 @@ export async function productSales(account: string | undefined, days: number): P
   if (error) throw error;
   return (data ?? {}) as Record<string, { units: number; orders: number; stores?: number }>;
 }
+export const productSales = synced("product_sales", productSalesQuery);
 
 export type ProductStore = { store_id: string; name: string; units: number; orders: number; last_at: string };
 export type ProductStores = { units: number; orders: number; stores: ProductStore[] };
@@ -381,7 +390,7 @@ export async function productStores(p: Pick<Product, "account_id" | "external_id
 }
 
 /** Salud de tiendas: métricas por dropshipper (ver supabase/migrations/0010_store_health.sql). */
-export async function storeHealth(account?: string): Promise<import("./stores").StoreRow[]> {
+async function storeHealthQuery(account?: string): Promise<import("./stores").StoreRow[]> {
   const { data, error } = await db().rpc("store_health", { p_account: account ?? null });
   if (error) throw error;
   return (data ?? []) as import("./stores").StoreRow[];
@@ -400,21 +409,19 @@ export async function storePeriod(opts: { account?: string; from: Date; to: Date
   return (data ?? []) as import("./stores").StorePeriod[];
 }
 
-/**
- * Salud de tiendas con memoria de 1 minuto (la consulta tarda ~0.4 s y los pedidos se
- * sincronizan cada 10 min): abrir y cerrar el panel de varias tiendas no la repite.
- */
-export const storeHealthRecent = (account?: string) => memo(`store_health:${account ?? "*"}`, 60_000, () => storeHealth(account));
+/** Guardada hasta la próxima sincronización: abrir y cerrar el panel de varias tiendas no la repite. */
+export const storeHealth = synced("store_health", storeHealthQuery);
 
 /** "Atención del dueño": hallazgos del día calculados en la base (owner_alerts). */
-export async function ownerAlerts(account?: string): Promise<OwnerAlerts> {
+async function ownerAlertsQuery(account?: string): Promise<OwnerAlerts> {
   const { data, error } = await db().rpc("owner_alerts", { p_account: account ?? null });
   if (error) throw error;
   return (data ?? { total: 0, alerts: [] }) as OwnerAlerts;
 }
+export const ownerAlerts = synced("owner_alerts", ownerAlertsQuery);
 
 /** Vista "Negocio": países, flujo de tiendas, productos y operación (business_overview). */
-export async function businessOverview(opts: { account?: string; days: number; country?: string }): Promise<BusinessOverview> {
+async function businessOverviewQuery(opts: { account?: string; days: number; country?: string }): Promise<BusinessOverview> {
   const { data, error } = await db().rpc("business_overview", {
     p_account: opts.account ?? null,
     p_days: opts.days,
@@ -423,3 +430,5 @@ export async function businessOverview(opts: { account?: string; days: number; c
   if (error) throw error;
   return data as BusinessOverview;
 }
+export const businessOverview = synced("business_overview", (opts: { account?: string; days: number; country?: string }) =>
+  businessOverviewQuery({ account: opts.account, days: opts.days, country: opts.country }));

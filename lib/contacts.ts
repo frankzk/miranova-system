@@ -1,16 +1,17 @@
 import "server-only";
-import { memo } from "./memo";
 import { db } from "./supabase";
+import { synced } from "./synced-cache";
 import { suggestLinks, type ContactLink, type DirectoryStore, type StoreContact, type Suggestion } from "./store-contacts";
 
 export type { ContactLink, DirectoryStore, StoreContact, Suggestion } from "./store-contacts";
 
 /** Todas las tiendas de todas las cuentas (nombre y responsable más recientes). */
-export async function storeDirectory(): Promise<DirectoryStore[]> {
+async function storeDirectoryQuery(): Promise<DirectoryStore[]> {
   const { data, error } = await db().rpc("store_directory");
   if (error) throw error;
   return ((data ?? []) as DirectoryStore[]).map((s) => ({ ...s, orders90: Number(s.orders90) }));
 }
+export const storeDirectory = synced("store_directory", storeDirectoryQuery);
 
 export async function contactLinks(): Promise<ContactLink[]> {
   const { data, error } = await db().from("store_contact_links").select("account_id, store_id, contact_id, store_name");
@@ -44,14 +45,12 @@ export type StoreProfile = {
   email: string | null;
 };
 
-/** Perfiles de todas las tiendas (recorre todos los pedidos: memoria de 1 minuto). */
-export function storeProfiles(): Promise<StoreProfile[]> {
-  return memo("store_profiles", 60_000, async () => {
-    const { data, error } = await db().rpc("store_profiles");
-    if (error) throw error;
-    return ((data ?? []) as StoreProfile[]).map((p) => ({ ...p, orders: Number(p.orders) }));
-  });
-}
+/** Perfiles de todas las tiendas (recorre todos los pedidos: se guarda hasta la próxima sincronización). */
+export const storeProfiles = synced("store_profiles", async (): Promise<StoreProfile[]> => {
+  const { data, error } = await db().rpc("store_profiles");
+  if (error) throw error;
+  return ((data ?? []) as StoreProfile[]).map((p) => ({ ...p, orders: Number(p.orders) }));
+});
 
 export type StoreContactView = {
   self: DirectoryStore | null;
@@ -65,13 +64,13 @@ export type StoreContactView = {
 
 /** Contacto de una tienda, las otras operaciones del mismo dueño y sugerencias para vincular. */
 export async function storeContactView(accountId: string, storeId: string): Promise<StoreContactView> {
-  // el directorio recorre todos los pedidos (~0.2 s): memoria de 1 minuto; los contactos, siempre al día
+  // el directorio sale de la caché de lo sincronizado; los contactos, siempre al día
   // el correo detectado es un extra: si su consulta falla, el panel se muestra igual
   const profilesOrNone = storeProfiles().catch((e) => {
     console.error("store_profiles", e);
     return [] as StoreProfile[];
   });
-  const [directory, links, profiles] = await Promise.all([memo("store_directory", 60_000, storeDirectory), contactLinks(), profilesOrNone]);
+  const [directory, links, profiles] = await Promise.all([storeDirectory(), contactLinks(), profilesOrNone]);
   const self = directory.find((s) => s.account_id === accountId && s.store_id === storeId) ?? null;
   const mine = links.find((l) => l.account_id === accountId && l.store_id === storeId);
   const contact = mine ? (await contactsById([mine.contact_id])).get(mine.contact_id) ?? null : null;

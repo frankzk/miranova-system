@@ -15,7 +15,7 @@ import { allStoreOpportunities, inventoryItems, OPP_GROUPS, productItems, sortOp
 import { can, permissionFlags, type PermissionFlags } from "@/lib/permissions";
 import { productInsights } from "@/lib/product-insights";
 import { productPerformance } from "@/lib/product-performance";
-import { storeHealthRecent } from "@/lib/queries";
+import { storeHealth } from "@/lib/queries";
 import { getScope } from "@/lib/scope";
 import { storeHref } from "@/lib/store-links";
 import { daysBetween, fmtDay, FOLLOWUP_STATUS } from "@/lib/store-metrics";
@@ -38,7 +38,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const scope = await getScope(accounts);
   // seguimientos y contactos son de Tiendas: sin ese permiso ni se cargan
   const [stores, followups, products, matrix, inventory, contacts, supply] = await Promise.all([
-    storeHealthRecent(scope.account),
+    storeHealth(scope.account),
     can(user, "stores") ? pendingFollowups(scope.account) : Promise.resolve([] as Followup[]),
     productPerformance(scope.account),
     storeProductMatrix(scope.account, 30),

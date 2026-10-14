@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidIngestKey } from "@/lib/auth";
 import { ingestPayload } from "@/lib/store";
+import { refreshSynced } from "@/lib/synced-cache";
 import { db } from "@/lib/supabase";
 
 // Recibe las respuestas JSON de Drop que captura la extensión de Chrome.
@@ -55,5 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error guardando pedidos" }, { status: 500, headers: CORS });
   }
 
+  // pedidos nuevos o actualizados: las cifras guardadas en caché ya no corresponden
+  if (saved) refreshSynced();
   return NextResponse.json({ ok: true, saved }, { headers: CORS });
 }
