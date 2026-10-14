@@ -72,6 +72,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   };
   const without = (key: string) => productQuery(pf, { [key]: undefined });
   const exportQs = productQuery(pf);
+  const exportHref = (format: "xlsx" | "csv") => `/api/export/products?${exportQs ? `${exportQs}&` : ""}format=${format}`;
 
   // opciones de los filtros por columna
   const statusCounts = new Map<string, number>();
@@ -113,9 +114,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         title="Productos"
         sub={<>{fmtInt(all.length)} en el catálogo · {scope.label}{lastSync && <> · actualizado {fmtAgo(lastSync)}</>}</>}
         actions={canExport && all.length > 0 && (
-          <a className="btn" href={`/api/export/products${exportQs ? `?${exportQs}` : ""}`}>
-            <IconDownload /> Exportar CSV
-          </a>
+          <>
+            <a className="btn" href={exportHref("xlsx")} download title="Descargar en Excel (.xlsx), con los filtros aplicados">
+              <IconDownload /> Descargar Excel
+            </a>
+            <a className="btn btn-ghost" href={exportHref("csv")} download title="Los mismos datos en CSV">CSV</a>
+          </>
         )}
       />
 
