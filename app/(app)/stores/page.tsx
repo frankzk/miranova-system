@@ -14,7 +14,7 @@ import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { storeHealthRecent, storePeriod } from "@/lib/queries";
+import { storeHealth, storePeriod } from "@/lib/queries";
 import { RANGES } from "@/lib/ranges";
 import { periodParams, periodUnit, prevPhrase, STORES_RANGE, storePeriodChoice } from "@/lib/store-period";
 import { getScope } from "@/lib/scope";
@@ -54,7 +54,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const pc = storePeriodChoice(sp, scope.tz);
   const { range, custom, days } = pc;
   const [healthRows, contacts, followups, period] = await Promise.all([
-    storeHealthRecent(scope.account),
+    storeHealth(scope.account),
     contactIndex(),
     followupIndex(),
     custom ? storePeriod({ account: scope.account, from: range.from, to: range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,

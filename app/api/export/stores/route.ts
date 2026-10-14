@@ -3,7 +3,7 @@ import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeDirectory, storeProfiles } from "@/lib/contacts";
 import { followupIndex } from "@/lib/followups";
-import { storeHealthRecent, storePeriod } from "@/lib/queries";
+import { storeHealth, storePeriod } from "@/lib/queries";
 import { prevPhrase, storePeriodChoice } from "@/lib/store-period";
 import { getScope } from "@/lib/scope";
 import { formatPhone, storeEmail, whatsappChat } from "@/lib/store-contacts";
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   const pc = storePeriodChoice(params, scope.tz);
 
   const [healthRows, contacts, directory, followups, profiles, period] = await Promise.all([
-    storeHealthRecent(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account), storeProfiles(),
+    storeHealth(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account), storeProfiles(),
     pc.custom ? storePeriod({ account: scope.account, from: pc.range.from, to: pc.range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,
   ]);
   const all = period ? withPeriodStores(healthRows, period) : healthRows;
