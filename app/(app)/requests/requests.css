@@ -1,0 +1,46 @@
+/* Solicitudes de tiendas (usa además las clases im-* de importaciones para formularios y tabla) */
+
+.rq-filters { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.rq-filters .chips { margin: 0; flex: 1 1 auto; min-width: 0; }
+.rq-search { flex: 0 1 280px; min-width: 200px; }
+
+.rq-demand { margin-bottom: 14px; }
+.rq-demand-list { list-style: none; margin: 0; padding: 8px 18px 14px; display: grid; gap: 2px; }
+.rq-demand-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name units" "meta meta";
+  gap: 0 12px; padding: 7px 0; border-top: 1px solid var(--line);
+}
+.rq-demand-list li:first-child { border-top: 0; }
+.rq-d-name { grid-area: name; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rq-d-units { grid-area: units; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink-2); }
+.rq-d-units b { color: var(--ink); font-weight: 650; }
+.rq-d-meta { grid-area: meta; font-size: var(--t-xs); color: var(--ink-3); }
+
+.rq-table .rq-notes { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rq-countries-cell { font-size: var(--t-sm); color: var(--ink-2); }
+.rq-status { display: grid; gap: 4px; }
+.rq-status .select { height: 30px; min-width: 124px; font-weight: 550; }
+.rq-status .select[data-status="pending"] { color: var(--warning); }
+.rq-status .select[data-status="in_progress"] { color: var(--info); }
+.rq-status .select[data-status="done"] { color: var(--success); }
+.rq-status .select[data-status="dropped"] { color: var(--ink-3); }
+
+/* formulario */
+.rq-hint { margin: -4px 0 0; font-size: var(--t-xs); color: var(--success); }
+.rq-countries { border: 0; padding: 0; margin: 0; min-width: 0; }
+.rq-countries legend { display: flex; align-items: center; gap: 6px; padding: 0; margin-bottom: 6px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.rq-countries legend .hint { font-size: var(--t-xs); color: var(--ink-3); font-weight: 400; }
+.rq-all { margin-left: auto; border: 0; background: none; padding: 2px 4px; font: inherit; font-size: var(--t-xs); font-weight: 550; color: var(--accent-ink); cursor: pointer; border-radius: var(--r); }
+.rq-all:hover { text-decoration: underline; }
+.rq-country-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.rq-country {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 10px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--bg-surface); font-size: var(--t-sm); cursor: pointer; user-select: none;
+}
+.rq-country[data-on] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-ink); font-weight: 550; }
+.rq-country input { margin: 0; accent-color: var(--accent); }
+
+@media (max-width: 640px) {
+  .rq-search { flex: 1 1 100%; }
+  .rq-table .rq-notes { max-width: none; white-space: normal; }
+}

@@ -140,3 +140,6 @@ export const IconPlay = (p: P) => (
 export const IconShip = (p: P) => (
   <Svg {...p}><path d="M2 10.5h12l-1.6 2.8a.5.5 0 0 1-.4.2H4a.5.5 0 0 1-.4-.2L2 10.5Z" /><path d="M3.5 10.5v-4h9v4" /><path d="M6 6.5V4h4v2.5" /><path d="M8 4V2" /></Svg>
 );
+export const IconInbox = (p: P) => (
+  <Svg {...p}><path d="M2.5 9 4.2 3.5h7.6L13.5 9v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V9Z" /><path d="M2.5 9h3l.8 1.5h3.4l.8-1.5h3" /></Svg>
+);

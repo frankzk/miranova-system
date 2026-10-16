@@ -9,9 +9,10 @@ export const PERMISSIONS = [
   { key: "products", label: "Productos", hint: "Catálogo, rendimiento, inventario y tienda × producto" },
   { key: "photos", label: "Fotos", hint: "Subir y borrar fotos y videos reales de productos (verlas y descargarlas va con Productos)" },
   { key: "imports", label: "Importaciones", hint: "Registrar importaciones: productos, guías, documentos y estados (costos y pagos, solo con Dinero)" },
+  { key: "requests", label: "Solicitudes", hint: "Lo que piden las tiendas (producto, cantidad y países): verlas, cargarlas y cambiar su estado" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
-  { key: "export", label: "Exportar", hint: "Descargar órdenes y catálogo en CSV" },
+  { key: "export", label: "Exportar", hint: "Descargar órdenes, catálogo y solicitudes en Excel o CSV" },
   { key: "accounts", label: "Cuentas", hint: "Cuentas de Drop y Dropi: accesos, sincronización y mantenimiento" },
   { key: "users", label: "Usuarios", hint: "Crear usuarios, cambiar sus permisos y restablecer contraseñas" },
 ] as const;
