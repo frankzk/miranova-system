@@ -10,6 +10,7 @@ import { extractMovements } from "./stock-movements";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./supabase";
 import { refreshSynced } from "./synced-cache";
+import { rangeChunks } from "./sync-ranges";
 import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
 import { ingestPayload, purgeIngestLog, saveCatalog, saveProducts, type AccountCtx } from "./store";
@@ -19,7 +20,7 @@ const DAY = 86_400_000;
 const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
 const WINDOW_DAYS = 30; // el historial se baja por ventanas de un mes
 const HISTORY_LIMIT_DAYS = 548; // no ir más atrás de ~18 meses
-const MAX_PAGES_PER_WINDOW = 60;
+const MAX_PAGES_PER_CHUNK = 200; // por tramo de una semana (ver lib/sync-ranges.ts): hasta 20,000 pedidos
 const MAX_PRODUCT_PAGES = 50;
 const TIME_BUDGET_MS = 240_000; // la función tiene 300 s; dejamos margen
 const GEO_MAX_AGE_MS = 7 * DAY;
@@ -125,6 +126,7 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
   let saved = 0;
   let ordersChanged = 0;
   let changed = 0;
+  let capped = 0; // tramos que llegaron al tope de páginas (quedaron pedidos sin revisar)
 
   try {
     let session = await loadSession(acc);
@@ -172,10 +174,15 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
 
     const ctx: AccountCtx = { id: acc.id, currency: acc.currency, timezone: acc.timezone, geo };
 
-    /** Baja todas las páginas de un rango de fechas. Devuelve cuántas órdenes había. */
-    const syncRange = async (from: Date, to: Date): Promise<number> => {
+    /** Baja todas las páginas de un tramo de fechas. Devuelve cuántas órdenes había. */
+    const syncChunk = async (from: Date, to: Date): Promise<number> => {
       let count = 0;
-      for (let page = 1; page <= MAX_PAGES_PER_WINDOW; page++) {
+      for (let page = 1; ; page++) {
+        if (page > MAX_PAGES_PER_CHUNK) {
+          capped++;
+          console.warn(`sync ${acc.name}: tramo ${from.toISOString()}–${to.toISOString()} llegó al tope de ${MAX_PAGES_PER_CHUNK} páginas`);
+          break;
+        }
         const res = await withSession((s) => c.fetchOrders(s, path!, page, { from, to }));
         const found = extractOrders(res.payload).length;
         const rows = res.rows ?? found;
@@ -187,6 +194,13 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
         changed += r.changed;
         if (rows < pageSize) break;
       }
+      return count;
+    };
+
+    /** Un rango de fechas, por tramos de una semana del más nuevo al más viejo (Drop entrega del más viejo al más nuevo). */
+    const syncRange = async (from: Date, to: Date): Promise<number> => {
+      let count = 0;
+      for (const ch of rangeChunks(from, to)) count += await syncChunk(ch.from, ch.to);
       return count;
     };
 
@@ -284,7 +298,7 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
       await updateAccount(acc.id, { backfill_cursor: cursor?.toISOString() ?? null });
     }
 
-    const orders = `${saved} pedidos revisados · ${ordersChanged} con cambios`;
+    const orders = `${saved} pedidos revisados · ${ordersChanged} con cambios${capped ? ` · ⚠ ${capped} ${capped === 1 ? "tramo llegó" : "tramos llegaron"} al tope de páginas` : ""}`;
     const message = cursor
       ? `${orders}${productsNote} · cargando historial (hasta ${cursor.toISOString().slice(0, 10)}), continúa en la próxima sincronización`
       : `${orders}${productsNote}`;
