@@ -65,7 +65,10 @@ export const fixtures: FixtureModule = {
     import_payments: [
       { id: "c3000000-0000-4000-8000-000000000001", import_id: A, paid_at: date(-12), amount: 600, method: "Transferencia", note: "Anticipo", document_id: null, created_by: OWNER, created_at: iso(-12) },
     ],
-    import_documents: [],
+    import_documents: [
+      // la importación en tránsito ya tiene su factura comercial; las demás no
+      { id: "c3000000-0000-4000-8000-000000000001", import_id: A, kind: "invoice", storage_path: `imports/${A}/docs/factura.pdf`, filename: "factura-comercial.pdf", content_type: "application/pdf", size_bytes: 182_000, uploaded_by: OWNER, created_at: iso(-9) },
+    ],
     import_events: [
       { id: "c4000000-0000-4000-8000-000000000001", import_id: A, status: "quote", note: "Importación creada", by_user: OWNER, at: iso(-12) },
       { id: "c4000000-0000-4000-8000-000000000002", import_id: A, status: "paid", note: "Anticipo del 50 %", by_user: OWNER, at: iso(-11) },

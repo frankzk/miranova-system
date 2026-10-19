@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  allInDrop, dropState, goodUnits, importFileProblem, importOrders, importsDigest, isImportFilePath, landedCosts, marginOf, matchNewProduct,
+  allInDrop, dropState, goodUnits, importChecklist, importFileProblem, importOrders, importsDigest, isImportFilePath, landedCosts, marginOf, matchNewProduct,
   needsReport, nextCode, receptionSummary, recoveryShare, trackingUrl, whatsappMessage, type DropState,
 } from "./imports.ts";
 import { trackOrders } from "./inventory.ts";
@@ -212,4 +212,13 @@ test("resumen diario: atrasadas, llegan esta semana y sin avisar a la bodega", (
   assert.deepEqual(d.late.map((i) => i.code), ["A"]);
   assert.deepEqual(d.week.map((i) => i.code), ["C", "B"]);
   assert.deepEqual(d.unreported.map((i) => i.code), ["A", "C"]);
+});
+
+test("checklist: factura comercial subida y tracking (número o guía subida)", () => {
+  const done = (docs: string[], tracking_number: string | null) => importChecklist({ docs, tracking_number }).map((c) => [c.id, c.done]);
+  assert.deepEqual(done([], null), [["invoice", false], ["tracking", false]]);
+  // la proforma no cuenta como factura comercial; un número vacío no es tracking
+  assert.deepEqual(done(["proforma", "payment"], "  "), [["invoice", false], ["tracking", false]]);
+  assert.deepEqual(done(["invoice"], "DHL 9579399841"), [["invoice", true], ["tracking", true]]);
+  assert.deepEqual(done(["tracking"], null), [["invoice", false], ["tracking", true]]);
 });

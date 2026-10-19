@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { RowLink } from "@/components/client";
-import { IconPlus } from "@/components/icons";
+import { IconCheck, IconPlus } from "@/components/icons";
 import { NewImportForm } from "@/components/import-forms";
 import { ImportsSubnav } from "@/components/imports-subnav";
 import { SideSheet } from "@/components/side-sheet";
@@ -9,7 +9,7 @@ import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
-import { ARRIVED, isActive, isLate, needsReport, staleDays, statusInfo, trackingUrl } from "@/lib/imports";
+import { ARRIVED, importChecklist, isActive, isLate, needsReport, staleDays, statusInfo, trackingUrl } from "@/lib/imports";
 import { listImports, listSuppliers } from "@/lib/imports-data";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
 import { can } from "@/lib/permissions";
@@ -137,6 +137,7 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                       <td data-slot="id">
                         <Link className="order-no" href={`/imports/${r.id}`}>{r.code}</Link>
                         <div className="sub clip">{r.supplier ?? "Sin proveedor"}{r.order_ref && <> · orden {r.order_ref}</>}</div>
+                        {r.status !== "cancelled" && <Checklist r={r} />}
                         {r.products.length > 0 && (
                           <ul className="im-prods" aria-label="Productos">
                             {r.products.slice(0, 3).map((p, i) => (
@@ -175,5 +176,22 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
         )}
       </div>
     </div>
+  );
+}
+
+/** Lo imprescindible de la importación: verde con check si ya está, gris si falta (abre Documentos). */
+function Checklist({ r }: { r: { id: string; docs: string[]; tracking_number: string | null } }) {
+  return (
+    <ul className="im-check" aria-label="Documentos clave">
+      {importChecklist(r).map((c) => (
+        <li key={c.id} data-done={c.done || undefined}>
+          {c.done ? (
+            <span title={`${c.label}: listo`}><IconCheck aria-hidden /> {c.label}</span>
+          ) : (
+            <Link href={`/imports/${r.id}#im-docs`} title={c.missing}><span className="o" aria-hidden /> {c.label}<span className="sr-only"> (falta)</span></Link>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
