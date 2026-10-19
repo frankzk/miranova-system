@@ -93,6 +93,8 @@ export type ImportSummary = ImportRow & {
   last_event_at: string | null;
   /** productos de la importación en su orden (para verlos en la lista) */
   products: { name: string; qty: number }[];
+  /** tipos de documento ya subidos (para el checklist de la lista) */
+  docs: string[];
 };
 
 /** Última novedad (cambio de estado, nota, aviso) de cada importación. */
@@ -109,14 +111,15 @@ async function lastEvents(): Promise<Map<string, string>> {
 
 /** Todas las importaciones, las más nuevas primero, con unidades, costo total, lo pagado y su última novedad. */
 export async function listImports(): Promise<ImportSummary[]> {
-  const [imp, it, co, pa, last] = await Promise.all([
+  const [imp, it, co, pa, last, dc] = await Promise.all([
     db().from("imports").select("*").order("created_at", { ascending: false }),
     db().from("import_items").select("id, import_id, name, position, qty, unit_cost, unit_weight_kg, received_qty, damaged_qty").order("position"),
     db().from("import_costs").select("import_id, kind, amount, allocation, item_id"),
     db().from("import_payments").select("import_id, amount"),
     lastEvents(),
+    db().from("import_documents").select("import_id, kind"),
   ]);
-  for (const r of [imp, it, co, pa]) if (r.error) throw r.error;
+  for (const r of [imp, it, co, pa, dc]) if (r.error) throw r.error;
   const group = <T extends { import_id: string }>(rows: T[]) => {
     const m = new Map<string, T[]>();
     for (const r of rows) m.set(r.import_id, [...(m.get(r.import_id) ?? []), r]);
@@ -125,6 +128,7 @@ export async function listImports(): Promise<ImportSummary[]> {
   const byItems = group(items((it.data ?? []) as ImportItem[]));
   const byCosts = group(costs((co.data ?? []) as ImportCost[]));
   const byPaid = group((pa.data ?? []) as { import_id: string; amount: number }[]);
+  const byDocs = group((dc.data ?? []) as { import_id: string; kind: string }[]);
   return ((imp.data ?? []) as ImportRow[]).map((r) => {
     const li = byItems.get(r.id) ?? [];
     const lc = landedCosts(li, byCosts.get(r.id) ?? []);
@@ -137,6 +141,7 @@ export async function listImports(): Promise<ImportSummary[]> {
       paid: (byPaid.get(r.id) ?? []).reduce((t, p) => t + Number(p.amount), 0),
       last_event_at: last.get(r.id) ?? null,
       products: li.map((i) => ({ name: i.name, qty: i.qty })),
+      docs: [...new Set((byDocs.get(r.id) ?? []).map((d) => d.kind))],
     };
   });
 }

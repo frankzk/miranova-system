@@ -201,3 +201,14 @@
 .im-prods li { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
 .im-prods .q { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .im-prods .more { color: var(--ink-3); }
+/* checklist de cada fila: factura comercial y tracking (verde = listo, gris = falta) */
+.im-check { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.im-check li > * {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 999px;
+  font-size: var(--t-xs); font-weight: 550; line-height: 18px; white-space: nowrap;
+  background: var(--bg-app); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line);
+}
+.im-check li > a:hover { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--ink-4); }
+.im-check .o { width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink-4); }
+.im-check li[data-done] > * { background: var(--success-bg); color: var(--success); box-shadow: none; }
+.im-check li[data-done] svg { width: 12px; height: 12px; stroke-width: 2.4; }

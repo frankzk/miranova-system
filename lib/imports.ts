@@ -109,6 +109,18 @@ export const docKindLabel = (id: string) => DOC_KINDS.find((k) => k.id === id)?.
 /** Documentos con montos: solo los ve quien tiene permiso de Dinero. */
 export const MONEY_DOCS: DocKind[] = ["proforma", "invoice", "payment"];
 
+/**
+ * Lo imprescindible de cada importación, en orden de importancia: la factura comercial (subida
+ * como documento) y el tracking (el número de guía, o la guía AWB / BL subida como documento).
+ */
+export function importChecklist(r: { docs: readonly string[]; tracking_number: string | null }) {
+  const tracking = !!r.tracking_number?.trim() || r.docs.includes("tracking");
+  return [
+    { id: "invoice", label: "Factura comercial", done: r.docs.includes("invoice"), missing: "Falta subir la factura comercial en Documentos" },
+    { id: "tracking", label: "Tracking", done: tracking, missing: "Falta el número de guía o subir la guía (AWB / BL)" },
+  ] as const;
+}
+
 /** Tipos de evento del historial: los de actividad y montos no cuentan como novedad del envío. */
 export type EventKind = "status" | "tracking" | "activity" | "money";
 export const isNews = (kind: string | null | undefined) => !kind || kind === "status" || kind === "tracking";
