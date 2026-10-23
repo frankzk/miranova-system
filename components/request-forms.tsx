@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
-import { norm, REQUEST_STATUSES, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
+import { norm, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
@@ -11,7 +11,7 @@ type Action = (prev: State, form: FormData) => Promise<State>;
 
 export type RequestValues = {
   id?: string; store_name?: string; owner_name?: string | null; countries?: string[]; product?: string; quantity?: number;
-  notes?: string | null; status?: RequestStatus;
+  notes?: string | null; status?: RequestStatus; requested_at?: string; arrival_at?: string | null; origin_country?: string | null;
 };
 
 function Msg({ state }: { state: State }) {
@@ -20,17 +20,19 @@ function Msg({ state }: { state: State }) {
 }
 
 /**
- * Nueva solicitud o edición: tienda, dueño, países, producto y cantidad. Al elegir una tienda que
- * ya vende en las cuentas, completa el dueño y sus países (si todavía están vacíos).
+ * Nueva solicitud o edición: tienda, dueño, países, producto, cantidad, fechas y origen. Al elegir
+ * una tienda que ya vende en las cuentas, completa el dueño y sus países (si todavía están vacíos).
  */
 export function RequestForm({
-  action, v = {}, countries, stores, products,
+  action, v = {}, countries, stores, products, today,
 }: {
   action: Action;
   v?: RequestValues;
   countries: { code: string; name: string }[];
   stores: StoreSuggestion[];
   products: string[];
+  /** Hoy (YYYY-MM-DD): fecha de solicitud por defecto y la más tardía posible. */
+  today: string;
 }) {
   const [state, run] = useActionState(action, null);
   const sheet = useSheet();
@@ -106,6 +108,18 @@ export function RequestForm({
           <span>Cantidad <span className="hint">unidades</span></span>
           <input className="input" name="quantity" defaultValue={v.quantity ?? ""} inputMode="numeric" pattern="[0-9][0-9,]*" required placeholder="500" />
         </label>
+        <label className="field">
+          <span>País de origen <span className="hint">opcional</span></span>
+          <input className="input" name="origin_country" defaultValue={v.origin_country ?? ""} maxLength={60} list={`${uid}-origins`} autoComplete="off" placeholder="Ej.: China" />
+        </label>
+        <label className="field">
+          <span>Fecha de solicitud</span>
+          <input className="input" type="date" name="requested_at" defaultValue={v.requested_at ?? today} max={today} required />
+        </label>
+        <label className="field">
+          <span>Fecha de llegada <span className="hint">opcional</span></span>
+          <input className="input" type="date" name="arrival_at" defaultValue={v.arrival_at ?? ""} />
+        </label>
         {v.id && (
           <label className="field">
             <span>Estado</span>
@@ -124,6 +138,9 @@ export function RequestForm({
       </datalist>
       <datalist id={`${uid}-products`}>
         {products.map((p) => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id={`${uid}-origins`}>
+        {ORIGIN_SUGGESTIONS.map((o) => <option key={o} value={o} />)}
       </datalist>
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Guardando…">{v.id ? "Guardar" : "Guardar solicitud"}</SubmitButton>

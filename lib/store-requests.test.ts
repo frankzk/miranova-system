@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanRequest, demandByProduct, filterRequests, matchesRequest, parseRequestFilters, storeSuggestions, type StoreRequest } from "./store-requests.ts";
+import {
+  cleanRequest, demandByProduct, filterRequests, isDay, isOverdue, matchesRequest, parseRequestFilters, storeSuggestions, type StoreRequest,
+} from "./store-requests.ts";
 
 const ALLOWED = ["HN", "GT", "SV", "CR"];
 
@@ -8,10 +10,14 @@ test("solicitud válida: limpia espacios, ordena los países y acepta 1,500", ()
   const r = cleanRequest(
     { store_name: "  Tienda   X ", owner_name: " Ana López ", countries: ["cr", "HN", "HN"], product: " Drenaje en gotas ", quantity: "1,500", notes: "  " },
     ALLOWED,
+    "2026-10-23",
   );
   assert.deepEqual(r, {
     ok: true,
-    row: { store_name: "Tienda X", owner_name: "Ana López", countries: ["HN", "CR"], product: "Drenaje en gotas", quantity: 1500, notes: null },
+    row: {
+      store_name: "Tienda X", owner_name: "Ana López", countries: ["HN", "CR"], product: "Drenaje en gotas", quantity: 1500, notes: null,
+      requested_at: "2026-10-23", arrival_at: null, origin_country: null,
+    },
   });
 });
 
@@ -44,6 +50,7 @@ test("búsqueda sin importar mayúsculas ni tildes", () => {
 
 const req = (p: Partial<StoreRequest>): StoreRequest => ({
   id: "x", store_name: "Tienda", owner_name: null, countries: ["HN"], product: "Drenaje", quantity: 100, notes: null,
+  requested_at: "2026-10-01", arrival_at: null, origin_country: null,
   status: "pending", created_by: null, created_at: "2026-10-01T10:00:00Z", updated_at: "2026-10-01T10:00:00Z", ...p,
 });
 
@@ -93,4 +100,24 @@ test("filtros de la URL: pestaña, país y búsqueda", () => {
   assert.equal(ids({ c: "HN", q: "colageno" }), "b");
   assert.equal(ids({ v: "otra" }), "ab");
   assert.equal(parseRequestFilters({ c: "Honduras" }).country, undefined);
+});
+
+test("fechas y origen: solicitud por defecto hoy, no futura; llegada no antes de la solicitud", () => {
+  const base = { store_name: "T", product: "P", quantity: "10", countries: ["HN"] };
+  const today = "2026-10-23";
+  const ok = cleanRequest({ ...base, requested_at: "2026-10-20", arrival_at: "2026-11-15", origin_country: "  China  " }, ALLOWED, today);
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.ok && [ok.row.requested_at, ok.row.arrival_at, ok.row.origin_country], ["2026-10-20", "2026-11-15", "China"]);
+  assert.deepEqual(cleanRequest({ ...base, requested_at: "2026-10-24" }, ALLOWED, today), { ok: false, msg: "La fecha de solicitud no puede ser futura." });
+  assert.deepEqual(cleanRequest({ ...base, requested_at: "2026-02-30" }, ALLOWED, today), { ok: false, msg: "La fecha de solicitud no es válida." });
+  assert.deepEqual(cleanRequest({ ...base, requested_at: "2026-10-20", arrival_at: "2026-10-19" }, ALLOWED, today), {
+    ok: false, msg: "La fecha de llegada no puede ser anterior a la solicitud.",
+  });
+  assert.equal(cleanRequest({ ...base, arrival_at: "mañana" }, ALLOWED, today).ok, false);
+  assert.ok(isDay("2028-02-29") && !isDay("2026-02-29") && !isDay("2026-1-5"));
+  // vencida: abierta y con la llegada ya pasada
+  assert.equal(isOverdue({ status: "pending", arrival_at: "2026-10-22" }, today), true);
+  assert.equal(isOverdue({ status: "done", arrival_at: "2026-10-22" }, today), false);
+  assert.equal(isOverdue({ status: "in_progress", arrival_at: today }, today), false);
+  assert.equal(isOverdue({ status: "pending", arrival_at: null }, today), false);
 });

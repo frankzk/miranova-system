@@ -25,13 +25,33 @@ export type StoreRequest = {
   product: string;
   quantity: number;
   notes: string | null;
+  /** Día en que la tienda lo pidió (YYYY-MM-DD). */
+  requested_at: string;
+  /** Para cuándo debe llegar (YYYY-MM-DD), si se sabe. */
+  arrival_at: string | null;
+  /** De dónde se traería el producto (p. ej. "China"). */
+  origin_country: string | null;
   status: RequestStatus;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type RequestFields = Pick<StoreRequest, "store_name" | "owner_name" | "countries" | "product" | "quantity" | "notes">;
+export type RequestFields = Pick<
+  StoreRequest,
+  "store_name" | "owner_name" | "countries" | "product" | "quantity" | "notes" | "requested_at" | "arrival_at" | "origin_country"
+>;
+
+/** Orígenes frecuentes para sugerir en el formulario (se puede escribir cualquiera). */
+export const ORIGIN_SUGGESTIONS = ["China", "Estados Unidos", "México", "Colombia", "Panamá", "Guatemala", "Honduras", "El Salvador", "Costa Rica"];
+
+/** "YYYY-MM-DD" que existe en el calendario. */
+export function isDay(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.toISOString().slice(0, 10) === s;
+}
 
 /** Para comparar nombres sin importar mayúsculas, tildes ni espacios de más. */
 export const norm = (s: string) =>
@@ -41,11 +61,16 @@ const MAX_QTY = 10_000_000;
 
 /**
  * Valida lo escrito en el formulario. `countries` admitidos: los de las cuentas, en su orden
- * (así "Honduras, Guatemala…" sale siempre igual). La cantidad acepta "1,500" o "1500".
+ * (así "Honduras, Guatemala…" sale siempre igual). La cantidad acepta "1,500" o "1500". La fecha de
+ * solicitud, si viene vacía, es `today`; no puede ser futura, y la de llegada no puede ser anterior.
  */
 export function cleanRequest(
-  input: { store_name?: string; owner_name?: string; countries?: string[]; product?: string; quantity?: string; notes?: string },
+  input: {
+    store_name?: string; owner_name?: string; countries?: string[]; product?: string; quantity?: string; notes?: string;
+    requested_at?: string; arrival_at?: string; origin_country?: string;
+  },
   allowed: readonly string[],
+  today: string = new Date().toISOString().slice(0, 10),
 ): { ok: true; row: RequestFields } | { ok: false; msg: string } {
   const text = (v: string | undefined, max: number) => (v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
   const store_name = text(input.store_name, 120);
@@ -61,17 +86,31 @@ export function cleanRequest(
   if (unknown.length) return { ok: false, msg: `País no válido: ${unknown.join(", ")}.` };
   const countries = allowed.filter((c) => picked.has(c));
   if (!countries.length) return { ok: false, msg: "Marca al menos un país." };
+  const requested_at = (input.requested_at ?? "").trim() || today;
+  if (!isDay(requested_at)) return { ok: false, msg: "La fecha de solicitud no es válida." };
+  if (requested_at > today) return { ok: false, msg: "La fecha de solicitud no puede ser futura." };
+  const arrival_at = (input.arrival_at ?? "").trim() || null;
+  if (arrival_at && !isDay(arrival_at)) return { ok: false, msg: "La fecha de llegada no es válida." };
+  if (arrival_at && arrival_at < requested_at) return { ok: false, msg: "La fecha de llegada no puede ser anterior a la solicitud." };
+  const origin_country = text(input.origin_country, 60) || null;
   const owner_name = text(input.owner_name, 120) || null;
   const notes = (input.notes ?? "").trim().slice(0, 2000) || null;
-  return { ok: true, row: { store_name, owner_name, countries, product, quantity, notes } };
+  return { ok: true, row: { store_name, owner_name, countries, product, quantity, notes, requested_at, arrival_at, origin_country } };
 }
 
-/** Búsqueda libre: tienda, dueño, producto o notas. */
-export function matchesRequest(r: Pick<StoreRequest, "store_name" | "owner_name" | "product" | "notes">, q: string | undefined): boolean {
+/** Búsqueda libre: tienda, dueño, producto, origen o notas. */
+export function matchesRequest(
+  r: Pick<StoreRequest, "store_name" | "owner_name" | "product" | "notes"> & { origin_country?: string | null },
+  q: string | undefined,
+): boolean {
   const needle = norm(q ?? "");
   if (!needle) return true;
-  return [r.store_name, r.owner_name, r.product, r.notes].some((v) => v && norm(v).includes(needle));
+  return [r.store_name, r.owner_name, r.product, r.origin_country, r.notes].some((v) => v && norm(v).includes(needle));
 }
+
+/** Abierta y con la fecha de llegada ya pasada. */
+export const isOverdue = (r: Pick<StoreRequest, "status" | "arrival_at">, today: string) =>
+  !!r.arrival_at && r.arrival_at < today && (OPEN_STATUSES as readonly string[]).includes(r.status);
 
 export type ProductDemand = {
   /** El nombre tal como se escribió en la solicitud más reciente. */

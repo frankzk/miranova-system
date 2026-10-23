@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   const names = (cs: string[]) => cs.map((c) => countryByCode(c)?.name ?? c).join(", ");
 
   const list: Cell[][] = rows.map((r) => [
-    day(r.created_at), r.store_name, r.owner_name, names(r.countries), r.product, r.quantity, requestStatus(r.status).label, r.notes, r.created_by_name,
+    r.requested_at, r.arrival_at, r.store_name, r.owner_name, names(r.countries), r.origin_country, r.product, r.quantity, requestStatus(r.status).label,
+    r.notes, r.created_by_name, day(r.created_at),
   ]);
   const demand: Cell[][] = demandByProduct(rows, codes).map((d) => [d.product, d.units, d.requests, d.stores, names(d.countries), day(d.last)]);
 
@@ -28,9 +29,10 @@ export async function GET(req: NextRequest) {
     {
       name: "Solicitudes",
       columns: [
-        { header: "Fecha", width: 12 }, { header: "Tienda", width: 26 }, { header: "Dueño", width: 22 }, { header: "Países", width: 26 },
-        { header: "Producto", width: 40 }, { header: "Cantidad", width: 11 }, { header: "Estado", width: 12 }, { header: "Notas", width: 40 },
-        { header: "Cargada por", width: 18 },
+        { header: "Fecha de solicitud", width: 14 }, { header: "Fecha de llegada", width: 14 }, { header: "Tienda", width: 26 },
+        { header: "Dueño", width: 22 }, { header: "Países", width: 26 }, { header: "País de origen", width: 16 }, { header: "Producto", width: 40 },
+        { header: "Cantidad", width: 11 }, { header: "Estado", width: 12 }, { header: "Notas", width: 40 }, { header: "Cargada por", width: 18 },
+        { header: "Cargada el", width: 12 },
       ],
       rows: list,
     },
