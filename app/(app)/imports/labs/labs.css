@@ -1,0 +1,37 @@
+/* Compras › Laboratorios (usa además las clases im-* y rq-* para tabla, formularios y estado) */
+.lab-tabs { margin-bottom: 0; flex: 1 1 auto; border-bottom: 0; }
+.lab-table td { vertical-align: top; }
+.lab-dates { font-size: var(--t-sm); line-height: 1.55; }
+.lab-dates .k { display: inline-block; min-width: 82px; color: var(--ink-3); font-size: var(--t-xs); }
+.lab-parts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; max-width: 360px; }
+.lab-parts li {
+  display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  background: var(--bg-app); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--t-xs); color: var(--ink-2); white-space: nowrap;
+}
+.lab-parts b { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.lab-table .sub { margin-top: 2px; }
+.lab-status .select[data-status="requested"] { color: var(--ink-2); }
+.lab-status .select[data-status="in_progress"] { color: var(--warning); }
+.lab-status .select[data-status="transit"] { color: var(--info); }
+.lab-status .select[data-status="arrived"] { color: var(--success); }
+
+/* formulario */
+.lab-total { margin: -4px 0 0; font-size: var(--t-sm); color: var(--ink-2); }
+.lab-total b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.lab-total .hint { font-size: var(--t-xs); color: var(--ink-3); }
+.lab-dist { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 12px 12px; margin: 0; min-width: 0; }
+.lab-dist legend { padding: 0 4px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.lab-dist legend .hint { font-size: var(--t-xs); color: var(--ink-3); font-weight: 400; }
+.lab-dist-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; }
+.lab-dist-grid .field { margin: 0; }
+.lab-dist-grid .field > span { font-size: var(--t-xs); }
+.lab-dist-sum { margin: 10px 0 0; font-size: var(--t-sm); color: var(--ink-2); }
+.lab-dist-sum b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.lab-dist-sum[data-state="left"] { color: var(--warning); }
+.lab-dist-sum[data-state="over"] { color: var(--danger); }
+.lab-dist-sum[data-state="ok"] { color: var(--success); }
+
+@media (max-width: 640px) {
+  .lab-dist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lab-parts { max-width: none; }
+}

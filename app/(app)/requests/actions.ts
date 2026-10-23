@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { authorizeAction } from "@/lib/auth";
+import { todayIn } from "@/lib/format";
 import { requestCountries } from "@/lib/store-requests-data";
 import { cleanRequest, isRequestStatus, requestStatus } from "@/lib/store-requests";
 import { db } from "@/lib/supabase";
@@ -15,7 +16,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail = (msg: string): RequestFormState => ({ ok: false, msg });
 const GONE = "Esa solicitud ya no existe.";
 
-/** Nueva o editada: tienda, dueño, países, producto, cantidad y notas (al editar, también el estado). */
+/** Nueva o editada: tienda, dueño, países, producto, cantidad, fechas, origen y notas (al editar, también el estado). */
 export async function saveRequest(_prev: RequestFormState, form: FormData): Promise<RequestFormState> {
   const auth = await authorizeAction("requests");
   if (!auth.ok) return auth;
@@ -30,8 +31,12 @@ export async function saveRequest(_prev: RequestFormState, form: FormData): Prom
       product: field(form, "product"),
       quantity: field(form, "quantity"),
       notes: field(form, "notes"),
+      requested_at: field(form, "requested_at"),
+      arrival_at: field(form, "arrival_at"),
+      origin_country: field(form, "origin_country"),
     },
     allowed,
+    todayIn(),
   );
   if (!c.ok) return fail(c.msg);
   const status = field(form, "status");

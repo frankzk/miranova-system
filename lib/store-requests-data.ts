@@ -11,7 +11,7 @@ const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === 
 
 export type RequestRow = StoreRequest & { created_by_name: string | null };
 
-/** Todas las solicitudes, de la más reciente a la más vieja, con el nombre de quien la cargó. */
+/** Todas las solicitudes, de la más reciente a la más vieja (por fecha de solicitud), con el nombre de quien la cargó. */
 export async function listRequests(): Promise<RequestRow[]> {
   const [{ data, error }, users] = await Promise.all([
     db().from("store_requests").select("*").order("created_at", { ascending: false }).limit(5000),
@@ -22,19 +22,29 @@ export async function listRequests(): Promise<RequestRow[]> {
     throw error;
   }
   const names = new Map(((users.data ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]));
-  return ((data ?? []) as StoreRequest[]).map((r) => ({
-    ...r,
-    countries: Array.isArray(r.countries) ? r.countries : [],
-    quantity: Number(r.quantity),
-    status: isRequestStatus(r.status) ? r.status : "pending",
-    created_by_name: r.created_by ? names.get(r.created_by) ?? null : null,
-  }));
+  const localDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa" }).format(new Date(iso));
+  return ((data ?? []) as StoreRequest[])
+    .map((r) => ({
+      ...r,
+      countries: Array.isArray(r.countries) ? r.countries : [],
+      quantity: Number(r.quantity),
+      status: isRequestStatus(r.status) ? r.status : "pending",
+      // sin la migración 0045, la fecha de solicitud es el día en que se cargó
+      requested_at: r.requested_at ?? localDay(r.created_at),
+      arrival_at: r.arrival_at ?? null,
+      origin_country: r.origin_country ?? null,
+      created_by_name: r.created_by ? names.get(r.created_by) ?? null : null,
+    }))
+    .sort((a, b) => b.requested_at.localeCompare(a.requested_at) || b.created_at.localeCompare(a.created_at));
 }
 
-/** Países donde se opera (los de las cuentas de Drop/Dropi con órdenes), en el orden habitual. */
+/** Países que se abren sin cuenta todavía: las tiendas ya pueden pedir para ellos. */
+const NEW_MARKETS = ["NI"];
+
+/** Países donde se opera (los de las cuentas de Drop/Dropi con órdenes y los nuevos), en el orden habitual. */
 export async function requestCountries(): Promise<{ code: string; name: string }[]> {
   const accounts = await listAccounts();
-  const codes = new Set(accounts.filter((a) => !a.catalog_only).map((a) => a.country));
+  const codes = new Set([...accounts.filter((a) => !a.catalog_only).map((a) => a.country), ...NEW_MARKETS]);
   return COUNTRIES.filter((c) => codes.has(c.code)).map((c) => ({ code: c.code, name: c.name }));
 }
 
