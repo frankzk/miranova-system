@@ -131,7 +131,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             <p>
               {all.length
                 ? "Cambia de pestaña, de país o la búsqueda."
-                : "Cuando una tienda pida algo (p. ej. 500 drenajes en gotas para Honduras), anótalo con “Nueva solicitud”: tienda, dueño, países, producto, cantidad y fechas."}
+                : "Cuando una tienda pida algo (p. ej. 500 drenajes en gotas para Honduras), anótalo con “Nueva solicitud”: tienda, dueño, países, productos con su cantidad y fechas."}
             </p>
           </div>
         ) : (
@@ -157,10 +157,19 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                       <div className="sub">{r.owner_name ?? "Dueño sin indicar"}</div>
                     </td>
                     <td>
-                      <div>{r.product}</div>
+                      {r.items.length > 1 ? (
+                        <ul className="rq-items" aria-label="Productos">
+                          {r.items.map((it, i) => <li key={i}><span className="q">{fmtInt(it.quantity)}</span><span>{it.product}</span></li>)}
+                        </ul>
+                      ) : (
+                        <div>{r.items[0]?.product ?? r.product}</div>
+                      )}
                       {r.notes && <div className="sub rq-notes" title={r.notes}>{r.notes}</div>}
                     </td>
-                    <td className="num strong">{fmtInt(r.quantity)}</td>
+                    <td className="num">
+                      <span className="strong">{fmtInt(r.quantity)}</span>
+                      {r.items.length > 1 && <div className="sub">{r.items.length} productos</div>}
+                    </td>
                     <td className="rq-countries-cell">
                       {countryList(r.countries)}
                       {r.origin_country && <div className="sub">Origen: {r.origin_country}</div>}

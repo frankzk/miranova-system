@@ -4,7 +4,7 @@ import { storeDirectory } from "./contacts";
 import { COUNTRIES } from "./countries";
 import { listProducts } from "./queries";
 import { db } from "./supabase";
-import { isRequestStatus, norm, storeSuggestions, type StoreRequest, type StoreSuggestion } from "./store-requests";
+import { isRequestStatus, norm, requestItems, storeSuggestions, type RequestItem, type StoreRequest, type StoreSuggestion } from "./store-requests";
 
 // tabla que todavía no existe (migración 0044 sin aplicar): la sección se ve vacía en vez de fallar
 const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === "PGRST205";
@@ -13,13 +13,20 @@ export type RequestRow = StoreRequest & { created_by_name: string | null };
 
 /** Todas las solicitudes, de la más reciente a la más vieja (por fecha de solicitud), con el nombre de quien la cargó. */
 export async function listRequests(): Promise<RequestRow[]> {
-  const [{ data, error }, users] = await Promise.all([
+  const [{ data, error }, users, lines] = await Promise.all([
     db().from("store_requests").select("*").order("created_at", { ascending: false }).limit(5000),
     db().from("app_users").select("id, name"),
+    db().from("store_request_items").select("request_id, position, product, quantity").order("position").limit(50000),
   ]);
   if (error) {
     if (missingTable(error)) return [];
     throw error;
+  }
+  // sin la migración 0047 no hay líneas: cada solicitud tiene su producto del resumen
+  if (lines.error && !missingTable(lines.error)) throw lines.error;
+  const byRequest = new Map<string, RequestItem[]>();
+  for (const l of (lines.data ?? []) as { request_id: string; position: number; product: string; quantity: number }[]) {
+    byRequest.set(l.request_id, [...(byRequest.get(l.request_id) ?? []), { product: l.product, quantity: Number(l.quantity) }]);
   }
   const names = new Map(((users.data ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]));
   const localDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa" }).format(new Date(iso));
@@ -28,6 +35,7 @@ export async function listRequests(): Promise<RequestRow[]> {
       ...r,
       countries: Array.isArray(r.countries) ? r.countries : [],
       quantity: Number(r.quantity),
+      items: requestItems({ product: r.product, quantity: Number(r.quantity), items: byRequest.get(r.id) }),
       status: isRequestStatus(r.status) ? r.status : "pending",
       // sin la migración 0045, la fecha de solicitud es el día en que se cargó
       requested_at: r.requested_at ?? localDay(r.created_at),
@@ -69,7 +77,7 @@ export async function requestFormOptions(requests: readonly StoreRequest[]): Pro
   }
   const products: string[] = [];
   const seen = new Set<string>();
-  for (const name of [...requests.map((r) => r.product), ...catalog.map((p) => p.name)]) {
+  for (const name of [...requests.flatMap((r) => requestItems(r).map((i) => i.product)), ...catalog.map((p) => p.name)]) {
     const k = norm(name ?? "");
     if (!k || seen.has(k)) continue;
     seen.add(k);

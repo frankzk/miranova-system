@@ -16,14 +16,21 @@ export const OPEN_STATUSES: readonly RequestStatus[] = ["pending", "in_progress"
 export const isRequestStatus = (v: unknown): v is RequestStatus => REQUEST_STATUSES.some((s) => s.id === v);
 export const requestStatus = (id: string) => REQUEST_STATUSES.find((s) => s.id === id) ?? REQUEST_STATUSES[0];
 
+/** Una línea del pedido: producto y cantidad. */
+export type RequestItem = { product: string; quantity: number };
+
 export type StoreRequest = {
   id: string;
   store_name: string;
   owner_name: string | null;
   /** Códigos de país (HN, GT…): una tienda puede trabajar varios. */
   countries: string[];
+  /** Resumen: el primer producto (las líneas están en `items`). */
   product: string;
+  /** Resumen: el total de unidades de todas las líneas. */
   quantity: number;
+  /** Productos del pedido, en su orden (al menos uno). */
+  items: RequestItem[];
   notes: string | null;
   /** Día en que la tienda lo pidió (YYYY-MM-DD). */
   requested_at: string;
@@ -39,8 +46,11 @@ export type StoreRequest = {
 
 export type RequestFields = Pick<
   StoreRequest,
-  "store_name" | "owner_name" | "countries" | "product" | "quantity" | "notes" | "requested_at" | "arrival_at" | "origin_country"
+  "store_name" | "owner_name" | "countries" | "product" | "quantity" | "items" | "notes" | "requested_at" | "arrival_at" | "origin_country"
 >;
+
+/** Máximo de productos en un mismo pedido. */
+export const MAX_ITEMS = 30;
 
 /** Orígenes frecuentes para sugerir en el formulario (se puede escribir cualquiera). */
 export const ORIGIN_SUGGESTIONS = ["China", "Estados Unidos", "México", "Colombia", "Panamá", "Guatemala", "Honduras", "El Salvador", "Costa Rica"];
@@ -60,13 +70,15 @@ export const norm = (s: string) =>
 const MAX_QTY = 10_000_000;
 
 /**
- * Valida lo escrito en el formulario. `countries` admitidos: los de las cuentas, en su orden
- * (así "Honduras, Guatemala…" sale siempre igual). La cantidad acepta "1,500" o "1500". La fecha de
- * solicitud, si viene vacía, es `today`; no puede ser futura, y la de llegada no puede ser anterior.
+ * Valida lo escrito en el formulario. `items`: los productos del pedido con su cantidad (las filas
+ * vacías se ignoran y el mismo producto escrito dos veces se suma). `countries` admitidos: los de
+ * las cuentas, en su orden (así "Honduras, Guatemala…" sale siempre igual). La cantidad acepta
+ * "1,500" o "1500". La fecha de solicitud, si viene vacía, es `today`; no puede ser futura, y la de
+ * llegada no puede ser anterior.
  */
 export function cleanRequest(
   input: {
-    store_name?: string; owner_name?: string; countries?: string[]; product?: string; quantity?: string; notes?: string;
+    store_name?: string; owner_name?: string; countries?: string[]; items?: { product?: string; quantity?: string }[]; notes?: string;
     requested_at?: string; arrival_at?: string; origin_country?: string;
   },
   allowed: readonly string[],
@@ -75,12 +87,24 @@ export function cleanRequest(
   const text = (v: string | undefined, max: number) => (v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
   const store_name = text(input.store_name, 120);
   if (!store_name) return { ok: false, msg: "Escribe el nombre de la tienda." };
-  const product = text(input.product, 160);
-  if (!product) return { ok: false, msg: "Escribe qué producto pide." };
-  const raw = (input.quantity ?? "").trim().replace(/[,\s]/g, "");
-  if (!/^\d+$/.test(raw) || Number(raw) < 1) return { ok: false, msg: "La cantidad debe ser un número entero mayor que cero." };
-  const quantity = Number(raw);
-  if (quantity > MAX_QTY) return { ok: false, msg: "La cantidad es demasiado grande." };
+  const lines = (input.items ?? []).map((i) => ({ product: text(i.product, 160), raw: (i.quantity ?? "").trim().replace(/[,\s]/g, "") }));
+  const filled = lines.filter((l) => l.product || l.raw);
+  if (!filled.length) return { ok: false, msg: "Escribe qué producto pide." };
+  if (filled.length > MAX_ITEMS) return { ok: false, msg: `Son demasiados productos: máximo ${MAX_ITEMS} por solicitud.` };
+  const many = filled.length > 1;
+  const items: RequestItem[] = [];
+  for (const [n, l] of filled.entries()) {
+    if (!l.product) return { ok: false, msg: many ? `Escribe el producto de la fila ${n + 1}.` : "Escribe qué producto pide." };
+    const of = many ? ` de “${l.product}”` : "";
+    if (!/^\d+$/.test(l.raw) || Number(l.raw) < 1) return { ok: false, msg: `La cantidad${of} debe ser un número entero mayor que cero.` };
+    const qty = Number(l.raw);
+    const same = items.find((i) => norm(i.product) === norm(l.product));
+    if (same) same.quantity += qty;
+    else items.push({ product: l.product, quantity: qty });
+    if ((same?.quantity ?? qty) > MAX_QTY) return { ok: false, msg: `La cantidad${of} es demasiado grande.` };
+  }
+  const product = items[0].product;
+  const quantity = items.reduce((t, i) => t + i.quantity, 0);
   const picked = new Set((input.countries ?? []).map((c) => c.trim().toUpperCase()));
   const unknown = [...picked].filter((c) => !allowed.includes(c));
   if (unknown.length) return { ok: false, msg: `País no válido: ${unknown.join(", ")}.` };
@@ -95,18 +119,23 @@ export function cleanRequest(
   const origin_country = text(input.origin_country, 60) || null;
   const owner_name = text(input.owner_name, 120) || null;
   const notes = (input.notes ?? "").trim().slice(0, 2000) || null;
-  return { ok: true, row: { store_name, owner_name, countries, product, quantity, notes, requested_at, arrival_at, origin_country } };
+  return { ok: true, row: { store_name, owner_name, countries, product, quantity, items, notes, requested_at, arrival_at, origin_country } };
 }
 
-/** Búsqueda libre: tienda, dueño, producto, origen o notas. */
+/** Búsqueda libre: tienda, dueño, cualquiera de sus productos, origen o notas. */
 export function matchesRequest(
-  r: Pick<StoreRequest, "store_name" | "owner_name" | "product" | "notes"> & { origin_country?: string | null },
+  r: Pick<StoreRequest, "store_name" | "owner_name" | "product" | "notes"> & { origin_country?: string | null; items?: RequestItem[] },
   q: string | undefined,
 ): boolean {
   const needle = norm(q ?? "");
   if (!needle) return true;
-  return [r.store_name, r.owner_name, r.product, r.origin_country, r.notes].some((v) => v && norm(v).includes(needle));
+  const products = r.items?.length ? r.items.map((i) => i.product) : [r.product];
+  return [r.store_name, r.owner_name, ...products, r.origin_country, r.notes].some((v) => v && norm(v).includes(needle));
 }
+
+/** Líneas del pedido; si no tiene (solicitudes de antes), el producto y la cantidad del resumen. */
+export const requestItems = (r: Pick<StoreRequest, "product" | "quantity"> & { items?: RequestItem[] }): RequestItem[] =>
+  r.items?.length ? r.items : [{ product: r.product, quantity: r.quantity }];
 
 /** Abierta y con la fecha de llegada ya pasada. */
 export const isOverdue = (r: Pick<StoreRequest, "status" | "arrival_at">, today: string) =>
@@ -130,17 +159,19 @@ export type ProductDemand = {
 export function demandByProduct(rows: readonly StoreRequest[], order: readonly string[] = []): ProductDemand[] {
   const groups = new Map<string, { product: string; units: number; requests: number; stores: Set<string>; countries: Set<string>; last: string }>();
   for (const r of rows) {
-    const key = norm(r.product);
-    const g = groups.get(key) ?? { product: r.product, units: 0, requests: 0, stores: new Set<string>(), countries: new Set<string>(), last: "" };
-    g.units += r.quantity;
-    g.requests += 1;
-    g.stores.add(norm(r.store_name));
-    for (const c of r.countries) g.countries.add(c);
-    if (r.created_at > g.last) {
-      g.last = r.created_at;
-      g.product = r.product;
+    for (const it of requestItems(r)) {
+      const key = norm(it.product);
+      const g = groups.get(key) ?? { product: it.product, units: 0, requests: 0, stores: new Set<string>(), countries: new Set<string>(), last: "" };
+      g.units += it.quantity;
+      g.requests += 1;
+      g.stores.add(norm(r.store_name));
+      for (const c of r.countries) g.countries.add(c);
+      if (r.created_at > g.last) {
+        g.last = r.created_at;
+        g.product = it.product;
+      }
+      groups.set(key, g);
     }
-    groups.set(key, g);
   }
   const rank = (c: string) => (order.includes(c) ? order.indexOf(c) : order.length);
   return [...groups.values()]
