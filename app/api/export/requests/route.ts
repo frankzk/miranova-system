@@ -5,8 +5,8 @@ import { demandByProduct, filterRequests, parseRequestFilters, requestStatus } f
 import { listRequests, requestCountries } from "@/lib/store-requests-data";
 import { buildXlsx, XLSX_TYPE, type Cell } from "@/lib/xlsx";
 
-// Solicitudes de tiendas en Excel, con los mismos filtros de la página: una hoja con cada
-// solicitud y otra con lo más pedido (suma por producto).
+// Solicitudes de tiendas en Excel, con los mismos filtros de la página: una hoja con una fila por
+// producto de cada solicitud (así se puede filtrar y sumar por producto) y otra con lo más pedido.
 
 const day = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa" }).format(new Date(iso));
 
@@ -19,10 +19,12 @@ export async function GET(req: NextRequest) {
   const codes = countries.map((c) => c.code);
   const names = (cs: string[]) => cs.map((c) => countryByCode(c)?.name ?? c).join(", ");
 
-  const list: Cell[][] = rows.map((r) => [
-    r.requested_at, r.arrival_at, r.store_name, r.owner_name, names(r.countries), r.origin_country, r.product, r.quantity, requestStatus(r.status).label,
-    r.notes, r.created_by_name, day(r.created_at),
-  ]);
+  const list: Cell[][] = rows.flatMap((r) =>
+    r.items.map((it, i) => [
+      r.requested_at, r.arrival_at, r.store_name, r.owner_name, names(r.countries), r.origin_country, it.product, it.quantity,
+      r.items.length > 1 ? `${i + 1} de ${r.items.length}` : null, requestStatus(r.status).label, r.notes, r.created_by_name, day(r.created_at),
+    ]),
+  );
   const demand: Cell[][] = demandByProduct(rows, codes).map((d) => [d.product, d.units, d.requests, d.stores, names(d.countries), day(d.last)]);
 
   const book = buildXlsx([
@@ -31,7 +33,8 @@ export async function GET(req: NextRequest) {
       columns: [
         { header: "Fecha de solicitud", width: 14 }, { header: "Fecha de llegada", width: 14 }, { header: "Tienda", width: 26 },
         { header: "Dueño", width: 22 }, { header: "Países", width: 26 }, { header: "País de origen", width: 16 }, { header: "Producto", width: 40 },
-        { header: "Cantidad", width: 11 }, { header: "Estado", width: 12 }, { header: "Notas", width: 40 }, { header: "Cargada por", width: 18 },
+        { header: "Cantidad", width: 11 }, { header: "Producto del pedido", width: 12 }, { header: "Estado", width: 12 }, { header: "Notas", width: 40 },
+        { header: "Cargada por", width: 18 },
         { header: "Cargada el", width: 12 },
       ],
       rows: list,

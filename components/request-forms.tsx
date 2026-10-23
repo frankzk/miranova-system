@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
-import { norm, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
+import { IconClose, IconPlus } from "./icons";
+import { MAX_ITEMS, norm, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestItem, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
@@ -10,7 +11,7 @@ type State = { ok: boolean; msg: string } | null;
 type Action = (prev: State, form: FormData) => Promise<State>;
 
 export type RequestValues = {
-  id?: string; store_name?: string; owner_name?: string | null; countries?: string[]; product?: string; quantity?: number;
+  id?: string; store_name?: string; owner_name?: string | null; countries?: string[]; product?: string; quantity?: number; items?: RequestItem[];
   notes?: string | null; status?: RequestStatus; requested_at?: string; arrival_at?: string | null; origin_country?: string | null;
 };
 
@@ -20,8 +21,9 @@ function Msg({ state }: { state: State }) {
 }
 
 /**
- * Nueva solicitud o edición: tienda, dueño, países, producto, cantidad, fechas y origen. Al elegir
- * una tienda que ya vende en las cuentas, completa el dueño y sus países (si todavía están vacíos).
+ * Nueva solicitud o edición: tienda, dueño, países, productos (uno o varios, con "+ Agregar
+ * producto"), fechas y origen. Al elegir una tienda que ya vende en las cuentas, completa el dueño
+ * y sus países (si todavía están vacíos).
  */
 export function RequestForm({
   action, v = {}, countries, stores, products, today,
@@ -43,6 +45,22 @@ export function RequestForm({
   const byName = useMemo(() => new Map(stores.map((s) => [norm(s.name), s])), [stores]);
   const codes = countries.map((c) => c.code);
   const all = codes.length > 1 && codes.every((c) => picked.includes(c));
+  // filas de producto: no controladas (cada una con su clave); el total se recalcula al escribir
+  const seq = useRef(0);
+  const first = v.items?.length ? v.items : v.product ? [{ product: v.product, quantity: v.quantity ?? 0 }] : [{ product: "", quantity: 0 }];
+  const [lines, setLines] = useState(() => first.map((it) => ({ key: seq.current++, product: it.product, quantity: it.quantity ? String(it.quantity) : "" })));
+  const linesRef = useRef<HTMLDivElement>(null);
+  const [total, setTotal] = useState(() => first.reduce((t, it) => t + (it.quantity || 0), 0));
+  const recount = () => {
+    const inputs = linesRef.current?.querySelectorAll<HTMLInputElement>('input[name="quantity"]') ?? [];
+    setTotal([...inputs].reduce((t, i) => t + (Number(i.value.replace(/[,\s]/g, "")) || 0), 0));
+  };
+  useEffect(recount, [lines.length]);
+  const addLine = () => {
+    setLines((l) => (l.length >= MAX_ITEMS ? l : [...l, { key: seq.current++, product: "", quantity: "" }]));
+    // el foco va al producto de la fila nueva
+    requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line:last-child input[name="product"]')?.focus());
+  };
 
   useEffect(() => {
     if (state?.ok) sheet?.close();
@@ -97,17 +115,41 @@ export function RequestForm({
             ))}
           </div>
         </fieldset>
-        <label className="field wide">
-          <span>Producto</span>
-          <input
-            className="input" name="product" defaultValue={v.product ?? ""} maxLength={160} required list={`${uid}-products`} autoComplete="off"
-            placeholder="Ej.: Drenaje linfático en gotas"
-          />
-        </label>
-        <label className="field">
-          <span>Cantidad <span className="hint">unidades</span></span>
-          <input className="input" name="quantity" defaultValue={v.quantity ?? ""} inputMode="numeric" pattern="[0-9][0-9,]*" required placeholder="500" />
-        </label>
+        <fieldset className="field wide rq-lines">
+          <legend>
+            {lines.length > 1 ? `Productos (${lines.length})` : "Producto"}
+            {lines.length > 1 && <span className="hint">{total.toLocaleString("en-US")} unidades en total</span>}
+          </legend>
+          <div className="rq-line-head" aria-hidden>
+            <span>Producto</span>
+            <span>Cantidad <span className="hint">unidades</span></span>
+          </div>
+          <div ref={linesRef} onInput={recount}>
+            {lines.map((l, i) => (
+              <div key={l.key} className="rq-line">
+                <input
+                  className="input" name="product" defaultValue={l.product} maxLength={160} required={i === 0} list={`${uid}-products`} autoComplete="off"
+                  placeholder={i === 0 ? "Ej.: Drenaje linfático en gotas" : "Otro producto"} aria-label={`Producto ${i + 1}`}
+                />
+                <input
+                  className="input" name="quantity" defaultValue={l.quantity} inputMode="numeric" pattern="[0-9][0-9,]*" required={i === 0}
+                  placeholder="500" aria-label={`Cantidad del producto ${i + 1}`}
+                />
+                {lines.length > 1 ? (
+                  <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label={`Quitar el producto ${i + 1}`} title="Quitar este producto"
+                    onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
+                    <IconClose />
+                  </button>
+                ) : <span aria-hidden />}
+              </div>
+            ))}
+          </div>
+          {lines.length < MAX_ITEMS && (
+            <button type="button" className="btn btn-ghost btn-sm rq-add" onClick={addLine}>
+              <IconPlus /> Agregar producto
+            </button>
+          )}
+        </fieldset>
         <label className="field">
           <span>País de origen <span className="hint">opcional</span></span>
           <input className="input" name="origin_country" defaultValue={v.origin_country ?? ""} maxLength={60} list={`${uid}-origins`} autoComplete="off" placeholder="Ej.: China" />

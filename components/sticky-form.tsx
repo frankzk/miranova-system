@@ -24,11 +24,18 @@ export function StickyForm({
     const form = own.current;
     const values = last.current;
     if (!form || !values || !state || state.ok) return;
+    // campos con el mismo nombre (p. ej. varias filas de producto): cada uno recibe el suyo, en orden
+    const seen = new Map<string, number>();
     for (const el of Array.from(form.elements) as (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)[]) {
       if (!el.name || ["hidden", "file", "submit", "button"].includes(el.type)) continue;
       const vals = values.filter(([k]) => k === el.name).map(([, v]) => v);
-      if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) el.checked = vals.includes(el.value);
-      else if (vals.length) el.value = vals[0];
+      if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
+        el.checked = vals.includes(el.value);
+        continue;
+      }
+      const i = seen.get(el.name) ?? 0;
+      seen.set(el.name, i + 1);
+      if (i < vals.length) el.value = vals[i];
     }
   }, [state]);
   return (

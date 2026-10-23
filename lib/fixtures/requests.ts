@@ -18,4 +18,11 @@ const store_requests: Row[] = [
   row(4, { days: 20, store_name: "ZONAHN", owner_name: "Andrea Paz", countries: ["HN"], product: "Mini ventilador portátil", quantity: 200, status: "done" }),
 ];
 
-export const fixtures: FixtureModule = { tables: { store_requests } };
+// líneas de producto: ZONAHN pidió dos productos en la misma solicitud; las demás, uno
+const store_request_items: Row[] = [
+  { id: "e1000000-0000-4000-8000-000000000001", request_id: store_requests[0].id, position: 0, product: "Drenaje Linfático en Gotas", quantity: 500, created_at: at(1) },
+  { id: "e1000000-0000-4000-8000-000000000002", request_id: store_requests[0].id, position: 1, product: "SommaSleep Spray Oral Antirronquidos", quantity: 400, created_at: at(1) },
+];
+store_requests[0].quantity = 900;
+
+export const fixtures: FixtureModule = { tables: { store_requests, store_request_items } };
