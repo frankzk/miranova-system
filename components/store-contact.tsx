@@ -15,7 +15,7 @@ type Action = (prev: ContactState, form: FormData) => Promise<ContactState>;
 export type StoreContactProps = {
   view: StoreContactView;
   store: { accountId: string; storeId: string; storeName: string };
-  actions: { save: Action; link: Action; unlink: Action } | null;
+  actions: { save: Action; link: Action; unlink: Action; merge: Action } | null;
 };
 
 /** Barra de contacto: quién es, cómo escribirle y el panel para gestionarlo. */
@@ -197,8 +197,11 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
     action = <StoreActionButton action={actions.link} contactId={mine} store={other} label="Vincular" pending="…" />;
   } else if (!mine && s.contact_id) {
     action = <StoreActionButton action={actions.link} contactId={s.contact_id} store={store} label="Usar su contacto" pending="…" />;
+  } else if (mine && s.contact_id) {
+    // cada una con su contacto: se unen en uno (queda el que tiene grupo de WhatsApp)
+    action = <StoreActionButton action={actions.merge} contactId={s.contact_id} store={store} label="Unir contactos" pending="Uniendo…" />;
   } else {
-    action = <span className="muted ct-note">{mine ? "Tiene otro contacto" : "Sin contacto aún"}</span>;
+    action = <span className="muted ct-note">Sin contacto aún</span>;
   }
   return (
     <li>
@@ -217,7 +220,8 @@ function SuggestionRow({ s, mine, store, actions }: { s: Suggestion; mine: strin
 
 /**
  * Contacto dentro del panel lateral de Salud de tiendas: los datos a la vista, accesos para
- * escribir o llamar y la edición plegada. Vincular otras operaciones sigue en la ficha completa.
+ * escribir o llamar, la edición plegada y las operaciones que parecen del mismo dueño, para
+ * vincularlas o unir sus contactos con un clic.
  */
 export function StoreContactSection({ view, store, actions, fullHref }: StoreContactProps & { fullHref: string }) {
   const { contact: c, siblings, suggestions, self } = view;
@@ -286,10 +290,18 @@ export function StoreContactSection({ view, store, actions, fullHref }: StoreCon
         </>
       )}
       {suggestions.length > 0 && (
-        <p className="sheet-note ct-more">
-          {suggestions.length === 1 ? "Hay 1 operación que podría ser" : `Hay ${suggestions.length} operaciones que podrían ser`} del mismo dueño.{" "}
-          <Link href={`${fullHref}#contacto`} prefetch={false}>Revisar en la ficha</Link>
-        </p>
+        <div className="ct-more">
+          <p className="sheet-note">
+            {suggestions.length === 1 ? "1 operación podría ser" : `${suggestions.length} operaciones podrían ser`} del mismo dueño
+            {actions ? ": vincúlala para no volver a cargar su grupo y teléfono." : "."}{" "}
+            <Link href={`${fullHref}#contacto`} prefetch={false}>Ver en la ficha</Link>
+          </p>
+          <ul className="ct-list">
+            {suggestions.map((s) => (
+              <SuggestionRow key={`${s.store.account_id}|${s.store.store_id}`} s={s} mine={c?.id ?? null} store={store} actions={actions} />
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

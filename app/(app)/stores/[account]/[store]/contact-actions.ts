@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import type { ContactState } from "@/components/contact-forms";
 import { authorizeAction } from "@/lib/auth";
-import { normalizeEmail, normalizePhone, parseWhatsappGroup, type StoreContact } from "@/lib/store-contacts";
+import {
+  canMergeContacts, contactFill, mergeSurvivor, normalizeEmail, normalizePhone, parseWhatsappGroup, type StoreContact,
+} from "@/lib/store-contacts";
 import { db } from "@/lib/supabase";
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -39,12 +41,44 @@ async function findBy(col: "whatsapp_group_code" | "owner_phone", v: string | nu
   return (data as StoreContact | null) ?? null;
 }
 
+async function contactById(id: string): Promise<StoreContact | null> {
+  const { data } = await db().from("store_contacts").select("*").eq("id", id).maybeSingle();
+  return (data as StoreContact | null) ?? null;
+}
+
+/** Nombres de las tiendas de un contacto (para los mensajes). */
+async function storesOf(contactId: string): Promise<string[]> {
+  const { data } = await db().from("store_contact_links").select("store_name").eq("contact_id", contactId);
+  return ((data ?? []) as { store_name: string | null }[]).map((l) => l.store_name ?? "otra tienda");
+}
+
+/**
+ * Une el contacto `from` en `into` (el mismo dueño con dos contactos): las tiendas de `from` pasan
+ * a `into`, `from` se borra y a `into` se le completa con los datos de `from` lo que le falte.
+ * Devuelve un error o null.
+ */
+async function mergeInto(into: StoreContact, from: StoreContact): Promise<string | null> {
+  if (into.id === from.id) return null;
+  const fill = contactFill(into, [from]);
+  // primero se mueven las tiendas (así nunca quedan sin contacto) y se borra el viejo, que libera su grupo y teléfono
+  const moved = await db().from("store_contact_links").update({ contact_id: into.id }).eq("contact_id", from.id);
+  if (moved.error) return `No se pudieron unir los contactos: ${moved.error.message}`;
+  const removed = await db().from("store_contacts").delete().eq("id", from.id);
+  if (removed.error) return `No se pudieron unir los contactos: ${removed.error.message}`;
+  if (Object.keys(fill).length) {
+    const { error } = await db().from("store_contacts").update({ ...fill, updated_at: new Date().toISOString() }).eq("id", into.id);
+    if (error) return dup(error);
+  }
+  return null;
+}
+
 const dup = (e: { code?: string; message: string }) =>
   e.code === "23505" ? "Ese grupo o teléfono ya está guardado en otro contacto." : `No se pudo guardar: ${e.message}`;
 
 /**
- * Guarda el contacto de la tienda. Si la tienda ya tiene contacto, lo edita. Si no, y el grupo
- * o el teléfono ya están en otro contacto, vincula la tienda a ese contacto en vez de duplicarlo.
+ * Guarda el contacto de la tienda. Si la tienda ya tiene contacto, lo edita. Si el grupo o el
+ * teléfono ya están en otro contacto, es el mismo dueño: la tienda pasa a ese contacto (y si ya
+ * tenía uno propio, los dos se unen) en vez de duplicarlo o rechazarlo.
  */
 export async function saveContact(_prev: ContactState, form: FormData): Promise<ContactState> {
   const auth = await authorizeAction("stores_edit");
@@ -81,12 +115,27 @@ export async function saveContact(_prev: ContactState, form: FormData): Promise<
 
   const [byGroup, byPhone] = await Promise.all([findBy("whatsapp_group_code", patch.whatsapp_group_code), findBy("owner_phone", phone)]);
 
-  // la tienda ya tiene contacto: se edita, cuidando que el grupo o el teléfono no sean de otro
+  // la tienda ya tiene contacto: se edita; si el grupo o el teléfono son de otro contacto, se unen
   if (link) {
-    const other = [byGroup, byPhone].find((c) => c && c.id !== link.contact_id);
+    const others = [byGroup, byPhone].filter((c): c is StoreContact => !!c && c.id !== link.contact_id);
+    if (others.length === 2 && others[0].id !== others[1].id) {
+      return fail("El grupo y el teléfono están guardados en dos contactos distintos. Revisa cuál corresponde a esta tienda.");
+    }
+    const other = others[0];
     if (other) {
+      const mine = await contactById(link.contact_id);
+      if (!mine) return fail("No se encontró el contacto de esta tienda. Vuelve a abrirla.");
       const what = other === byGroup ? "Ese grupo" : "Ese teléfono";
-      return fail(`${what} ya está guardado en el contacto de ${await describe(other.id)}. Desvincula esta tienda y vincúlala a ese contacto.`);
+      const where = await describe(other.id);
+      // el contacto de esta tienda tal como quedó en el formulario (lo que se borró, no se rescata)
+      const edited: StoreContact = { ...mine, ...patch };
+      if (!canMergeContacts(other, edited)) {
+        return fail(`${what} ya está en el contacto de ${where}, que tiene otro grupo de WhatsApp. Si es el mismo dueño con dos grupos, deja vacío ${other === byPhone ? "el teléfono" : "el grupo"} en una de las tiendas.`);
+      }
+      const err = await mergeInto(other, edited);
+      if (err) return fail(err);
+      const names = (await storesOf(other.id)).filter((n) => n !== store.storeName);
+      return done(`${what} ya estaba en el contacto de ${where}: unimos los dos contactos y ${store.storeName ?? "esta tienda"} quedó con el mismo${names.length ? ` (también atiende ${names.join(", ")})` : ""}.`);
     }
     const { error } = await db().from("store_contacts").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", link.contact_id);
     if (error) return fail(dup(error));
@@ -151,6 +200,36 @@ export async function linkStore(_prev: ContactState, form: FormData): Promise<Co
   });
   if (error) return fail(dup(error));
   return done("Tienda vinculada al contacto.");
+}
+
+/**
+ * Une el contacto de esta tienda con el de otra operación del mismo dueño (`contact_id`): queda el
+ * que tiene grupo de WhatsApp (o teléfono) y el otro se suma a él, con todas sus tiendas.
+ */
+export async function mergeContacts(_prev: ContactState, form: FormData): Promise<ContactState> {
+  const auth = await authorizeAction("stores_edit");
+  if (!auth.ok) return fail(auth.msg);
+  const theirsId = field(form, "contact_id");
+  const store = await storeOf(form);
+  if (!UUID.test(theirsId) || !store) return fail("Datos no válidos.");
+  const { data: link } = await db()
+    .from("store_contact_links")
+    .select("contact_id")
+    .eq("account_id", store.accountId)
+    .eq("store_id", store.storeId)
+    .maybeSingle();
+  if (!link) return fail("Esta tienda todavía no tiene contacto: usa “Usar su contacto”.");
+  if (link.contact_id === theirsId) return fail("Ya comparten el mismo contacto.");
+  const [mine, theirs] = await Promise.all([contactById(link.contact_id), contactById(theirsId)]);
+  if (!mine || !theirs) return fail("Contacto no encontrado. Vuelve a abrir la tienda.");
+  if (!canMergeContacts(mine, theirs)) {
+    return fail("Cada contacto tiene su propio grupo de WhatsApp: se dejan separados para no perder ninguno. Si uno ya no se usa, borra su enlace primero.");
+  }
+  const { into, from } = mergeSurvivor(mine, theirs);
+  const err = await mergeInto(into, from);
+  if (err) return fail(err);
+  const names = await storesOf(into.id);
+  return done(`Contactos unidos: ${names.join(", ")} comparten ahora el mismo grupo y datos.`);
 }
 
 /** Quita una tienda de su contacto; si el contacto queda sin tiendas, se borra. */
