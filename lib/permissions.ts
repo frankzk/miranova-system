@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   { key: "requests", label: "Solicitudes", hint: "Lo que piden las tiendas (producto, cantidad y países): verlas, cargarlas y cambiar su estado" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
+  { key: "profit", label: "Rentabilidad", hint: "Costos por producto, precios comunidad y usuarios, márgenes y utilidad real de lo entregado" },
   { key: "export", label: "Exportar", hint: "Descargar órdenes, catálogo y solicitudes en Excel o CSV" },
   { key: "accounts", label: "Cuentas", hint: "Cuentas de Drop y Dropi: accesos, sincronización y mantenimiento" },
   { key: "users", label: "Usuarios", hint: "Crear usuarios, cambiar sus permisos y restablecer contraseñas" },

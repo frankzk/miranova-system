@@ -110,6 +110,9 @@ export const IconBox = (p: P) => (
 export const IconChart = (p: P) => (
   <Svg {...p}><path d="M2.5 13.5h11M4.5 11V8M8 11V4.5M11.5 11V6.5" /></Svg>
 );
+export const IconTrend = (p: P) => (
+  <Svg {...p}><path d="M2.5 13.5h11M3 10.5 6.5 7 9 9.5 13.5 5M10.5 5h3v3" /></Svg>
+);
 export const IconTarget = (p: P) => (
   <Svg {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="8" cy="8" r="2.5" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2" /></Svg>
 );

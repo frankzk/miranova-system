@@ -1,0 +1,95 @@
+/* Rentabilidad: resumen (utilidad real de lo entregado) y costos por producto. Usa además im-* para formularios. */
+.pf-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.pf-toolbar .segmented { max-width: 100%; overflow-x: auto; }
+.pf-search { flex: 0 1 320px; }
+.pf-period { margin: 0 0 10px; font-size: var(--t-sm); color: var(--ink-3); }
+.pf-period b { color: var(--ink); font-weight: 600; }
+.pf-metrics .value[data-tone="down"] { color: var(--danger); }
+.pf-cover { margin: -4px 0 16px; padding: 9px 12px; border-radius: var(--r); background: var(--bg-app); border: 1px solid var(--line); font-size: var(--t-sm); color: var(--ink-2); }
+.pf-cover[data-tone="warning"] { background: var(--warning-bg); border-color: #f5d9a8; color: var(--warning); }
+.pf-cover b { font-variant-numeric: tabular-nums; }
+.pf-cover a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pf-block { margin-bottom: 16px; }
+/* lo oculto para lectores de pantalla (p. ej. "Acciones") se ubica dentro del área con scroll, no a la derecha de la página */
+.pf-page .table-scroll { position: relative; }
+.pf-help { margin: 6px 18px 10px; font-size: var(--t-sm); color: var(--ink-3); }
+.pf-chart-body { padding: 12px 18px 16px; }
+
+/* gráficos */
+.pf-grid { position: absolute; inset: 0; pointer-events: none; }
+.pf-grid i { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.pf-grid i[data-zero] { border-top-style: solid; border-color: var(--line-strong); }
+.pf-chart .col rect.del[data-current] { fill: #cdcaff; stroke: var(--accent); stroke-width: 1.5px; }
+.pf-chart .col rect.neg { fill: var(--danger-dot); opacity: 0.85; }
+.pf-chart .col:hover rect.neg { opacity: 1; }
+.pf-chart .col rect.mark { fill: var(--accent-ink); }
+
+.pf-compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 28px; padding: 12px 18px 18px; }
+.pf-fig { margin: 0; min-width: 0; }
+.pf-fig figcaption { font-size: var(--t-sm); font-weight: 600; }
+.pf-fig .og-sub { margin-bottom: 12px; }
+.pf-months { border-top: 1px solid var(--line); }
+
+/* tablas */
+.pf-table td b[data-tone="down"], .pf-calc b[data-tone="down"], .pf-market summary b[data-tone="down"] { color: var(--danger); }
+.pf-table td b { font-weight: 600; }
+.pf-table .sub > * + .pill { margin-left: 6px; }
+.pf-name { color: var(--ink); }
+.pf-name:hover { color: var(--accent-ink); }
+.pf-actions-cell { width: 1%; }
+.pf-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.pf-unlinked td:first-child { min-width: 240px; }
+.pf-link { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.pf-link .select { height: 30px; max-width: 220px; font-size: var(--t-sm); }
+.pf-link .im-msg { flex-basis: 100%; text-align: right; }
+
+.pf-costs { min-width: 940px; }
+.pf-costs td:first-child { min-width: 230px; }
+.pf-table th .th-sub { display: block; font-weight: 400; font-size: 10.5px; color: var(--ink-4); }
+.pf-pct { font-size: var(--t-xs); color: var(--ink-3); }
+.pf-costs tbody.pf-group + tbody.pf-group tr:first-child td { border-top: 1px solid var(--line-strong); }
+.pf-costs tr.pf-product td { background: var(--bg-subtle); }
+.pf-costs tr.pf-market-row td:first-child { padding-left: 30px; }
+.pf-acc { font-weight: 550; color: var(--ink-2); }
+
+/* formulario */
+.pf-form .im-grid { align-items: end; }
+.pf-note { margin: 0; align-self: center; font-size: var(--t-xs); color: var(--ink-3); }
+.pf-calc { margin: -2px 0 0; font-size: var(--t-sm); color: var(--ink-2); }
+.pf-calc b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-calc b[data-tone="up"] { color: var(--success); }
+.pf-calc .hint, .pf-markets-h .hint { font-size: var(--t-xs); color: var(--ink-3); font-weight: 400; }
+.pf-markets { display: grid; gap: 8px; }
+.pf-markets-h { margin: 0; font-size: var(--t-sm); font-weight: 600; }
+.pf-market { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-surface); }
+.pf-market[open] { border-color: var(--line-strong); }
+.pf-market summary { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; padding: 10px 12px; cursor: pointer; list-style: none; }
+.pf-market summary::-webkit-details-marker { display: none; }
+.pf-market summary .n { font-weight: 600; font-size: var(--t-sm); }
+.pf-market summary .s { font-size: var(--t-xs); color: var(--ink-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.pf-market summary .s b { color: var(--success); font-weight: 600; }
+.pf-market-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; padding: 2px 12px 12px; }
+.pf-market-body .field { margin: 0; }
+.pf-span2 { grid-column: 1 / -1; }
+.pf-seen { margin: 0; font-size: var(--t-xs); color: var(--info); }
+.pf-market .check { display: flex; align-items: center; gap: 8px; font-size: var(--t-sm); }
+
+.pf-toolbar .segmented a { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .pf-compare { grid-template-columns: minmax(0, 1fr); }
+  .pf-table td:first-child { min-width: 170px; }
+}
+
+/* en el celular, "Entregados sin ficha" en tarjetas: nombre y cifras arriba, acciones abajo */
+@media (max-width: 640px) {
+  .pf-unlinked thead { display: none; }
+  .pf-unlinked, .pf-unlinked tbody { display: block; }
+  .pf-unlinked tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .pf-unlinked tbody tr:last-child { border-bottom: 0; }
+  .pf-unlinked td { display: block; padding: 0; border: 0; }
+  .pf-unlinked td:first-child { min-width: 0; }
+  .pf-unlinked td.pf-actions-cell { grid-column: 1 / -1; width: auto; }
+  .pf-unlinked .pf-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .pf-unlinked .pf-link { justify-content: flex-start; }
+}
