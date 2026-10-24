@@ -25,7 +25,7 @@ export type StoreDrawerProps = {
   canOrders: boolean;
   /** null = solo lectura (sin permiso de Editar tiendas). */
   actions: {
-    contact: { save: Action<ContactState>; link: Action<ContactState>; unlink: Action<ContactState> };
+    contact: { save: Action<ContactState>; link: Action<ContactState>; unlink: Action<ContactState>; merge: Action<ContactState> };
     followup: { add: Action<FollowupState>; update: Action<FollowupState> };
   } | null;
 };

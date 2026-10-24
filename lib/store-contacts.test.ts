@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatPhone, nameTokens, normalizeEmail, normalizePhone, parseWhatsappGroup, storeEmail, suggestLinks, type DirectoryStore } from "./store-contacts.ts";
+import {
+  canMergeContacts, contactFill, formatPhone, mergeSurvivor, nameTokens, normalizeEmail, normalizePhone, parseWhatsappGroup, storeEmail, suggestLinks,
+  type ContactData, type DirectoryStore,
+} from "./store-contacts.ts";
 
 const CODE = "AbCdEfGhIjKlMnOpQrStUv";
 
@@ -75,4 +78,21 @@ test("correo de la tienda: el del contacto manda sobre el detectado en los pedid
   assert.deepEqual(storeEmail("tienda@x.com", "otra@y.com"), { email: "tienda@x.com", source: "contacto" });
   assert.deepEqual(storeEmail(null, "otra@y.com"), { email: "otra@y.com", source: "pedidos" });
   assert.deepEqual(storeEmail("  ", undefined), null);
+});
+
+test("unir contactos: queda el que tiene grupo y se completa lo que le falta sin pisar nada", () => {
+  const hn: ContactData = { whatsapp_group_url: "https://chat.whatsapp.com/ABC", whatsapp_group_code: "ABC", owner_name: "Miguel Jaramillo", owner_phone: null, email: null, notes: null };
+  const sv: ContactData = { whatsapp_group_url: null, whatsapp_group_code: null, owner_name: "Divertix Shop", owner_phone: "573166921804", email: "zuper@gmail.com", notes: "Responde de noche" };
+  assert.equal(mergeSurvivor(sv, hn).into, hn);
+  assert.equal(mergeSurvivor(hn, sv).into, hn);
+  // el nombre distinto queda anotado en las notas para no perderlo
+  assert.deepEqual(contactFill(hn, [sv]), { owner_phone: "573166921804", email: "zuper@gmail.com", notes: "Responde de noche\nTambién: Divertix Shop" });
+  // dos teléfonos distintos: queda el de `into` y el otro, anotado
+  assert.deepEqual(contactFill({ ...hn, owner_phone: "50499990000", owner_name: null }, [{ owner_phone: "50255551234" }]), { notes: "Otro teléfono: +502 5555 1234" });
+  // lo escrito en el formulario va primero; las notas distintas se suman, las iguales no
+  assert.deepEqual(contactFill({ ...hn, notes: "Prefiere audios" }, [{ notes: "prefiere  audios" }, { notes: "Solo de 8 a 5" }]), { notes: "Prefiere audios\nSolo de 8 a 5" });
+  assert.deepEqual(contactFill(hn, [{ whatsapp_group_url: "https://chat.whatsapp.com/XYZ", whatsapp_group_code: "XYZ" }]), {});
+  // dos grupos distintos no se unen (sería perder uno)
+  assert.equal(canMergeContacts(hn, { ...sv, whatsapp_group_code: "XYZ" }), false);
+  assert.equal(canMergeContacts(hn, sv), true);
 });

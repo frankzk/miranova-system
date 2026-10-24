@@ -153,3 +153,49 @@ export function storeEmail(manual: string | null | undefined, detected: string |
   if (detected?.trim()) return { email: detected.trim(), source: "pedidos" };
   return null;
 }
+
+// ─── Unir dos contactos del mismo dueño ───
+
+export type ContactData = Pick<StoreContact, "whatsapp_group_url" | "whatsapp_group_code" | "owner_name" | "owner_phone" | "email" | "notes">;
+
+/**
+ * Dos contactos se pueden unir salvo que tengan grupos de WhatsApp distintos (sería la misma
+ * persona con dos grupos: se dejan separados para no perder ninguno).
+ */
+export const canMergeContacts = (a: ContactData, b: ContactData) =>
+  !a.whatsapp_group_code || !b.whatsapp_group_code || a.whatsapp_group_code === b.whatsapp_group_code;
+
+/** Cuál queda al unir: el que tiene grupo; si no, el que tiene teléfono; si no, el segundo. */
+export function mergeSurvivor<T extends ContactData>(a: T, b: T): { into: T; from: T } {
+  const score = (c: ContactData) => (c.whatsapp_group_code ? 2 : 0) + (c.owner_phone ? 1 : 0);
+  return score(a) > score(b) ? { into: a, from: b } : { into: b, from: a };
+}
+
+/**
+ * Lo que hay que completarle a `into` con los datos de `sources` (en orden de preferencia): solo
+ * lo que le falta, sin pisar lo que ya tiene. Las notas distintas se suman en otra línea, y si un
+ * teléfono, nombre o correo no cabe porque `into` ya tiene otro, queda anotado para no perderlo.
+ */
+export function contactFill(into: ContactData, sources: Partial<ContactData>[]): Partial<ContactData> {
+  const fill: Partial<ContactData> = {};
+  const first = <K extends keyof ContactData>(k: K) => sources.map((s) => s[k]).find((v) => typeof v === "string" && v.trim()) as string | undefined;
+  if (!into.whatsapp_group_code) {
+    const src = sources.find((s) => s.whatsapp_group_code && s.whatsapp_group_url);
+    if (src) Object.assign(fill, { whatsapp_group_url: src.whatsapp_group_url, whatsapp_group_code: src.whatsapp_group_code });
+  }
+  if (!into.owner_phone && first("owner_phone")) fill.owner_phone = first("owner_phone");
+  if (!into.owner_name?.trim() && first("owner_name")) fill.owner_name = first("owner_name");
+  if (!into.email?.trim() && first("email")) fill.email = first("email");
+  // lo que no cabe porque `into` ya tiene otro valor
+  const kept = { owner_phone: into.owner_phone ?? fill.owner_phone, owner_name: into.owner_name ?? fill.owner_name, email: into.email ?? fill.email };
+  const extra: string[] = [];
+  for (const src of sources) {
+    if (src.owner_phone && kept.owner_phone && src.owner_phone !== kept.owner_phone) extra.push(`Otro teléfono: ${formatPhone(src.owner_phone)}`);
+    if (src.owner_name?.trim() && kept.owner_name?.trim() && norm(src.owner_name) !== norm(kept.owner_name)) extra.push(`También: ${src.owner_name.trim()}`);
+    if (src.email?.trim() && kept.email?.trim() && src.email.trim().toLowerCase() !== kept.email.trim().toLowerCase()) extra.push(`Otro correo: ${src.email.trim()}`);
+  }
+  const notes = [into.notes, ...sources.map((s) => s.notes), ...extra].map((n) => n?.trim()).filter((n): n is string => !!n);
+  const unique = notes.filter((n, i) => notes.findIndex((m) => norm(m) === norm(n)) === i);
+  if (unique.length > (into.notes?.trim() ? 1 : 0)) fill.notes = unique.join("\n").slice(0, 1000);
+  return fill;
+}

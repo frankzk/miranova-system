@@ -14,7 +14,7 @@ import { storeDetail } from "@/lib/store-detail";
 import { fmtDay, pctChange, vsAverage, type StoreDetail } from "@/lib/store-metrics";
 import { classify, HEALTH, opportunities, type StoreRow } from "@/lib/stores";
 import { addFollowup, updateFollowup } from "./actions";
-import { linkStore, saveContact, unlinkStore } from "./contact-actions";
+import { linkStore, mergeContacts, saveContact, unlinkStore } from "./contact-actions";
 import "./store-detail.css";
 
 type Params = Promise<{ account: string; store: string }>;
@@ -88,7 +88,7 @@ export default async function StorePage({ params }: { params: Params }) {
       <StoreContactBar
         view={contact}
         store={{ accountId: s.account_id, storeId: s.store_id, storeName: s.name }}
-        actions={canEdit ? { save: saveContact, link: linkStore, unlink: unlinkStore } : null}
+        actions={canEdit ? { save: saveContact, link: linkStore, unlink: unlinkStore, merge: mergeContacts } : null}
       />
 
       {ops.length > 0 && (

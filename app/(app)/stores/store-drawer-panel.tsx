@@ -9,7 +9,7 @@ import { fmtMoney } from "@/lib/format";
 import { storeDetail, type StoreDetail } from "@/lib/store-detail";
 import { classify, opportunities, type StoreRow } from "@/lib/stores";
 import { addFollowup, updateFollowup } from "./[account]/[store]/actions";
-import { linkStore, saveContact, unlinkStore } from "./[account]/[store]/contact-actions";
+import { linkStore, mergeContacts, saveContact, unlinkStore } from "./[account]/[store]/contact-actions";
 // estilos de contacto y seguimiento (los mismos de la ficha)
 import "./[account]/[store]/store-detail.css";
 
@@ -71,7 +71,7 @@ async function StoreDrawerPanel({ data, row, typical, closeHref, me, canOrders, 
         closeHref={closeHref}
         me={me}
         canOrders={canOrders}
-        actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore }, followup: { add: addFollowup, update: updateFollowup } } : null}
+        actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore, merge: mergeContacts }, followup: { add: addFollowup, update: updateFollowup } } : null}
       />
     </Drawer>
   );
