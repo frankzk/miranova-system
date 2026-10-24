@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconInbox, IconLogout, IconMenu, IconMoney, IconOrders, IconShip, IconStore, IconTarget } from "./icons";
+import { IconAccounts, IconBox, IconChart, IconChevronDown, IconHome, IconInbox, IconLogout, IconMenu, IconMoney, IconOrders, IconShip, IconStore, IconTarget, IconTrend } from "./icons";
 import type { Permission, PermissionFlags } from "@/lib/permissions";
 import { setScopeAction } from "@/lib/scope-actions";
 import { NavPending } from "./nav-pending";
@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permissi
   { href: "/imports", label: "Compras", icon: IconShip, perm: "imports", match: (p: string) => p.startsWith("/imports") },
   { href: "/requests", label: "Solicitudes", icon: IconInbox, perm: "requests", match: (p: string) => p.startsWith("/requests") },
   { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
+  { href: "/profit", label: "Rentabilidad", icon: IconTrend, perm: "profit", match: (p: string) => p.startsWith("/profit") },
 ];
 
 const initials = (name: string) =>
