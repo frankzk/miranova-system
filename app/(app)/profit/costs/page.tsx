@@ -10,7 +10,7 @@ import { can, permissionFlags } from "@/lib/permissions";
 import { costProduct, type CostProduct } from "@/lib/profit-access";
 import { defaultGtqRate } from "@/lib/lab-purchases-data";
 import {
-  carrierLabel, costSymbol, costFx, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
+  automaticHnlFx, carrierLabel, costSymbol, costFx, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
   type Carrier, type MarketAccount, type ProfitProduct,
 } from "@/lib/profit";
 import { listProfitProducts, marketAccounts, profitCatalog, profitDelivered } from "@/lib/profit-data";
@@ -67,8 +67,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
   // "Crear ficha" desde Entregados sin ficha: viene con el producto de la plataforma elegido
   const nuevo = one(sp, "nuevo");
   const seed = nuevo ? catalog.find((c) => `${c.account_id}|${c.product_key}` === nuevo && !taken[nuevo]) : undefined;
-  const hnlUsdRate = accounts.find((a) => a.currency === "HNL" && a.usd_rate && a.usd_rate > 0)?.usd_rate;
-  const hnlFx = hnlUsdRate && Number.isFinite(hnlUsdRate) ? Math.round(10_000 / hnlUsdRate) / 10_000 : null;
+  const hnlFx = automaticHnlFx(accounts);
   const form = (v?: Partial<CostProduct>) => (
     <ProfitForm
       action={saveProfitProduct} v={v} accounts={accounts} catalog={catalog} taken={taken}
@@ -219,7 +218,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
       </div>
       <p className="footnote">
         Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + fulfillment
-        ({usd(1.2)} por pedido, fijo). Los costos en quetzales o lempiras se convierten a dólares con el tipo de cambio de la ficha. Todos los costos de una ficha usan la moneda seleccionada. Los precios comerciales y el análisis de rentabilidad tienen accesos separados.
+        ({usd(1.2)} por pedido, fijo). Los costos en lempiras usan automáticamente el tipo de cambio actual sincronizado de Drop, también en Rentabilidad y Excel. Los costos en quetzales usan la tasa de la ficha. Todos los costos de una ficha usan la moneda seleccionada.
       </p>
     </div>
   );

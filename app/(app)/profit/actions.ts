@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { authorizeAction } from "@/lib/auth";
-import { cleanProfitProduct, type MarketInput } from "@/lib/profit";
+import { automaticHnlFx, cleanProfitProduct, type MarketInput } from "@/lib/profit";
 import { cleanCostProduct, costMarketWrites } from "@/lib/profit-access";
 import { can } from "@/lib/permissions";
 import { marketAccounts } from "@/lib/profit-data";
@@ -47,6 +47,10 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
   const id = field(form, "id");
   if (id && !UUID.test(id)) return fail(GONE);
   const accounts = await marketAccounts();
+  const hnlFx = automaticHnlFx(accounts);
+  if (field(form, "cost_currency") === "HNL" && hnlFx === null) {
+    return fail("Todavía no hay un tipo de cambio de lempiras sincronizado. Vuelve a intentar después de sincronizar la cuenta de Honduras.");
+  }
   const markets: Record<string, MarketInput> = {};
   for (const a of accounts) {
     markets[a.id] = {
@@ -65,7 +69,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
       name: field(form, "name"),
       cost_currency: field(form, "cost_currency"),
       fx_gtq_per_usd: field(form, "fx_gtq_per_usd"),
-      fx_hnl_per_usd: field(form, "fx_hnl_per_usd"),
+      fx_hnl_per_usd: hnlFx === null ? "" : String(hnlFx),
       unit_cost: field(form, "unit_cost"),
       import_cost: field(form, "import_cost"),
       pickup_cost: field(form, "pickup_cost"),

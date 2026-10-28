@@ -111,10 +111,11 @@ ni variables nuevas. La clave privilegiada de Supabase permanece en el servidor.
 
 Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
 
-Las fichas de costos admiten USD, GTQ y HNL. Para quetzales y lempiras se guarda
-el tipo de cambio de la ficha (moneda local por USD), que se utiliza para convertir
-todos sus costos y el reporte de Excel a dólares. Las tasas GTQ y HNL son independientes;
-la tasa HNL sugerida proviene de la cuenta sincronizada y se puede ajustar a la compra.
+Las fichas de costos admiten USD, GTQ y HNL. En lempiras se usa automáticamente
+la tasa actual del catálogo sincronizado de Drop Honduras (L por USD), al guardar
+y consultar fichas, rentabilidad y Excel, incluidas las fichas existentes. El servidor
+ignora tasas HNL enviadas desde el formulario; si falta la tasa sincronizada, bloquea
+el guardado y deja los cálculos sin tasa disponible. La tasa GTQ continúa en la ficha.
 
 - **Costos de productos** (`product_costs`, `/profit/costs`): crear y editar fichas,
   costos, traslados, cantidades y vínculos. No recibe precios comerciales ni utilidades.

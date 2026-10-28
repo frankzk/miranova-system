@@ -58,6 +58,19 @@ export type ProfitProduct = {
 /** Cuenta con su moneda y dólares por unidad de esa moneda (null si no se conoce). */
 export type MarketAccount = { id: string; name: string; country: string | null; currency: string; usd_rate: number | null };
 
+/** Current platform quote, in lempiras per USD. Never reuse a saved/manual cost rate. */
+export function automaticHnlFx(accounts: Pick<MarketAccount, "id" | "currency" | "usd_rate">[]): number | null {
+  const rate = [...accounts].sort((a, b) => a.id.localeCompare(b.id))
+    .find((a) => a.currency === "HNL" && a.usd_rate !== null && Number.isFinite(a.usd_rate) && a.usd_rate > 0)?.usd_rate;
+  if (!rate) return null;
+  const fx = Math.round(10_000 / rate) / 10_000;
+  return fx >= 1 && fx <= 1000 ? fx : null;
+}
+
+export function withAutomaticHnlFx<T extends Pick<ProfitProduct, "cost_currency" | "fx_hnl_per_usd">>(p: T, fx: number | null): T {
+  return p.cost_currency === "HNL" ? { ...p, fx_hnl_per_usd: fx } : p;
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Monto en la moneda de costos de la ficha → dólares (null si falta el monto o el tipo de cambio). */

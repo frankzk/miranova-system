@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   cleanProfitProduct, dailyTotals, marketEconomics, margin, monthBuckets, nameSimilarity, observedPrices, parseMoney, profitPeriod, realize,
-  suggestLinks, unitCosts, weekBuckets, windowStart, type Delivered, type ProfitProduct,
+  automaticHnlFx, withAutomaticHnlFx, suggestLinks, unitCosts, weekBuckets, windowStart, type Delivered, type ProfitProduct,
 } from "./profit.ts";
 
 const HN = "hn";
@@ -19,6 +19,21 @@ const product = (over: Partial<ProfitProduct> = {}): ProfitProduct => ({
   ],
   links: [{ account_id: HN, product_key: "dlg-hn" }, { account_id: SV, product_key: "dlg-sv" }],
   ...over,
+});
+
+test("HNL automático: usa la tasa sincronizada nueva para fichas existentes y no una tasa manual guardada", () => {
+  const p = product({ cost_currency: "HNL", fx_hnl_per_usd: 7.65, unit_cost: 250, import_cost: null, pickup_cost: null });
+  const account = { id: "hn", currency: "HNL", usd_rate: 0.04 };
+  const first = automaticHnlFx([account]);
+  assert.equal(first, 25);
+  close(unitCosts(withAutomaticHnlFx(p, first)).cost_total, 10);
+  const next = automaticHnlFx([{ ...account, usd_rate: 0.05 }]);
+  assert.equal(next, 20);
+  close(unitCosts(withAutomaticHnlFx(p, next)).cost_total, 12.5);
+  assert.equal(withAutomaticHnlFx(product({ cost_currency: "GTQ", fx_gtq_per_usd: 7.65 }), next).fx_gtq_per_usd, 7.65);
+  for (const usd_rate of [null, 0, -1, NaN, Infinity]) assert.equal(automaticHnlFx([{ ...account, usd_rate }]), null);
+  assert.equal(automaticHnlFx([{ ...account, currency: "GTQ" }]), null);
+  assert.equal(unitCosts(withAutomaticHnlFx(p, null)).cost_total, null);
 });
 
 test("montos: acepta símbolos y comas; texto que no es número da NaN", () => {

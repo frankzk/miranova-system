@@ -57,7 +57,7 @@ export function ProfitForm({
   const [fxByCurrency, setFxByCurrency] = useState({
     USD: "", GTQ: str(v.fx_gtq_per_usd ?? defaultFx), HNL: str(v.fx_hnl_per_usd ?? defaultHnlFx),
   });
-  const fx = fxByCurrency[currency];
+  const fx = currency === "HNL" ? str(defaultHnlFx) : fxByCurrency[currency];
   const [cost, setCost] = useState(str(v.unit_cost));
   const [imp, setImp] = useState(str(v.import_cost));
   const [pickup, setPickup] = useState(str(v.pickup_cost));
@@ -146,11 +146,11 @@ export function ProfitForm({
         </label>
         {currency !== "USD" ? (
           <label className="field">
-            <span>Tipo de cambio <span className="hint">{sym} por USD</span></span>
+            <span>Tipo de cambio <span className="hint">{sym} por USD{currency === "HNL" ? " · Automático" : ""}</span></span>
             <input className="input" name={currency === "HNL" ? "fx_hnl_per_usd" : "fx_gtq_per_usd"} value={fx}
               onChange={(e) => { const value = e.currentTarget.value; setFxByCurrency((cur) => ({ ...cur, [currency]: value })); }}
-              inputMode="decimal" placeholder={`${sym} por 1 USD`} required />
-            {currency === "HNL" && <span className="hint">Lempiras por cada dólar. Revisa el tipo de cambio de tu compra.</span>}
+              inputMode="decimal" placeholder={currency === "HNL" ? "Pendiente de sincronización" : `${sym} por 1 USD`} required readOnly={currency === "HNL"} />
+            {currency === "HNL" && <span className="hint">{defaultHnlFx ? "Se actualiza con la sincronización del catálogo de Drop Honduras. Los cálculos usan la última tasa disponible." : "Todavía no hay una tasa sincronizada. Sincroniza la cuenta de Honduras para guardar costos en lempiras."}</span>}
           </label>
         ) : (
           <p className="pf-note">Traslado, recolección y costos van en dólares. Los precios se gestionan con el permiso Precios comerciales.</p>
@@ -235,7 +235,7 @@ export function ProfitForm({
       </label>
       <datalist id={`${uid}-names`}>{names.map((n) => <option key={n} value={n} />)}</datalist>
       <Msg state={state} />
-      <SubmitButton className="btn btn-primary" pending="Guardando…">{isNew ? "Guardar ficha" : "Guardar"}</SubmitButton>
+      <SubmitButton className="btn btn-primary" pending="Guardando…" disabled={currency === "HNL" && !defaultHnlFx}>{isNew ? "Guardar ficha" : "Guardar"}</SubmitButton>
     </StickyForm>
   );
 }
