@@ -5,15 +5,15 @@ import { ProfitSubnav } from "@/components/profit-subnav";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, todayIn } from "@/lib/format";
 import { can, permissionFlags } from "@/lib/permissions";
 import { costProduct, type CostProduct } from "@/lib/profit-access";
 import { defaultGtqRate } from "@/lib/lab-purchases-data";
 import {
-  carrierLabel, costSymbol, FULFILLMENT_USD, normName, unitCosts,
+  carrierLabel, costSymbol, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
   type Carrier, type MarketAccount, type ProfitProduct,
 } from "@/lib/profit";
-import { listProfitProducts, marketAccounts, profitCatalog } from "@/lib/profit-data";
+import { listProfitProducts, marketAccounts, profitCatalog, profitDelivered } from "@/lib/profit-data";
 import { deleteProfitProduct, saveProfitProduct } from "../actions";
 import "../../imports/imports.css";
 import "../profit.css";
@@ -32,12 +32,20 @@ const money = (n: number | null, c: ProfitProduct["cost_currency"]) => (n === nu
 
 export default async function ProfitCostsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, sp] = await Promise.all([requirePermission("product_costs"), searchParams]);
-  const [accounts, products, fx] = await Promise.all([
+  const today = todayIn();
+  const [accounts, products, fx, catalog] = await Promise.all([
     marketAccounts(),
     listProfitProducts().then((ps) => ps.map(costProduct)),
     defaultGtqRate().catch(() => 7.75),
+    // Keep historical products available for linking. Only catalog names/keys reach the form.
+    profitDelivered(windowStart(today, profitPeriod("mes", today)), "delivered").then(profitCatalog),
   ]);
-  const catalog = await profitCatalog({ rows: [], orders: [], names: Object.fromEntries(products.flatMap((p) => p.links.map((l) => [`${l.account_id}:${l.product_key}`, p.name]))) });
+  // Also retain older links outside the historical window so editing cannot silently clear them.
+  const catalogKeys = new Set(catalog.map((c) => `${c.account_id}|${c.product_key}`));
+  for (const p of products) for (const l of p.links) {
+    const key = `${l.account_id}|${l.product_key}`;
+    if (!catalogKeys.has(key)) { catalog.push({ ...l, name: p.name }); catalogKeys.add(key); }
+  }
   const taken: Record<string, string> = {};
   for (const p of products) for (const l of p.links) taken[`${l.account_id}|${l.product_key}`] = p.id;
   // transportista más usado en cada país, para proponerlo en las cuentas nuevas
