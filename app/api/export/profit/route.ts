@@ -3,7 +3,7 @@ import { listAccounts } from "@/lib/accounts";
 import { authorizeRoute } from "@/lib/auth";
 import { todayIn } from "@/lib/format";
 import {
-  carrierLabel, coverage, dailyTotals, dayBuckets, marketEconomics, margin, profitPeriod, realize, windowStart,
+  carrierLabel, costFx, coverage, dailyTotals, dayBuckets, marketEconomics, margin, profitPeriod, realize, windowStart,
 } from "@/lib/profit";
 import { listProfitProducts, marketAccounts, profitDelivered, ratesOf } from "@/lib/profit-data";
 import { getScope } from "@/lib/scope";
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       const a = m ? accounts.find((x) => x.id === m.account_id) : undefined;
       const e = m ? marketEconomics(p, m, a?.usd_rate ?? null) : null;
       costs.push([
-        p.name, a?.name ?? null, p.cost_currency, p.cost_currency === "GTQ" ? p.fx_gtq_per_usd : null,
+        p.name, a?.name ?? null, p.cost_currency, p.cost_currency !== "USD" ? costFx(p) : null,
         p.unit_cost, p.import_cost, p.pickup_cost,
         m ? carrierLabel(m.carrier) : null, m?.transfer_cost ?? null,
         r2(e?.cost_total ?? null), r2(e?.pickup ?? null), r2(e?.transfer ?? null), e ? 1.2 : null,
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
     {
       name: "Costos por producto",
       columns: [
-        { header: "Producto", width: 34 }, { header: "Cuenta", width: 24 }, { header: "Moneda de costos", width: 10 }, { header: "Tipo de cambio (Q por USD)", width: 11 },
+        { header: "Producto", width: 34 }, { header: "Cuenta", width: 24 }, { header: "Moneda de costos", width: 10 }, { header: "Tipo de cambio (moneda de costos por USD)", width: 16 },
         { header: "Costo", width: 10 }, { header: "Costo de importación", width: 11 }, { header: "Recolección en GT", width: 11 },
         { header: "Transportista", width: 18 }, { header: "Traslado", width: 10 },
         usd("Costo total"), usd("Recolección"), usd("Traslado"), usd("Fulfillment", 11), usd("Costo final"),

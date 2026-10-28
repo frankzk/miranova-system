@@ -10,5 +10,6 @@ next-env.d.ts
 *.zip
 .impeccable/review/
 .playwright-cli/
+supabase/.temp/
 .impeccable/mocks/
 .claude/worktrees/

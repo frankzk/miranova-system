@@ -32,7 +32,7 @@ type MarketState = { link: string; touched: boolean; carrier: string; transfer: 
  * de la plataforma, el traslado y la cantidad ingresada. Calcula el costo puesto en cada país.
  */
 export function ProfitForm({
-  action, v = {}, accounts, catalog, taken, carrierDefaults, defaultFx, names,
+  action, v = {}, accounts, catalog, taken, carrierDefaults, defaultFx, defaultHnlFx, names,
 }: {
   action: Action;
   v?: Partial<CostProduct>;
@@ -45,6 +45,7 @@ export function ProfitForm({
   carrierDefaults: Record<string, Carrier>;
   /** quetzales por dólar para una ficha nueva */
   defaultFx: number;
+  defaultHnlFx: number | null;
   names: string[];
 }) {
   const [state, run] = useActionState(action, null);
@@ -53,7 +54,10 @@ export function ProfitForm({
   const isNew = !v.id;
   const [name, setName] = useState(v.name ?? "");
   const [currency, setCurrency] = useState<CostCurrency>(v.cost_currency ?? "USD");
-  const [fx, setFx] = useState(str(v.fx_gtq_per_usd ?? defaultFx));
+  const [fxByCurrency, setFxByCurrency] = useState({
+    USD: "", GTQ: str(v.fx_gtq_per_usd ?? defaultFx), HNL: str(v.fx_hnl_per_usd ?? defaultHnlFx),
+  });
+  const fx = fxByCurrency[currency];
   const [cost, setCost] = useState(str(v.unit_cost));
   const [imp, setImp] = useState(str(v.import_cost));
   const [pickup, setPickup] = useState(str(v.pickup_cost));
@@ -114,7 +118,8 @@ export function ProfitForm({
 
   const base = {
     cost_currency: currency,
-    fx_gtq_per_usd: val(fx),
+    fx_gtq_per_usd: currency === "GTQ" ? val(fx) : null,
+    fx_hnl_per_usd: currency === "HNL" ? val(fx) : null,
     unit_cost: val(cost),
     import_cost: val(imp),
     pickup_cost: val(pickup),
@@ -139,10 +144,13 @@ export function ProfitForm({
             {COST_CURRENCIES.map((x) => <option key={x.id} value={x.id}>{x.label} ({x.symbol})</option>)}
           </select>
         </label>
-        {currency === "GTQ" ? (
+        {currency !== "USD" ? (
           <label className="field">
-            <span>Tipo de cambio <span className="hint">Q por USD</span></span>
-            <input className="input" name="fx_gtq_per_usd" value={fx} onChange={(e) => setFx(e.currentTarget.value)} inputMode="decimal" placeholder="7.65" required />
+            <span>Tipo de cambio <span className="hint">{sym} por USD</span></span>
+            <input className="input" name={currency === "HNL" ? "fx_hnl_per_usd" : "fx_gtq_per_usd"} value={fx}
+              onChange={(e) => { const value = e.currentTarget.value; setFxByCurrency((cur) => ({ ...cur, [currency]: value })); }}
+              inputMode="decimal" placeholder={`${sym} por 1 USD`} required />
+            {currency === "HNL" && <span className="hint">Lempiras por cada dólar. Revisa el tipo de cambio de tu compra.</span>}
           </label>
         ) : (
           <p className="pf-note">Traslado, recolección y costos van en dólares. Los precios se gestionan con el permiso Precios comerciales.</p>
@@ -163,7 +171,7 @@ export function ProfitForm({
           Costo total: <b>{c.cost_total === null ? "—" : usd(c.cost_total)}</b>
           {c.cost_total !== null && c.pickup > 0 && <> · con recolección <b>{usd(c.cost_total + c.pickup)}</b></>}
           {" "}· Fulfillment <b>{usd(FULFILLMENT_USD)}</b> por pedido (fijo)
-          {currency === "GTQ" && base.fx_gtq_per_usd === null && <span className="hint"> · falta el tipo de cambio</span>}
+          {currency !== "USD" && !val(fx) && <span className="hint"> · falta el tipo de cambio</span>}
         </p>
       </div>
 

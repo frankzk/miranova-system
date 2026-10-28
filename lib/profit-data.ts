@@ -17,7 +17,7 @@ type LinkRow = { product_id: string; account_id: string; product_key: string };
 /** Todas las fichas de costos, por nombre, con sus cuentas y los productos de la plataforma vinculados. */
 export async function listProfitProducts(): Promise<ProfitProduct[]> {
   const [p, m, l] = await Promise.all([
-    db().from("profit_products").select("id, name, cost_currency, fx_gtq_per_usd, unit_cost, import_cost, pickup_cost, notes").order("name").limit(5000),
+    db().from("profit_products").select("id, name, cost_currency, fx_gtq_per_usd, fx_hnl_per_usd, unit_cost, import_cost, pickup_cost, notes").order("name").limit(5000),
     db().from("profit_markets").select("product_id, account_id, carrier, transfer_cost, price_community, price_users, qty_in").limit(50000),
     db().from("profit_links").select("product_id, account_id, product_key").limit(50000),
   ]);
@@ -44,6 +44,7 @@ export async function listProfitProducts(): Promise<ProfitProduct[]> {
     ...r,
     cost_currency: isCostCurrency(r.cost_currency) ? r.cost_currency : "USD",
     fx_gtq_per_usd: num(r.fx_gtq_per_usd),
+    fx_hnl_per_usd: num(r.fx_hnl_per_usd),
     unit_cost: num(r.unit_cost),
     import_cost: num(r.import_cost),
     pickup_cost: num(r.pickup_cost),

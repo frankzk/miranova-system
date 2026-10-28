@@ -111,6 +111,11 @@ ni variables nuevas. La clave privilegiada de Supabase permanece en el servidor.
 
 Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
 
+Las fichas de costos admiten USD, GTQ y HNL. Para quetzales y lempiras se guarda
+el tipo de cambio de la ficha (moneda local por USD), que se utiliza para convertir
+todos sus costos y el reporte de Excel a dólares. Las tasas GTQ y HNL son independientes;
+la tasa HNL sugerida proviene de la cuenta sincronizada y se puede ajustar a la compra.
+
 - **Costos de productos** (`product_costs`, `/profit/costs`): crear y editar fichas,
   costos, traslados, cantidades y vínculos. No recibe precios comerciales ni utilidades.
 - **Precios comerciales** (`product_prices`, `/profit/prices`): consultar y editar
