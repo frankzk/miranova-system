@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useId, useState } from "react";
-import { currencySymbol } from "@/lib/format";
 import {
-  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, parseMoney, suggestLinks, unitCosts, unitProfit,
-  type CatalogItem, type Carrier, type CostCurrency, type MarketAccount, type ProfitProduct, type UnitProfit,
+  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, parseMoney, suggestLinks, unitCosts,
+  type CatalogItem, type Carrier, type CostCurrency, type MarketAccount,
 } from "@/lib/profit";
+import type { CostProduct } from "@/lib/profit-access";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
@@ -24,27 +24,23 @@ const val = (s: string) => {
   return n === null || Number.isNaN(n) ? null : n;
 };
 const usd = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const pct = (m: number | null) => (m === null ? "" : ` (${Math.round(m * 100)}%)`);
 
-type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; pc: string; pu: string; qty: string };
+type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; qty: string };
 
 /**
  * Ficha de costos de un producto: costos comunes (en dólares o quetzales) y, por cuenta, el producto
- * de la plataforma, el traslado, los precios comunidad y usuarios y la cantidad ingresada. Calcula
- * al escribir el costo total, lo puesto en el país y la rentabilidad por unidad.
+ * de la plataforma, el traslado y la cantidad ingresada. Calcula el costo puesto en cada país.
  */
 export function ProfitForm({
-  action, v = {}, accounts, catalog, taken, observed, carrierDefaults, defaultFx, names,
+  action, v = {}, accounts, catalog, taken, carrierDefaults, defaultFx, names,
 }: {
   action: Action;
-  v?: Partial<ProfitProduct>;
+  v?: Partial<CostProduct>;
   accounts: MarketAccount[];
   /** productos de la plataforma que se pueden vincular */
   catalog: CatalogItem[];
   /** "cuenta|product_key" → ficha que ya lo tiene (no se ofrece en las demás) */
   taken: Record<string, string>;
-  /** "cuenta|product_key" → precios más cobrados en Drop, de menor a mayor */
-  observed: Record<string, number[]>;
   /** transportista más usado por país, para cuentas nuevas */
   carrierDefaults: Record<string, Carrier>;
   /** quetzales por dólar para una ficha nueva */
@@ -67,18 +63,14 @@ export function ProfitForm({
     return !owner || owner === v.id;
   };
   const optionsOf = (aid: string) => catalog.filter((c) => c.account_id === aid && free(c));
-  const prices = (aid: string, key: string) => observed[`${aid}|${key}`] ?? [];
   const initial = (a: MarketAccount): MarketState => {
     const m = v.markets?.find((x) => x.account_id === a.id);
     const link = v.links?.find((l) => l.account_id === a.id)?.product_key ?? "";
-    const seen = link && !m ? prices(a.id, link) : [];
     return {
       link,
       touched: !!link,
       carrier: m ? m.carrier ?? "" : a.country === "GT" ? "" : carrierDefaults[a.country ?? ""] ?? "",
       transfer: str(m?.transfer_cost),
-      pc: str(m?.price_community ?? (seen.length === 2 ? seen[0] : null)),
-      pu: str(m?.price_users ?? (seen.length ? seen[seen.length - 1] : null)),
       qty: str(m?.qty_in),
     };
   };
@@ -98,17 +90,14 @@ export function ProfitForm({
 
   const patch = (aid: string, p: Partial<MarketState>) => setMarkets((cur) => ({ ...cur, [aid]: { ...cur[aid], ...p } }));
 
-  /** Al elegir el producto de una cuenta, si los precios están vacíos se proponen los cobrados en Drop. */
+  /** El producto elegido es independiente de los precios comerciales. */
   const chooseLink = (aid: string, key: string, touched = true) =>
     setMarkets((cur) => {
       const m = cur[aid];
-      const seen = key ? prices(aid, key) : [];
       return {
         ...cur,
         [aid]: {
           ...m, link: key, touched,
-          pc: m.pc || (seen.length === 2 ? String(seen[0]) : ""),
-          pu: m.pu || (seen.length ? String(seen[seen.length - 1]) : ""),
         },
       };
     });
@@ -156,7 +145,7 @@ export function ProfitForm({
             <input className="input" name="fx_gtq_per_usd" value={fx} onChange={(e) => setFx(e.currentTarget.value)} inputMode="decimal" placeholder="7.65" required />
           </label>
         ) : (
-          <p className="pf-note">Traslado, recolección y costos van en dólares; los precios, en la moneda de cada cuenta.</p>
+          <p className="pf-note">Traslado, recolección y costos van en dólares. Los precios se gestionan con el permiso Precios comerciales.</p>
         )}
         <label className="field">
           <span>Costo <span className="hint">por unidad, {sym}</span></span>
@@ -179,23 +168,18 @@ export function ProfitForm({
       </div>
 
       <div className="pf-markets">
-        <p className="pf-markets-h">Por cuenta <span className="hint">traslado, precios y cantidad ingresada; solo donde se vende</span></p>
+        <p className="pf-markets-h">Por cuenta <span className="hint">traslado y cantidad ingresada; solo donde se vende</span></p>
         {accounts.map((a) => {
           const m = markets[a.id];
           const options = optionsOf(a.id);
           const landed = unitCosts(base, { transfer_cost: val(m.transfer) }).landed;
-          const comm = unitProfit(landed, val(m.pc), a.usd_rate);
-          const users = unitProfit(landed, val(m.pu), a.usd_rate);
-          const seen = m.link ? prices(a.id, m.link) : [];
-          const cur = currencySymbol(a.currency);
-          const active = !!(m.link || m.transfer || m.pc || m.pu || m.qty || extras.some((x) => x.account_id === a.id));
+          const active = !!(m.link || m.transfer || m.qty || extras.some((x) => x.account_id === a.id));
           return (
             <details key={a.id} className="pf-market" open={active || undefined}>
               <summary>
                 <span className="n">{a.name}</span>
                 <span className="s">
                   {m.link ? options.find((o) => o.product_key === m.link)?.name ?? "Producto vinculado" : "No vinculado"}
-                  {users && <> · usuarios <b data-tone={users.profit < 0 ? "down" : undefined}>{usd(users.profit)}</b></>}
                 </span>
               </summary>
               <div className="pf-market-body">
@@ -224,26 +208,11 @@ export function ProfitForm({
                   <input className="input" name={`m_${a.id}_transfer`} value={m.transfer} onChange={(e) => patch(a.id, { transfer: e.currentTarget.value })} inputMode="decimal" placeholder="0.00" />
                 </label>
                 <label className="field">
-                  <span>Precio comunidad <span className="hint">{cur}</span></span>
-                  <input className="input" name={`m_${a.id}_pc`} value={m.pc} onChange={(e) => patch(a.id, { pc: e.currentTarget.value })} inputMode="decimal" />
-                </label>
-                <label className="field">
-                  <span>Precio usuarios <span className="hint">{cur}</span></span>
-                  <input className="input" name={`m_${a.id}_pu`} value={m.pu} onChange={(e) => patch(a.id, { pu: e.currentTarget.value })} inputMode="decimal" />
-                </label>
-                <label className="field">
                   <span>Cantidad ingresada <span className="hint">unidades</span></span>
                   <input className="input" name={`m_${a.id}_qty`} value={m.qty} onChange={(e) => patch(a.id, { qty: e.currentTarget.value })} inputMode="numeric" pattern="[0-9][0-9,]*" placeholder="0" />
                 </label>
-                {seen.length > 0 && (
-                  <p className="pf-seen pf-span2">
-                    En Drop se cobró {seen.map((p) => `${cur}${p.toLocaleString("en-US")}`).join(" y ")} por unidad (últimos 60 días)
-                    {seen.length === 2 ? ": el menor suele ser comunidad y el mayor usuarios." : "."}
-                  </p>
-                )}
                 <p className="pf-calc pf-span2">
                   Costo final en {a.country ?? "el país"}: <b>{landed === null ? "—" : usd(landed + FULFILLMENT_USD)}</b>
-                  {" "}· Comunidad <Profit p={comm} /> · Usuarios <Profit p={users} />
                   {!a.usd_rate && <span className="hint"> · sin tipo de cambio de esta cuenta todavía</span>}
                 </p>
               </div>
@@ -263,10 +232,6 @@ export function ProfitForm({
   );
 }
 
-function Profit({ p }: { p: UnitProfit | null }) {
-  if (!p) return <b>—</b>;
-  return <b data-tone={p.profit < 0 ? "down" : "up"}>{usd(p.profit)}{pct(p.margin)}</b>;
-}
 
 export function DeleteProfitForm({ action, id, label }: { action: Action; id: string; label: string }) {
   const [state, run] = useActionState(action, null);

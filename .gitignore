@@ -9,5 +9,6 @@ out/
 next-env.d.ts
 *.zip
 .impeccable/review/
+.playwright-cli/
 .impeccable/mocks/
 .claude/worktrees/

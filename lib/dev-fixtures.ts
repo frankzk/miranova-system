@@ -179,16 +179,30 @@ class Query {
   abortSignal(_signal: AbortSignal) { return this; }
   maybeSingle() { this.one = "maybe"; return this; }
   single() { this.one = "single"; return this; }
-  private write: { op: "insert" | "update" | "delete"; rows?: Row[]; patch?: Row } | null = null;
+  private write: { op: "insert" | "update" | "delete" | "upsert"; rows?: Row[]; patch?: Row; conflict?: string[] } | null = null;
   update(patch?: Row) { this.write = { op: "update", patch }; return this; }
   insert(rows?: Row | Row[]) { this.write = { op: "insert", rows: rows ? (Array.isArray(rows) ? rows : [rows]) : [] }; return this; }
-  upsert(rows?: Row | Row[]) { return this.insert(rows); }
+  upsert(rows?: Row | Row[], options?: { onConflict?: string }) {
+    this.write = { op: "upsert", rows: rows ? (Array.isArray(rows) ? rows : [rows]) : [], conflict: (options?.onConflict ?? "id").split(",") };
+    return this;
+  }
   delete() { this.write = { op: "delete" }; return this; }
   private run() {
     const extra = EXTRA_TABLES[this.table];
     if (extra && this.write) {
       // escrituras solo en tablas en memoria de los módulos; las demás se ignoran como antes
       const now = new Date().toISOString();
+      if (this.write.op === "upsert") {
+        const keys = this.write.conflict!;
+        const saved = (this.write.rows ?? []).map((patch) => {
+          const found = extra.find((r) => keys.every((k) => patch[k] !== undefined && r[k] === patch[k]));
+          if (found) { Object.assign(found, patch); return found; }
+          const row = { id: crypto.randomUUID(), created_at: now, ...patch };
+          extra.push(row);
+          return row;
+        });
+        return { data: this.one ? saved[0] ?? null : saved, error: null, count: saved.length };
+      }
       if (this.write.op === "insert") {
         const added = (this.write.rows ?? []).map((r) => ({ id: crypto.randomUUID(), created_at: now, updated_at: now, ...r }));
         extra.push(...added);

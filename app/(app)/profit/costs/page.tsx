@@ -5,13 +5,15 @@ import { ProfitSubnav } from "@/components/profit-subnav";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
-import { currencySymbol, fmtInt, todayIn } from "@/lib/format";
+import { fmtInt } from "@/lib/format";
+import { can, permissionFlags } from "@/lib/permissions";
+import { costProduct, type CostProduct } from "@/lib/profit-access";
 import { defaultGtqRate } from "@/lib/lab-purchases-data";
 import {
-  addDays, carrierLabel, costSymbol, FULFILLMENT_USD, marketEconomics, normName, observedAll, profitPeriod, unitCosts, windowStart,
-  type Carrier, type MarketAccount, type ProfitProduct, type UnitProfit,
+  carrierLabel, costSymbol, FULFILLMENT_USD, normName, unitCosts,
+  type Carrier, type MarketAccount, type ProfitProduct,
 } from "@/lib/profit";
-import { listProfitProducts, marketAccounts, profitCatalog, profitDelivered } from "@/lib/profit-data";
+import { listProfitProducts, marketAccounts, profitCatalog } from "@/lib/profit-data";
 import { deleteProfitProduct, saveProfitProduct } from "../actions";
 import "../../imports/imports.css";
 import "../profit.css";
@@ -26,37 +28,16 @@ const one = (sp: SP, k: string) => {
 
 const usd = (n: number | null) =>
   n === null ? "—" : `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const local = (n: number | null, currency: string) => (n === null ? "—" : `${currencySymbol(currency)}${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
 const money = (n: number | null, c: ProfitProduct["cost_currency"]) => (n === null ? null : `${costSymbol(c)}${n.toLocaleString("en-US", { maximumFractionDigits: 4 })}`);
 
-/** Rentabilidad por unidad a ese precio (y el precio, en la moneda de la cuenta y en dólares). */
-function PriceCell({ price, p, currency }: { price: number | null; p: UnitProfit | null; currency: string }) {
-  if (price === null) return <span className="subtle">—</span>;
-  return (
-    <>
-      {p ? (
-        <>
-          <b data-tone={p.profit < 0 ? "down" : undefined}>{usd(p.profit)}</b>
-          {p.margin !== null && <span className="pf-pct"> {Math.round(p.margin * 100)}%</span>}
-        </>
-      ) : <span className="subtle">—</span>}
-      <div className="sub">{local(price, currency)}{p && currency !== "USD" && <> · {usd(p.price_usd)}</>}</div>
-    </>
-  );
-}
-
 export default async function ProfitCostsPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const [, sp] = await Promise.all([requirePermission("profit"), searchParams]);
-  const today = todayIn();
-  // misma ventana que el Resumen por defecto: comparten la caché
-  const [accounts, products, fx, data] = await Promise.all([
+  const [user, sp] = await Promise.all([requirePermission("product_costs"), searchParams]);
+  const [accounts, products, fx] = await Promise.all([
     marketAccounts(),
-    listProfitProducts(),
+    listProfitProducts().then((ps) => ps.map(costProduct)),
     defaultGtqRate().catch(() => 7.75),
-    profitDelivered(windowStart(today, profitPeriod("mes", today)), "delivered"),
   ]);
-  const catalog = await profitCatalog(data);
-  const observed = observedAll(data.rows, addDays(today, -59));
+  const catalog = await profitCatalog({ rows: [], orders: [], names: Object.fromEntries(products.flatMap((p) => p.links.map((l) => [`${l.account_id}:${l.product_key}`, p.name]))) });
   const taken: Record<string, string> = {};
   for (const p of products) for (const l of p.links) taken[`${l.account_id}|${l.product_key}`] = p.id;
   // transportista más usado en cada país, para proponerlo en las cuentas nuevas
@@ -78,17 +59,15 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
   // "Crear ficha" desde Entregados sin ficha: viene con el producto de la plataforma elegido
   const nuevo = one(sp, "nuevo");
   const seed = nuevo ? catalog.find((c) => `${c.account_id}|${c.product_key}` === nuevo && !taken[nuevo]) : undefined;
-  const form = (v?: Partial<ProfitProduct>) => (
+  const form = (v?: Partial<CostProduct>) => (
     <ProfitForm
-      action={saveProfitProduct} v={v} accounts={accounts} catalog={catalog} taken={taken} observed={observed}
+      action={saveProfitProduct} v={v} accounts={accounts} catalog={catalog} taken={taken}
       carrierDefaults={carrierDefaults} defaultFx={fx} names={names}
     />
   );
 
   const accountOf = (id: string): MarketAccount | undefined => accounts.find((a) => a.id === id);
   const missingCost = products.filter((p) => p.unit_cost === null).length;
-  let investment = 0;
-  for (const p of products) for (const m of p.markets) investment += marketEconomics(p, m, accountOf(m.account_id)?.usd_rate ?? null).investment ?? 0;
 
   return (
     <div className="page pf-page">
@@ -97,19 +76,18 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
         sub={<>
           {fmtInt(products.length)} {products.length === 1 ? "ficha" : "fichas"}
           {missingCost > 0 && <> · {fmtInt(missingCost)} sin costo</>}
-          {investment > 0 && <> · inventario ingresado {usd(investment)}</>}
-          {" "}· costo, recolección, traslado y precios por cuenta
+          {" "}· costo, recolección y traslado por cuenta
         </>}
         actions={
           <SideSheet
             trigger={<><IconPlus /> Nueva ficha</>} triggerClass="btn btn-primary" hash="nueva"
-            title="Nueva ficha de costos" sub="Costos del producto y, en cada cuenta, traslado, precios y cantidad ingresada"
+            title="Nueva ficha de costos" sub="Costos del producto y, en cada cuenta, traslado y cantidad ingresada"
           >
             {form(seed ? { name: seed.name, links: [{ account_id: seed.account_id, product_key: seed.product_key }] } : undefined)}
           </SideSheet>
         }
       />
-      <ProfitSubnav sheets={products.length} />
+      <ProfitSubnav sheets={products.length} perms={permissionFlags(user)} />
 
       <div className="pf-toolbar">
         <form className="rq-search pf-search" action="/profit/costs" role="search">
@@ -128,7 +106,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
             <p>
               {products.length
                 ? "Prueba con otra palabra."
-                : "Crea una ficha por producto: costo, importación (si aplica), recolección en Guatemala y, por cuenta, el traslado, el precio comunidad y el de usuarios. El panel propone el producto de Drop de cada país y los precios que ya se cobraron."}
+                : "Crea una ficha por producto: costo, importación (si aplica), recolección en Guatemala y, por cuenta, el traslado. Los precios se cargan por separado en Precios comerciales."}
             </p>
           </div>
         ) : (
@@ -143,8 +121,6 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                   <th className="r" title={`Costo total + recolección + traslado + fulfillment (${usd(FULFILLMENT_USD)} por pedido, fijo)`}>
                     Costo final<span className="th-sub">con fulfillment {usd(FULFILLMENT_USD)}</span>
                   </th>
-                  <th className="r">Comunidad<span className="th-sub">rentabilidad · precio</span></th>
-                  <th className="r">Usuarios<span className="th-sub">rentabilidad · precio</span></th>
                   <th className="r">Cant. ingresada</th>
                   <th><span className="sr-only">Acciones</span></th>
                 </tr>
@@ -172,13 +148,13 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                       </td>
                       <td className="num strong">{usd(c.cost_total)}</td>
                       <td className="num">{p.pickup_cost === null ? <span className="subtle">—</span> : usd(c.pickup)}</td>
-                      <td colSpan={4} />
+                      <td colSpan={2} />
                       <td className="num">{qty > 0 ? fmtInt(qty) : null}</td>
                       <td className="r nowrap">
                         <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={p.name} sub="Ficha de costos">
                           {form(p)}
                           <div className="section im-recv-photos">
-                            <DeleteProfitForm action={deleteProfitProduct} id={p.id} label={p.name} />
+                            {can(user, "product_prices") && <DeleteProfitForm action={deleteProfitProduct} id={p.id} label={p.name} />}
                           </div>
                         </SideSheet>
                       </td>
@@ -186,7 +162,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                     {ms.map((m) => {
                       const a = accountOf(m.account_id);
                       if (!a) return null;
-                      const e = marketEconomics(p, m, a.usd_rate);
+                      const e = unitCosts(p, m);
                       const linked = p.links.some((l) => l.account_id === m.account_id);
                       return (
                         <tr key={m.account_id} className="pf-market-row">
@@ -200,12 +176,9 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                           <td />
                           <td />
                           <td className="num">{m.transfer_cost === null ? <span className="subtle">—</span> : usd(e.transfer)}</td>
-                          <td className="num strong">{usd(e.landed === null ? null : e.landed + e.fulfillment)}</td>
-                          <td className="num"><PriceCell price={m.price_community} p={e.community} currency={a.currency} /></td>
-                          <td className="num"><PriceCell price={m.price_users} p={e.users} currency={a.currency} /></td>
+                          <td className="num strong">{usd(e.landed === null ? null : e.landed + FULFILLMENT_USD)}</td>
                           <td className="num">
                             {m.qty_in === null ? <span className="subtle">—</span> : fmtInt(m.qty_in)}
-                            {e.investment !== null && e.investment > 0 && <div className="sub">{usd(e.investment)} invertidos</div>}
                           </td>
                           <td />
                         </tr>
@@ -217,13 +190,13 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                         <tr key={`l-${l.account_id}`} className="pf-market-row">
                           <td>
                             <span className="pf-acc">{a.name}</span>
-                            <div className="sub">Vinculado, sin precios ni traslado</div>
+                            <div className="sub">Vinculado, sin traslado</div>
                           </td>
                           <td />
                           <td />
                           <td className="num"><span className="subtle">—</span></td>
                           <td className="num strong">{usd(c.landed === null ? null : c.landed + FULFILLMENT_USD)}</td>
-                          <td colSpan={4} />
+                          <td colSpan={2} />
                         </tr>
                       ) : null;
                     })}
@@ -236,10 +209,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
       </div>
       <p className="footnote">
         Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + fulfillment
-        ({usd(1.2)} por pedido, fijo). Rentabilidad = precio (comunidad o usuarios, en la moneda de la cuenta, pasado a dólares con el tipo
-        de cambio de Drop) − costo final. Si los costos están en quetzales, se pasan a dólares con el tipo de cambio de la ficha. La
-        cantidad ingresada × el costo sin fulfillment es lo invertido en ese inventario. En el Resumen, la utilidad real usa lo que Drop descontó de
-        verdad en cada pedido entregado, que puede incluir una comisión además del fulfillment.
+        ({usd(1.2)} por pedido, fijo). Los costos en quetzales se convierten a dólares con el tipo de cambio de la ficha. Los precios comerciales y el análisis de rentabilidad tienen accesos separados.
       </p>
     </div>
   );
