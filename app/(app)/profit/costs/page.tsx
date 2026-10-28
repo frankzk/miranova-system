@@ -10,7 +10,7 @@ import { can, permissionFlags } from "@/lib/permissions";
 import { costProduct, type CostProduct } from "@/lib/profit-access";
 import { defaultGtqRate } from "@/lib/lab-purchases-data";
 import {
-  carrierLabel, costSymbol, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
+  carrierLabel, costSymbol, costFx, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
   type Carrier, type MarketAccount, type ProfitProduct,
 } from "@/lib/profit";
 import { listProfitProducts, marketAccounts, profitCatalog, profitDelivered } from "@/lib/profit-data";
@@ -67,10 +67,12 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
   // "Crear ficha" desde Entregados sin ficha: viene con el producto de la plataforma elegido
   const nuevo = one(sp, "nuevo");
   const seed = nuevo ? catalog.find((c) => `${c.account_id}|${c.product_key}` === nuevo && !taken[nuevo]) : undefined;
+  const hnlUsdRate = accounts.find((a) => a.currency === "HNL" && a.usd_rate && a.usd_rate > 0)?.usd_rate;
+  const hnlFx = hnlUsdRate && Number.isFinite(hnlUsdRate) ? Math.round(10_000 / hnlUsdRate) / 10_000 : null;
   const form = (v?: Partial<CostProduct>) => (
     <ProfitForm
       action={saveProfitProduct} v={v} accounts={accounts} catalog={catalog} taken={taken}
-      carrierDefaults={carrierDefaults} defaultFx={fx} names={names}
+      carrierDefaults={carrierDefaults} defaultFx={fx} defaultHnlFx={hnlFx} names={names}
     />
   );
 
@@ -148,7 +150,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                             <>
                               {money(p.unit_cost, p.cost_currency)}
                               {p.import_cost ? <> + {money(p.import_cost, p.cost_currency)} importación</> : null}
-                              {p.cost_currency === "GTQ" && p.fx_gtq_per_usd && <> · Q{p.fx_gtq_per_usd} por USD</>}
+                              {p.cost_currency !== "USD" && costFx(p) && <> · {costSymbol(p.cost_currency)}{costFx(p)} por USD</>}
                             </>
                           )}
                           {p.links.length === 0 && <> · sin producto de Drop vinculado</>}
@@ -217,7 +219,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
       </div>
       <p className="footnote">
         Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + fulfillment
-        ({usd(1.2)} por pedido, fijo). Los costos en quetzales se convierten a dólares con el tipo de cambio de la ficha. Los precios comerciales y el análisis de rentabilidad tienen accesos separados.
+        ({usd(1.2)} por pedido, fijo). Los costos en quetzales o lempiras se convierten a dólares con el tipo de cambio de la ficha. Todos los costos de una ficha usan la moneda seleccionada. Los precios comerciales y el análisis de rentabilidad tienen accesos separados.
       </p>
     </div>
   );

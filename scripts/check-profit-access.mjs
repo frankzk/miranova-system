@@ -85,5 +85,17 @@ assert.equal((await action("precios", "saveProductPrices", { id, [`m_${HN}_pc`]:
 console.log("PASS: saving costs preserves prices, saving prices preserves costs, invalid price rejected");
 
 // Restore the synthetic records for subsequent manual QA.
+const hnl = await action("costos", "saveProfitProduct", { ...costs, cost_currency: "HNL", fx_hnl_per_usd: "25", fx_gtq_per_usd: "7.65",
+  unit_cost: "62.50", import_cost: "12.50", pickup_cost: "5", [`m_${HN}_transfer`]: "15" });
+assert.equal(hnl.ok, true, hnl.msg);
+const hnlPage = (await page("costos", "/profit/costs")).text;
+assert.ok(hnlPage.includes('"cost_currency":"HNL"'));
+assert.ok(hnlPage.includes('"fx_hnl_per_usd":25'));
+assert.ok(hnlPage.includes('"unit_cost":62.5'));
+assert.ok(hnlPage.includes("L62.5"));
+assert.ok(hnlPage.includes("$3.00"));
+assert.equal((await action("costos", "saveProfitProduct", { ...costs, cost_currency: "HNL", fx_hnl_per_usd: "" })).ok, false);
+assert.equal((await page("analista", "/api/export/profit")).res.status, 200);
+console.log("PASS: HNL cost sheet round-trip, conversion display, export and missing-rate rejection");
 await action("costos", "saveProfitProduct", { ...costs, unit_cost: "3.1" });
 await action("precios", "saveProductPrices", { id, [`m_${HN}_pc`]: "300", [`m_${HN}_pu`]: "319", [`m_${GT}_pc`]: "95", [`m_${GT}_pu`]: "98.89" });

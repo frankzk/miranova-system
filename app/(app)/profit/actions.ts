@@ -65,6 +65,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
       name: field(form, "name"),
       cost_currency: field(form, "cost_currency"),
       fx_gtq_per_usd: field(form, "fx_gtq_per_usd"),
+      fx_hnl_per_usd: field(form, "fx_hnl_per_usd"),
       unit_cost: field(form, "unit_cost"),
       import_cost: field(form, "import_cost"),
       pickup_cost: field(form, "pickup_cost"),

@@ -11,6 +11,7 @@ export type PriceProduct = Pick<ProfitProduct, "id" | "name"> & {
 export function costProduct(p: ProfitProduct): CostProduct {
   return {
     id: p.id, name: p.name, cost_currency: p.cost_currency, fx_gtq_per_usd: p.fx_gtq_per_usd,
+    fx_hnl_per_usd: p.fx_hnl_per_usd ?? null,
     unit_cost: p.unit_cost, import_cost: p.import_cost, pickup_cost: p.pickup_cost, notes: p.notes,
     links: p.links.map(({ account_id, product_key }) => ({ account_id, product_key })),
     markets: p.markets.map(({ account_id, carrier, transfer_cost, qty_in }) => ({ account_id, carrier, transfer_cost, qty_in })),

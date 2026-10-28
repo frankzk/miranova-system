@@ -53,6 +53,35 @@ test("costos en quetzales: se pasan a dólares con el tipo de cambio de la ficha
   close(c.landed, 2 + 0.4 + 0.6);
 });
 
+test("lempiras: convierte todos los costos por la tasa HNL, sin usar la de GTQ", () => {
+  const p = product({ cost_currency: "HNL", fx_hnl_per_usd: 25, fx_gtq_per_usd: 7.65,
+    unit_cost: 62.5, import_cost: 12.5, pickup_cost: 5 });
+  const m = { ...p.markets[0], transfer_cost: 15 };
+  const c = unitCosts(p, m);
+  close(c.cost_total, 3);
+  close(c.pickup, 0.2);
+  close(c.transfer, 0.6);
+  close(c.landed, 3.8);
+  close(marketEconomics(p, m, 0.04).users?.profit, 4.44);
+  assert.equal(unitCosts({ ...p, fx_hnl_per_usd: null }, m).cost_total, null);
+});
+
+test("formulario HNL: persiste la tasa propia y rechaza tasas vacías, invertidas y monedas desconocidas", () => {
+  const input = { name: "Honduras", cost_currency: "HNL", fx_hnl_per_usd: "25", fx_gtq_per_usd: "7.65", unit_cost: "L 62.50" };
+  const r = cleanProfitProduct(input, ACCOUNTS);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.row.cost_currency, "HNL");
+    assert.equal(r.row.unit_cost, 62.5);
+    assert.equal(r.row.fx_hnl_per_usd, 25);
+    assert.equal(r.row.fx_gtq_per_usd, null);
+  }
+  for (const rate of ["", "0", "-1", "0.04", "abc", "1001"]) {
+    assert.equal(cleanProfitProduct({ ...input, fx_hnl_per_usd: rate }, ACCOUNTS).ok, false);
+  }
+  assert.equal(cleanProfitProduct({ ...input, cost_currency: "INVALID" }, ACCOUNTS).ok, false);
+});
+
 test("formulario: valida, limpia y guarda solo las cuentas con datos", () => {
   const r = cleanProfitProduct(
     {
@@ -64,7 +93,7 @@ test("formulario: valida, limpia y guarda solo las cuentas con datos", () => {
   );
   assert.ok(r.ok);
   if (!r.ok) return;
-  assert.deepEqual(r.row, { name: "Drenaje linfático", cost_currency: "GTQ", fx_gtq_per_usd: 7.65, unit_cost: 12.5, import_cost: null, pickup_cost: 2, notes: null });
+  assert.deepEqual(r.row, { name: "Drenaje linfático", cost_currency: "GTQ", fx_gtq_per_usd: 7.65, fx_hnl_per_usd: null, unit_cost: 12.5, import_cost: null, pickup_cost: 2, notes: null });
   assert.deepEqual(r.markets, [{ account_id: HN, carrier: "raulito", transfer_cost: 4, price_community: 215, price_users: 236, qty_in: 1000 }]);
   assert.deepEqual(r.links, [{ account_id: HN, product_key: "dlg-hn" }]);
 });

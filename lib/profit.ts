@@ -9,10 +9,11 @@ export const FULFILLMENT_USD = 1.2;
 export const COST_CURRENCIES = [
   { id: "USD", label: "Dólares", symbol: "$" },
   { id: "GTQ", label: "Quetzales", symbol: "Q" },
+  { id: "HNL", label: "Lempiras", symbol: "L" },
 ] as const;
 export type CostCurrency = (typeof COST_CURRENCIES)[number]["id"];
 export const isCostCurrency = (v: unknown): v is CostCurrency => COST_CURRENCIES.some((c) => c.id === v);
-export const costSymbol = (c: CostCurrency) => (c === "GTQ" ? "Q" : "$");
+export const costSymbol = (c: CostCurrency) => COST_CURRENCIES.find((x) => x.id === c)?.symbol ?? "$";
 
 /** Quién lleva la mercadería de Guatemala al país de la cuenta. */
 export const CARRIERS = [
@@ -43,6 +44,8 @@ export type ProfitProduct = {
   cost_currency: CostCurrency;
   /** Quetzales por dólar, si los costos están en quetzales. */
   fx_gtq_per_usd: number | null;
+  /** Lempiras por dólar; separado del tipo de cambio de quetzales. */
+  fx_hnl_per_usd?: number | null;
   /** Costo por unidad, costo de importación por unidad (de ser el caso) y recolección en Guatemala. */
   unit_cost: number | null;
   import_cost: number | null;
@@ -58,10 +61,14 @@ export type MarketAccount = { id: string; name: string; country: string | null; 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Monto en la moneda de costos de la ficha → dólares (null si falta el monto o el tipo de cambio). */
-export function costToUsd(p: Pick<ProfitProduct, "cost_currency" | "fx_gtq_per_usd">, n: number | null | undefined): number | null {
+export const costFx = (p: Pick<ProfitProduct, "cost_currency" | "fx_gtq_per_usd" | "fx_hnl_per_usd">) =>
+  p.cost_currency === "USD" ? 1 : p.cost_currency === "HNL" ? p.fx_hnl_per_usd ?? null : p.fx_gtq_per_usd;
+
+export function costToUsd(p: Pick<ProfitProduct, "cost_currency" | "fx_gtq_per_usd" | "fx_hnl_per_usd">, n: number | null | undefined): number | null {
   if (n === null || n === undefined) return null;
   if (p.cost_currency === "USD") return n;
-  return p.fx_gtq_per_usd && p.fx_gtq_per_usd > 0 ? n / p.fx_gtq_per_usd : null;
+  const fx = costFx(p);
+  return fx && Number.isFinite(fx) && fx > 0 ? n / fx : null;
 }
 
 export type UnitCosts = {
@@ -124,7 +131,7 @@ export function parseMoney(s: string | undefined): number | null {
 
 export type MarketInput = { carrier?: string; transfer_cost?: string; price_community?: string; price_users?: string; qty_in?: string };
 export type ProfitInput = {
-  name?: string; cost_currency?: string; fx_gtq_per_usd?: string; unit_cost?: string; import_cost?: string; pickup_cost?: string; notes?: string;
+  name?: string; cost_currency?: string; fx_gtq_per_usd?: string; fx_hnl_per_usd?: string; unit_cost?: string; import_cost?: string; pickup_cost?: string; notes?: string;
   markets?: Record<string, MarketInput>;
   /** "cuenta|product_key" de cada producto de la plataforma que es esta ficha */
   links?: string[];
@@ -139,6 +146,7 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
   if (!name) return fail("Escribe el nombre del producto.");
   if (name.length > 160) return fail("El nombre es demasiado largo (máximo 160 caracteres).");
   const cost_currency = isCostCurrency(input.cost_currency) ? input.cost_currency : "USD";
+  if (input.cost_currency && !isCostCurrency(input.cost_currency)) return fail("Selecciona una moneda de costos válida.");
 
   const money = (label: string, s: string | undefined, prefix = ""): { ok: true; n: number | null } | { ok: false; msg: string } => {
     const n = parseMoney(s);
@@ -155,6 +163,14 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
     if (r.n === null || r.n <= 0) return fail("Escribe el tipo de cambio: cuántos quetzales vale un dólar (por ejemplo 7.65).");
     if (r.n < 1 || r.n > 50) return fail("El tipo de cambio no parece correcto: son quetzales por dólar (por ejemplo 7.65).");
     fx = r.n;
+  }
+  let hnlFx: number | null = null;
+  if (cost_currency === "HNL") {
+    const r = money("El tipo de cambio", input.fx_hnl_per_usd);
+    if (!r.ok) return fail(r.msg);
+    if (r.n === null || r.n <= 0) return fail("Escribe el tipo de cambio: cuántos lempiras vale un dólar (L por USD).");
+    if (r.n < 1 || r.n > 1000) return fail("El tipo de cambio no parece correcto: usa lempiras por dólar, no dólares por lempira.");
+    hnlFx = r.n;
   }
   const cost = money("El costo", input.unit_cost);
   if (!cost.ok) return fail(cost.msg);
@@ -198,7 +214,7 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
 
   return {
     ok: true,
-    row: { name, cost_currency, fx_gtq_per_usd: fx, unit_cost: cost.n, import_cost: imp.n, pickup_cost: pick.n, notes: notes || null },
+    row: { name, cost_currency, fx_gtq_per_usd: fx, fx_hnl_per_usd: hnlFx, unit_cost: cost.n, import_cost: imp.n, pickup_cost: pick.n, notes: notes || null },
     markets,
     links: [...links.values()],
   };
