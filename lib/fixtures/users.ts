@@ -13,6 +13,10 @@ const now = new Date().toISOString();
 const base = { active: true, must_change_password: false, session_version: 1, failed_attempts: 0, locked_until: null, last_login_at: null, created_by: null, created_at: now, updated_at: now };
 
 const app_users: Row[] = [
+  ...["costos", "precios", "analista"].map((username, i) => ({
+    ...base, id: `a0000000-0000-4000-8000-00000000000${i + 3}`, username, name: `Prueba ${username}`,
+    password_hash: hash("demo1234"), permissions: [["product_costs"], ["product_prices"], ["profit", "export"]][i], is_owner: false,
+  })),
   { ...base, id: "a0000000-0000-4000-8000-000000000001", username: "dueno", name: "Frank Dueño", password_hash: hash("demo1234"), permissions: [], is_owner: true },
   {
     ...base, id: "a0000000-0000-4000-8000-000000000002", username: "andrea", name: "Andrea Operación", password_hash: hash("demo1234"),

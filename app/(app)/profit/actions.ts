@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { authorizeAction } from "@/lib/auth";
 import { cleanProfitProduct, type MarketInput } from "@/lib/profit";
+import { cleanCostProduct, costMarketWrites } from "@/lib/profit-access";
+import { can } from "@/lib/permissions";
 import { marketAccounts } from "@/lib/profit-data";
 import { db } from "@/lib/supabase";
 
@@ -18,6 +20,7 @@ const GONE = "Esa ficha ya no existe.";
 function refresh() {
   revalidatePath("/profit");
   revalidatePath("/profit/costs");
+  revalidatePath("/profit/prices");
 }
 
 /** Productos de la plataforma que ya están en otra ficha: "X (Drop Honduras) ya está en la ficha de Y". */
@@ -39,7 +42,7 @@ async function linkConflicts(links: { account_id: string; product_key: string }[
 
 /** Ficha nueva o editada: costos comunes, cada cuenta (traslado, precios, cantidad) y los productos vinculados. */
 export async function saveProfitProduct(_prev: ProfitFormState, form: FormData): Promise<ProfitFormState> {
-  const auth = await authorizeAction("profit");
+  const auth = await authorizeAction("product_costs");
   if (!auth.ok) return auth;
   const id = field(form, "id");
   if (id && !UUID.test(id)) return fail(GONE);
@@ -49,8 +52,6 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
     markets[a.id] = {
       carrier: field(form, `m_${a.id}_carrier`),
       transfer_cost: field(form, `m_${a.id}_transfer`),
-      price_community: field(form, `m_${a.id}_pc`),
-      price_users: field(form, `m_${a.id}_pu`),
       qty_in: field(form, `m_${a.id}_qty`),
     };
   }
@@ -59,7 +60,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
     ...accounts.map((a) => (field(form, `link_${a.id}`) ? `${a.id}|${field(form, `link_${a.id}`)}` : "")).filter(Boolean),
     ...form.getAll("links_extra").map(String),
   ];
-  const c = cleanProfitProduct(
+  const c = cleanCostProduct(
     {
       name: field(form, "name"),
       cost_currency: field(form, "cost_currency"),
@@ -90,11 +91,14 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
     productId = (data as { id: string }).id;
   }
 
-  // cuentas y vínculos: se reemplazan por lo del formulario
-  const delM = await db().from("profit_markets").delete().eq("product_id", productId);
-  if (delM.error) return fail(`No se pudo guardar las cuentas: ${delM.error.message}`);
-  if (c.markets.length) {
-    const { error } = await db().from("profit_markets").insert(c.markets.map((m) => ({ ...m, product_id: productId })));
+  // Update only cost columns; never delete markets or overwrite commercial prices.
+  const existing = await db().from("profit_markets").select("account_id").eq("product_id", productId);
+  if (existing.error) return fail(`No se pudo leer las cuentas: ${existing.error.message}`);
+  const known = new Set(accounts.map((a) => a.id));
+  const ids = [...new Set([...c.markets.map((m) => m.account_id), ...c.links.map((l) => l.account_id),
+    ...(existing.data ?? []).map((m: { account_id: string }) => m.account_id).filter((id: string) => known.has(id))])];
+  if (ids.length) {
+    const { error } = await db().from("profit_markets").upsert(costMarketWrites(productId, c.markets, ids), { onConflict: "product_id,account_id" });
     if (error) return fail(`No se pudo guardar las cuentas: ${error.message}`);
   }
   const delL = await db().from("profit_links").delete().eq("product_id", productId);
@@ -109,8 +113,9 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
 }
 
 export async function deleteProfitProduct(_prev: ProfitFormState, form: FormData): Promise<ProfitFormState> {
-  const auth = await authorizeAction("profit");
+  const auth = await authorizeAction("product_costs");
   if (!auth.ok) return auth;
+  if (!can(auth.user, "product_prices")) return fail("Borrar una ficha también elimina sus precios. Necesitas Costos de productos y Precios comerciales.");
   const id = field(form, "id");
   if (!UUID.test(id)) return fail(GONE);
   const { error } = await db().from("profit_products").delete().eq("id", id);
@@ -121,7 +126,7 @@ export async function deleteProfitProduct(_prev: ProfitFormState, form: FormData
 
 /** Desde "Entregados sin ficha": este producto de la plataforma es el de una ficha que ya existe. */
 export async function linkToProfitProduct(_prev: ProfitFormState, form: FormData): Promise<ProfitFormState> {
-  const auth = await authorizeAction("profit");
+  const auth = await authorizeAction("product_costs");
   if (!auth.ok) return auth;
   const productId = field(form, "product_id");
   const account_id = field(form, "account_id");
@@ -134,4 +139,34 @@ export async function linkToProfitProduct(_prev: ProfitFormState, form: FormData
   if (error) return fail(error.code === "23505" ? "Ese producto ya está en otra ficha." : `No se pudo vincular: ${error.message}`);
   refresh();
   return { ok: true, msg: `Vinculado a ${(p as { name: string }).name}.` };
+}
+
+/** Commercial prices are saved separately and cannot overwrite costs or links. */
+export async function saveProductPrices(_prev: ProfitFormState, form: FormData): Promise<ProfitFormState> {
+  const auth = await authorizeAction("product_prices");
+  if (!auth.ok) return auth;
+  const id = field(form, "id");
+  if (!UUID.test(id)) return fail(GONE);
+  const accounts = await marketAccounts();
+  const markets = Object.fromEntries(accounts.map((a) => [a.id, {
+    price_community: field(form, `m_${a.id}_pc`), price_users: field(form, `m_${a.id}_pu`),
+  }]));
+  const c = cleanProfitProduct({ name: "Precios", markets }, accounts);
+  if (!c.ok) return fail(c.msg);
+  const p = await db().from("profit_products").select("id").eq("id", id).maybeSingle();
+  if (p.error) return fail("No se pudo comprobar la ficha. Inténtalo de nuevo.");
+  if (!p.data) return fail(GONE);
+  const existing = await db().from("profit_markets").select("account_id").eq("product_id", id);
+  if (existing.error) return fail("No se pudo leer las cuentas. Inténtalo de nuevo.");
+  const ids = new Set([...c.markets.map((m) => m.account_id), ...(existing.data ?? []).map((m: { account_id: string }) => m.account_id)]);
+  const rows = accounts.filter((a) => ids.has(a.id)).map((a) => {
+    const m = c.markets.find((m) => m.account_id === a.id);
+    return { product_id: id, account_id: a.id, price_community: m?.price_community ?? null, price_users: m?.price_users ?? null };
+  });
+  if (rows.length) {
+    const { error } = await db().from("profit_markets").upsert(rows, { onConflict: "product_id,account_id" });
+    if (error) return fail(`No se pudo guardar los precios: ${error.message}`);
+  }
+  refresh();
+  return { ok: true, msg: "Precios guardados." };
 }

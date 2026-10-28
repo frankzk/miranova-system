@@ -9,7 +9,7 @@ import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { fmtInt, todayIn } from "@/lib/format";
-import { can } from "@/lib/permissions";
+import { can, permissionFlags } from "@/lib/permissions";
 import {
   addDays, capitalize, coverage, dailyTotals, dayBuckets, dayLabel, margin, monthBuckets, monthLabel, monthProjection, monthShortLabel,
   pctChange, PROFIT_RANGES, profitPeriod, realize, spanLabel, weekBuckets, weekdayLabel, windowStart, type Acc, type Period,
@@ -105,11 +105,11 @@ export default async function ProfitPage({ searchParams }: { searchParams: Promi
                 <IconDownload /> Descargar Excel
               </a>
             )}
-            <Link className="btn btn-primary" href="/profit/costs#nueva"><IconPlus /> Nueva ficha de costos</Link>
+            {can(user, "product_costs") && <Link className="btn btn-primary" href="/profit/costs#nueva"><IconPlus /> Nueva ficha de costos</Link>}
           </>
         }
       />
-      <ProfitSubnav sheets={products.length} />
+      <ProfitSubnav sheets={products.length} perms={permissionFlags(user)} />
       <AccountChips accounts={markets} current={scope.account} next={here} />
 
       <div className="pf-toolbar">
@@ -135,7 +135,7 @@ export default async function ProfitPage({ searchParams }: { searchParams: Promi
         <div className="banner" data-tone="info">
           <span>
             <b>Empieza por la ficha de costos de cada producto.</b> Los pedidos entregados ya llegan solos de Drop (cada 10 minutos, con su
-            estado): en cuanto un producto tiene su costo, su utilidad aparece aquí. <Link href="/profit/costs#nueva">Crear la primera ficha</Link>
+            estado): en cuanto un producto tiene su costo, su utilidad aparece aquí. {can(user, "product_costs") && <Link href="/profit/costs#nueva">Crear la primera ficha</Link>}
           </span>
         </div>
       )}
@@ -218,7 +218,7 @@ export default async function ProfitPage({ searchParams }: { searchParams: Promi
                   return (
                     <tr key={p.id}>
                       <td>
-                        <Link className="strong pf-name" href={`/profit/costs?q=${encodeURIComponent(p.name)}`}>{p.name}</Link>
+                        {can(user, "product_costs") ? <Link className="strong pf-name" href={`/profit/costs?q=${encodeURIComponent(p.name)}`}>{p.name}</Link> : <span className="strong">{p.name}</span>}
                         <div className="sub">
                           {showAccount && <span>{p.accounts.map(accountName).join(" · ")}</span>}
                           {!p.has_cost && <span className="pill" data-tone="warning">Falta el costo</span>}
@@ -330,10 +330,10 @@ export default async function ProfitPage({ searchParams }: { searchParams: Promi
                     <td className="num">{fmtInt(u.units)}</td>
                     <td className="num">{usd(u.revenue)}</td>
                     <td className="pf-actions-cell">
-                      <div className="pf-actions">
+                      {can(user, "product_costs") && <div className="pf-actions">
                         <LinkProfitForm action={linkToProfitProduct} accountId={u.account_id} productKey={u.key} products={sheetsList} />
                         <Link className="btn btn-sm" href={`/profit/costs?nuevo=${encodeURIComponent(`${u.account_id}|${u.key}`)}#nueva`}>Crear ficha</Link>
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))}

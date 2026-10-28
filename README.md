@@ -109,6 +109,25 @@ ni variables nuevas. La clave privilegiada de Supabase permanece en el servidor.
 
 ## Seguridad
 
+Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
+
+- **Costos de productos** (`product_costs`, `/profit/costs`): crear y editar fichas,
+  costos, traslados, cantidades y vínculos. No recibe precios comerciales ni utilidades.
+- **Precios comerciales** (`product_prices`, `/profit/prices`): consultar y editar
+  precios comunidad/usuarios. No recibe costos, notas de costos ni utilidades.
+- **Rentabilidad** (`profit`, `/profit`): consultar el análisis de costos, precios,
+  márgenes y utilidad. Exportar el análisis requiere también **Exportar**.
+
+Los dueños mantienen todos los accesos. Rentabilidad por sí sola no autoriza editar.
+Borrar una ficha elimina también sus precios, por lo que requiere los permisos de
+costos y precios. Cada acción verifica el permiso en el servidor. Las escrituras
+parciales de costos y precios conservan los campos del otro permiso.
+
+QA local: iniciar `next dev --port 3100` con `MIRANOVA_FIXTURES=1 AUTH_SECRET=demo`
+y ejecutar `node scripts/check-profit-access.mjs`. Usa los usuarios sintéticos
+`costos`, `precios`, `analista`, `andrea` y `dueno`, con contraseña `demo1234`.
+Comprueba rutas, exportaciones, acciones directas sin permiso y conservación de datos.
+
 - La `service_role key` solo vive en Vercel; las tablas tienen RLS activado sin
   políticas, así que nadie accede con la clave pública.
 - El panel exige contraseña (cookie firmada, 30 días).
