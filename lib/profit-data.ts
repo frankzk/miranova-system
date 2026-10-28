@@ -1,6 +1,7 @@
 import "server-only";
+import { cache } from "react";
 import { listAccounts } from "./accounts";
-import { isCarrier, isCostCurrency, type CatalogItem, type Delivered, type DeliveredRow, type MarketAccount, type ProfitProduct } from "./profit";
+import { automaticHnlFx, withAutomaticHnlFx, isCarrier, isCostCurrency, type CatalogItem, type Delivered, type DeliveredRow, type MarketAccount, type ProfitProduct } from "./profit";
 import { listProducts } from "./queries";
 import { db } from "./supabase";
 import { synced } from "./synced-cache";
@@ -16,10 +17,11 @@ type LinkRow = { product_id: string; account_id: string; product_key: string };
 
 /** Todas las fichas de costos, por nombre, con sus cuentas y los productos de la plataforma vinculados. */
 export async function listProfitProducts(): Promise<ProfitProduct[]> {
-  const [p, m, l] = await Promise.all([
+  const [p, m, l, accounts] = await Promise.all([
     db().from("profit_products").select("id, name, cost_currency, fx_gtq_per_usd, fx_hnl_per_usd, unit_cost, import_cost, pickup_cost, notes").order("name").limit(5000),
     db().from("profit_markets").select("product_id, account_id, carrier, transfer_cost, price_community, price_users, qty_in").limit(50000),
     db().from("profit_links").select("product_id, account_id, product_key").limit(50000),
+    marketAccounts(),
   ]);
   if (p.error) {
     if (missing(p.error)) return [];
@@ -40,7 +42,8 @@ export async function listProfitProducts(): Promise<ProfitProduct[]> {
   }
   const links = new Map<string, ProfitProduct["links"]>();
   for (const r of (l.data ?? []) as LinkRow[]) links.set(r.product_id, [...(links.get(r.product_id) ?? []), { account_id: r.account_id, product_key: r.product_key }]);
-  return ((p.data ?? []) as ProductRow[]).map((r) => ({
+  const hnlFx = automaticHnlFx(accounts);
+  return ((p.data ?? []) as ProductRow[]).map((r) => withAutomaticHnlFx({
     ...r,
     cost_currency: isCostCurrency(r.cost_currency) ? r.cost_currency : "USD",
     fx_gtq_per_usd: num(r.fx_gtq_per_usd),
@@ -50,7 +53,7 @@ export async function listProfitProducts(): Promise<ProfitProduct[]> {
     pickup_cost: num(r.pickup_cost),
     markets: markets.get(r.id) ?? [],
     links: links.get(r.id) ?? [],
-  }));
+  }, hnlFx));
 }
 
 const EMPTY: Delivered = { rows: [], orders: [], names: {} };
@@ -78,7 +81,7 @@ export const profitDelivered = synced("profit_delivered", deliveredQuery);
  * Cuentas de venta (no las de solo catálogo) con su tipo de cambio de la plataforma; si una cuenta
  * todavía no lo tiene (sin productos sincronizados), el de otra con la misma moneda.
  */
-export async function marketAccounts(): Promise<MarketAccount[]> {
+export const marketAccounts = cache(async (): Promise<MarketAccount[]> => {
   const [accounts, fx] = await Promise.all([listAccounts(), db().from("account_fx").select("account_id, usd_rate")]);
   const rate = new Map(((fx.data ?? []) as { account_id: string; usd_rate: unknown }[]).map((r) => [r.account_id, num(r.usd_rate)]));
   const sale = accounts.filter((a) => !a.catalog_only);
@@ -94,7 +97,7 @@ export async function marketAccounts(): Promise<MarketAccount[]> {
     currency: a.currency,
     usd_rate: rate.get(a.id) || byCurrency.get(a.currency) || (a.currency === "USD" ? 1 : null),
   }));
-}
+});
 
 /**
  * Productos de cada cuenta para vincular a una ficha: el catálogo sincronizado y, además, los que
