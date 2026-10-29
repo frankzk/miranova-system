@@ -179,6 +179,7 @@ export function BankWorkspace({
                           {entry.counterparty}
                           {entry.bank_account ? " · " + entry.bank_account : ""}
                         </span>
+                        {entry.notes.startsWith("Empresa por confirmar.") && <span className="pill" data-tone="warning">Empresa por confirmar</span>}
                         {source === "boxful" && entry.document_path && (
                           <a
                             href={"/api/reconciliation/document/" + entry.id}

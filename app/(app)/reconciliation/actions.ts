@@ -105,9 +105,28 @@ export async function saveBankEntry(
     const version = Number(field(form, "version"));
     if (!UUID.test(id) || !Number.isSafeInteger(version) || version < 1)
       return fail("Registro no válido.");
+    const target = field(form, "target_company") || clean.row.company;
+    if (!isCompany(target)) return fail("Selecciona una empresa válida.");
+    let notes = clean.row.notes;
+    if (target !== clean.row.company) {
+      const reason = field(form, "company_reason");
+      if (field(form, "company_confirmed") !== "on" || reason.length < 3 || reason.length > 300)
+        return fail("Confirma la empresa de destino y escribe un motivo de 3 a 300 caracteres.");
+      const [original, history] = await Promise.all([
+        db().from("bank_entries").select("source,document_path,void_reason").eq("id", id).eq("company", clean.row.company).eq("version", version).maybeSingle(),
+        db().from("bank_matches").select("id").or(`boxful_id.eq.${id},mercury_id.eq.${id}`).limit(1),
+      ]);
+      if (original.error || history.error) return fail("No se pudo verificar el historial del abono.");
+      if (!original.data) return fail("El movimiento cambió. Actualiza la página.");
+      if (original.data.source !== "mercury" || original.data.document_path || original.data.void_reason || history.data?.length)
+        return fail("Solo se puede mover un abono Mercury sin anular, sin PDF y sin historial de conciliación.");
+      notes = notes.replace(/^Empresa por confirmar\.[^\n]*(?:\n|$)/, "").trim();
+      notes = [notes, `Cambio de empresa: ${clean.row.company} → ${target}. Motivo: ${reason}`].filter(Boolean).join("\n");
+      if (notes.length > 2000) return fail("Reduce las notas para poder registrar el motivo del cambio de empresa.");
+    }
     const { data, error } = await db()
       .from("bank_entries")
-      .update({ ...clean.row, version: version + 1, updated_by: auth.user.id })
+      .update({ ...clean.row, company: target, notes, version: version + 1, updated_by: auth.user.id })
       .eq("id", id)
       .eq("company", clean.row.company)
       .eq("source", clean.row.source)

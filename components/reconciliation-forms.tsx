@@ -61,6 +61,7 @@ export function BankEntryForm({
   entry?: BankEntry;
 }) {
   const [state, run, saving] = useActionState(saveBankEntry, null);
+  const [targetCompany, setTargetCompany] = useState<Company>(company);
   const [fields, setFields] = useState<BoxfulAutofill>({
     reference: entry?.reference ?? "",
     occurred_on: entry?.occurred_on ?? (source === "mercury" ? today : ""),
@@ -299,6 +300,26 @@ export function BankEntryForm({
         disabled={uploading || reading || saving}
       >
         <legend className="sr-only">Datos de la transferencia</legend>
+        {entry?.source === "mercury" && !entry.document_path && (
+          <div className="bank-field-grid">
+            <label className="field bank-wide">
+              <span>Empresa del abono</span>
+              <select className="select" name="target_company" value={targetCompany} onChange={(event) => setTargetCompany(event.target.value as Company)}>
+                <option value="miranova">Miranova</option>
+                <option value="mireva">Mireva</option>
+              </select>
+              <span className="hint">Puedes mover el abono mientras no tenga historial de conciliación. Se conserva su registro.</span>
+            </label>
+            {targetCompany !== company && <>
+              <label className="field bank-wide"><span>Motivo del cambio de empresa</span>
+                <textarea className="input" name="company_reason" required minLength={3} maxLength={300} rows={2} />
+              </label>
+              <label className="bank-confirm bank-wide"><input type="checkbox" name="company_confirmed" required />
+                <span>Verifiqué que este abono pertenece a {targetCompany === "mireva" ? "Mireva" : "Miranova"}.</span>
+              </label>
+            </>}
+          </div>
+        )}
         <div className="bank-field-grid">
           <label className="field bank-wide">
             <span>
