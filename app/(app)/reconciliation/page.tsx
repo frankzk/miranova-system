@@ -7,6 +7,7 @@ import { BankWorkspace } from "@/components/reconciliation-workspace";
 import "./reconciliation.css";
 
 export const metadata = { title: "Conciliación bancaria" };
+export const maxDuration = 120;
 
 export default async function ReconciliationPage({
   searchParams,

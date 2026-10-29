@@ -1,6 +1,40 @@
 .bank-page {
   --bank-space: 20px;
 }
+.bank-form-fields {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.bank-form-fields:disabled {
+  opacity: 0.65;
+}
+.bank-autofill-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bank-autofill-result .banner {
+  margin: 0;
+}
+.bank-autofill-result > .btn {
+  align-self: start;
+}
+.bank-read-warnings {
+  padding: 0 0 0 18px;
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+.bank-read-evidence {
+  font-size: var(--t-sm);
+}
+.bank-read-evidence summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
 .bank-source-nav {
   display: flex;
   justify-content: space-between;
