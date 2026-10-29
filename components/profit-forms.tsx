@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useId, useState } from "react";
 import {
-  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, costToUsd, parseMoney, suggestLinks, unitCosts,
+  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, costToUsd, isCostCurrency, parseMoney, suggestLinks, unitCosts,
   type CatalogItem, type Carrier, type CostCurrency, type MarketAccount,
 } from "@/lib/profit";
 import type { CostProduct } from "@/lib/profit-access";
@@ -25,7 +25,7 @@ const val = (s: string) => {
 };
 const usd = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; transferCurrency: CostCurrency; qty: string };
+type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; transferCurrency: CostCurrency; collection: string; collectionCurrency: CostCurrency; qty: string };
 
 function CostEntry({ label, name, amount, currency, onAmount, onCurrency, rates }: {
   label: string; name: string; amount: string; currency: CostCurrency;
@@ -39,7 +39,7 @@ function CostEntry({ label, name, amount, currency, onAmount, onCurrency, rates 
       <label className="sr-only" htmlFor={`${id}-amount`}>Importe de {label.toLowerCase()}</label>
       <input id={`${id}-amount`} className="input" name={name} value={amount} onChange={(e) => onAmount(e.currentTarget.value)} inputMode="decimal" placeholder="0.00" />
       <label className="sr-only" htmlFor={`${id}-currency`}>Moneda de {label.toLowerCase()}</label>
-      <select id={`${id}-currency`} className="select" name={name === "unit_cost" ? "cost_currency" : name.replace(/_cost$/, "_currency").replace(/_transfer$/, "_transfer_currency")}
+      <select id={`${id}-currency`} className="select" name={name === "unit_cost" ? "cost_currency" : name.replace(/_cost$/, "_currency").replace(/_(transfer|collection)$/, "_$1_currency")}
         value={currency} onChange={(e) => onCurrency(e.currentTarget.value as CostCurrency)}>
         {COST_CURRENCIES.map((c) => <option value={c.id} key={c.id}>{c.id} ({c.symbol})</option>)}
       </select>
@@ -96,6 +96,8 @@ export function ProfitForm({
       carrier: m ? m.carrier ?? "" : a.country === "GT" ? "" : carrierDefaults[a.country ?? ""] ?? "",
       transfer: str(m?.transfer_cost),
       transferCurrency: m?.transfer_currency ?? v.cost_currency ?? "USD",
+      collection: str(m?.collection_cost),
+      collectionCurrency: m?.collection_currency ?? m?.transfer_currency ?? (isCostCurrency(a.currency) ? a.currency : v.cost_currency ?? "USD"),
       qty: str(m?.qty_in),
     };
   };
@@ -148,7 +150,7 @@ export function ProfitForm({
   };
   const c = unitCosts(base);
   const needsRate = (cur: CostCurrency) => cur === "GTQ" ? !defaultFx : cur === "HNL" ? !defaultHnlFx : false;
-  const missingRate = needsRate(currency) || ((val(imp) ?? 0) > 0 && needsRate(importCurrency)) || ((val(pickup) ?? 0) > 0 && needsRate(pickupCurrency)) || Object.values(markets).some((m) => (val(m.transfer) ?? 0) > 0 && needsRate(m.transferCurrency));
+  const missingRate = needsRate(currency) || ((val(imp) ?? 0) > 0 && needsRate(importCurrency)) || ((val(pickup) ?? 0) > 0 && needsRate(pickupCurrency)) || Object.values(markets).some((m) => ((val(m.transfer) ?? 0) > 0 && needsRate(m.transferCurrency)) || ((val(m.collection) ?? 0) > 0 && needsRate(m.collectionCurrency)));
 
   return (
     <StickyForm state={state} action={run} className="im-form pf-form">
@@ -174,12 +176,12 @@ export function ProfitForm({
       </div>
 
       <div className="pf-markets">
-        <p className="pf-markets-h">Por cuenta <span className="hint">traslado y cantidad ingresada; solo donde se vende</span></p>
+        <p className="pf-markets-h">Por cuenta <span className="hint">traslado, recolecta y cantidad ingresada; solo donde se vende</span></p>
         {accounts.map((a) => {
           const m = markets[a.id];
           const options = optionsOf(a.id);
-          const landed = unitCosts(base, { transfer_cost: val(m.transfer), transfer_currency: m.transferCurrency }).landed;
-          const active = !!(m.link || m.transfer || m.qty || extras.some((x) => x.account_id === a.id));
+          const landed = unitCosts(base, { transfer_cost: val(m.transfer), transfer_currency: m.transferCurrency, collection_cost: val(m.collection), collection_currency: m.collectionCurrency }).landed;
+          const active = !!(m.link || m.transfer || m.collection || m.qty || extras.some((x) => x.account_id === a.id));
           return (
             <details key={a.id} className="pf-market" open={active || undefined}>
               <summary>
@@ -212,6 +214,8 @@ export function ProfitForm({
                 </label>
                 <CostEntry label={"Traslado a " + a.name} name={`m_${a.id}_transfer`} amount={m.transfer} currency={m.transferCurrency}
                   onAmount={(value) => patch(a.id, { transfer: value })} onCurrency={(value) => patch(a.id, { transferCurrency: value })} rates={rates} />
+                <CostEntry label="Recolecta" name={`m_${a.id}_collection`} amount={m.collection} currency={m.collectionCurrency}
+                  onAmount={(value) => patch(a.id, { collection: value })} onCurrency={(value) => patch(a.id, { collectionCurrency: value })} rates={rates} />
                 <label className="field">
                   <span>Cantidad ingresada <span className="hint">unidades</span></span>
                   <input className="input" name={`m_${a.id}_qty`} value={m.qty} onChange={(e) => patch(a.id, { qty: e.currentTarget.value })} inputMode="numeric" pattern="[0-9][0-9,]*" placeholder="0" />

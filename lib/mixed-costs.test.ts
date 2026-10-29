@@ -10,7 +10,7 @@ const p: ProfitProduct = { id: "p", name: "Producto", cost_currency: "USD", impo
 };
 test("mixed currencies: converts each amount separately, including actual profitability and investment", () => {
   const m = p.markets[0];
-  assert.deepEqual(unitCosts(p, m), { cost_total: 5, pickup: 0.5, transfer: 1, landed: 6.5 });
+  assert.deepEqual(unitCosts(p, m), { cost_total: 5, pickup: 0.5, transfer: 1, collection: 0, landed: 6.5 });
   const e = marketEconomics(p, m, 0.04);
   assert.equal(e.investment, 650);
   assert.ok(Math.abs(e.users!.profit - 4.3) < 0.00001);

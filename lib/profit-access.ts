@@ -15,7 +15,7 @@ export function costProduct(p: ProfitProduct): CostProduct {
     import_currency: p.import_currency ?? null, pickup_currency: p.pickup_currency ?? null,
     unit_cost: p.unit_cost, import_cost: p.import_cost, pickup_cost: p.pickup_cost, notes: p.notes,
     links: p.links.map(({ account_id, product_key }) => ({ account_id, product_key })),
-    markets: p.markets.map(({ account_id, carrier, transfer_cost, qty_in, transfer_currency }) => ({ account_id, carrier, transfer_cost, qty_in, ...(transfer_currency ? { transfer_currency } : {}) })),
+    markets: p.markets.map(({ account_id, carrier, transfer_cost, qty_in, transfer_currency, collection_cost, collection_currency }) => ({ account_id, carrier, transfer_cost, qty_in, ...(transfer_currency ? { transfer_currency } : {}), ...(collection_cost !== undefined ? { collection_cost } : {}), ...(collection_currency ? { collection_currency } : {}) })),
   };
 }
 export function priceProduct(p: ProfitProduct): PriceProduct {
@@ -25,7 +25,7 @@ export function priceProduct(p: ProfitProduct): PriceProduct {
 /** Only the cost fields are accepted, including when a forged form submits prices. */
 export function cleanCostProduct(input: ProfitInput, accounts: { id: string; name: string }[]) {
   return cleanProfitProduct({ ...input, markets: Object.fromEntries(Object.entries(input.markets ?? {}).map(([id, m]) => [id, {
-    carrier: m.carrier, transfer_cost: m.transfer_cost, transfer_currency: m.transfer_currency, qty_in: m.qty_in,
+    carrier: m.carrier, transfer_cost: m.transfer_cost, transfer_currency: m.transfer_currency, collection_cost: m.collection_cost, collection_currency: m.collection_currency, qty_in: m.qty_in,
   }])) }, accounts);
 }
 
@@ -33,6 +33,6 @@ export function cleanCostProduct(input: ProfitInput, accounts: { id: string; nam
 export function costMarketWrites(productId: string, markets: CostProduct["markets"], accountIds: string[]) {
   return accountIds.map((account_id) => {
     const m = markets.find((m) => m.account_id === account_id);
-    return { product_id: productId, account_id, carrier: m?.carrier ?? null, transfer_cost: m?.transfer_cost ?? null, ...(m?.transfer_currency ? { transfer_currency: m.transfer_currency } : {}), qty_in: m?.qty_in ?? null };
+    return { product_id: productId, account_id, carrier: m?.carrier ?? null, transfer_cost: m?.transfer_cost ?? null, ...(m?.transfer_currency ? { transfer_currency: m.transfer_currency } : {}), ...(m?.collection_cost !== undefined ? { collection_cost: m.collection_cost } : {}), ...(m?.collection_currency ? { collection_currency: m.collection_currency } : {}), qty_in: m?.qty_in ?? null };
   });
 }

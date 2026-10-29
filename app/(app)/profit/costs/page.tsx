@@ -83,7 +83,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
         sub={<>
           {fmtInt(products.length)} {products.length === 1 ? "ficha" : "fichas"}
           {missingCost > 0 && <> · {fmtInt(missingCost)} sin costo</>}
-          {" "}· costo, recolección y traslado por cuenta
+          {" "}· costos, traslado y recolecta por cuenta
         </>}
         actions={
           <SideSheet
@@ -113,7 +113,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
             <p>
               {products.length
                 ? "Prueba con otra palabra."
-                : "Crea una ficha por producto: costo, importación (si aplica), recolección en Guatemala y, por cuenta, el traslado. Los precios se cargan por separado en Precios comerciales."}
+                : "Crea una ficha por producto: costo, importación (si aplica), recolección en Guatemala y, por cuenta, traslado y recolecta. Los precios se cargan por separado en Precios comerciales."}
             </p>
           </div>
         ) : (
@@ -125,7 +125,8 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                   <th className="r">Costo total</th>
                   <th className="r">Recolección GT</th>
                   <th className="r">Traslado</th>
-                  <th className="r" title={`Costo total + recolección + traslado + fulfillment (${usd(FULFILLMENT_USD)} por pedido, fijo)`}>
+                  <th className="r">Recolecta</th>
+                  <th className="r" title={`Costo total + recolección GT + traslado + recolecta + fulfillment (${usd(FULFILLMENT_USD)} por pedido, fijo)`}>
                     Costo final<span className="th-sub">con fulfillment {usd(FULFILLMENT_USD)}</span>
                   </th>
                   <th className="r">Cant. ingresada</th>
@@ -155,7 +156,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                       </td>
                       <td className="num strong">{usd(c.cost_total)}</td>
                       <td className="num">{p.pickup_cost === null ? <span className="subtle">—</span> : usd(c.pickup)}</td>
-                      <td colSpan={2} />
+                      <td colSpan={3} />
                       <td className="num">{qty > 0 ? fmtInt(qty) : null}</td>
                       <td className="r nowrap">
                         <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={p.name} sub="Ficha de costos">
@@ -183,6 +184,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                           <td />
                           <td />
                           <td className="num">{m.transfer_cost === null ? <span className="subtle">—</span> : usd(e.transfer)}</td>
+                          <td className="num">{m.collection_cost == null ? <span className="subtle">—</span> : usd(e.collection)}</td>
                           <td className="num strong">{usd(e.landed === null ? null : e.landed + FULFILLMENT_USD)}</td>
                           <td className="num">
                             {m.qty_in === null ? <span className="subtle">—</span> : fmtInt(m.qty_in)}
@@ -202,6 +204,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                           <td />
                           <td />
                           <td className="num"><span className="subtle">—</span></td>
+                          <td className="num"><span className="subtle">—</span></td>
                           <td className="num strong">{usd(c.landed === null ? null : c.landed + FULFILLMENT_USD)}</td>
                           <td colSpan={2} />
                         </tr>
@@ -215,7 +218,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
         )}
       </div>
       <p className="footnote">
-        Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + fulfillment
+        Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + recolecta por cuenta + fulfillment
         ({usd(1.2)} por pedido, fijo). Los costos en lempiras usan automáticamente el tipo de cambio actual sincronizado de Drop, también en Rentabilidad y Excel. Los quetzales también usan la tasa sincronizada. Cada costo tiene su propia moneda.
       </p>
     </div>
