@@ -126,7 +126,13 @@ los saldos de Drop ni realiza transferencias.
      revisa y corrige los campos antes de guardar; nunca se guarda ni se concilia
      automáticamente. Los valores ambiguos quedan pendientes, sin calcular USD
      a partir de otra moneda ni descontar comisiones. Se muestran citas del PDF.
-     Para escaneos o formatos que requieren interpretación se intenta la
+     Los comprobantes BAC de Boxful se leen por su formato bancario: fecha de
+     ejecución, número de referencia y «Monto a Transferir». La comisión del
+     banco de origen y el total debitado no sustituyen el importe enviado.
+     Los escaneos BAC de una página tienen OCR local con modelo incluido, sin
+     créditos de IA ni envíos a terceros. Los datos con baja confianza o totales
+     contradictorios quedan pendientes; siempre se revisan antes de guardar.
+     Para otros escaneos o formatos que requieren interpretación se intenta la
      integración Anthropic de Ajustes, o AI Gateway de Vercel mediante OIDC;
      esa alternativa requiere credenciales y saldo del proveedor. Si no está
      disponible, se conserva la propuesta parcial y se permite captura manual.
