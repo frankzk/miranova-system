@@ -25,7 +25,7 @@ export type Carrier = (typeof CARRIERS)[number]["id"];
 export const isCarrier = (v: unknown): v is Carrier => CARRIERS.some((c) => c.id === v);
 export const carrierLabel = (c: Carrier | null) => CARRIERS.find((x) => x.id === c)?.label ?? null;
 
-/** El producto en una cuenta: traslado (moneda de costos de la ficha) y precios (moneda de la cuenta). */
+/** El producto en una cuenta: traslado con moneda independiente y precios en moneda de la cuenta. */
 export type ProfitMarket = {
   account_id: string;
   carrier: Carrier | null;
