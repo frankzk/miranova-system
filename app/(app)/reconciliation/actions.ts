@@ -16,6 +16,10 @@ import {
   type BankState,
 } from "@/lib/reconciliation";
 import { bankError } from "@/lib/reconciliation-data";
+import { uploadedBankPdf } from "@/lib/bank-pdf-storage";
+import { readBoxfulDocument } from "@/lib/boxful-pdf";
+import type { BoxfulReadResult } from "@/lib/boxful-document";
+import { integrationKey } from "@/lib/integrations";
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const fail = (msg: string) => ({ ok: false as const, msg });
@@ -45,6 +49,33 @@ export async function prepareBankPdf(
     .createSignedUploadUrl(path);
   if (error || !data) return fail("No se pudo preparar la carga del PDF.");
   return { ok: true as const, path, url: data.signedUrl };
+}
+
+/** Propone datos del PDF cargado por esta persona. No registra ni concilia movimientos. */
+export async function readBankPdf(
+  company: string,
+  path: string,
+): Promise<BoxfulReadResult> {
+  const auth = await authorizeAction("reconciliation");
+  if (!auth.ok) return auth;
+  if (!isCompany(company)) return fail("Selecciona una empresa válida.");
+  try {
+    const file = await uploadedBankPdf(company, auth.user.id, path);
+    if (!file.ok) return file;
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Lima",
+    }).format(new Date());
+    return await readBoxfulDocument(
+      file.bytes,
+      () => integrationKey("anthropic"),
+      company + ":" + auth.user.id,
+      today,
+    );
+  } catch {
+    return fail(
+      "No se pudo leer el PDF. Inténtalo de nuevo o completa los datos manualmente.",
+    );
+  }
 }
 
 export async function saveBankEntry(
@@ -95,33 +126,11 @@ export async function saveBankEntry(
   if (clean.row.source === "boxful") {
     const path = field(form, "document_path");
     const name = field(form, "document_name");
-    const prefix = `${clean.row.company}/${auth.user.id}/`;
-    if (
-      !path.startsWith(prefix) ||
-      !UUID.test(path.slice(prefix.length, -4)) ||
-      !path.endsWith(".pdf") ||
-      !name ||
-      name.length > 200
-    )
-      return fail("Adjunta el PDF de Boxful antes de guardar.");
-    const { data: info, error: infoErr } = await db()
-      .storage.from(BANK_BUCKET)
-      .info(path);
-    if (
-      infoErr ||
-      !info ||
-      !info.size ||
-      info.size > MAX_BANK_PDF ||
-      info.contentType !== "application/pdf"
-    )
-      return fail("El PDF no se cargó correctamente o supera 15 MB.");
-    const { data: file, error: readErr } = await db()
-      .storage.from(BANK_BUCKET)
-      .download(path);
-    if (readErr || !file) return fail("No se pudo verificar el PDF.");
-    const bytes = Buffer.from(await file.arrayBuffer());
-    if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-")
-      return fail("El archivo no es un PDF válido.");
+    if (!name || name.length > 200)
+      return fail("Indica el nombre del PDF de Boxful.");
+    const file = await uploadedBankPdf(clean.row.company, auth.user.id, path);
+    if (!file.ok) return file;
+    const bytes = file.bytes;
     document = {
       document_path: path,
       document_name: name,
@@ -182,20 +191,18 @@ export async function reconcileBank(
   if (problem) return fail(problem);
   if (b.version !== versions[0] || m.version !== versions[1])
     return fail("Los movimientos cambiaron. Actualiza y revisa los importes.");
-  const { error: writeErr } = await db()
-    .from("bank_matches")
-    .insert({
-      company,
-      boxful_id: boxfulId,
-      mercury_id: mercuryId,
-      boxful_version: versions[0],
-      mercury_version: versions[1],
-      boxful_snapshot: b,
-      mercury_snapshot: m,
-      fee_cents: fee,
-      fee_note,
-      created_by: auth.user.id,
-    });
+  const { error: writeErr } = await db().from("bank_matches").insert({
+    company,
+    boxful_id: boxfulId,
+    mercury_id: mercuryId,
+    boxful_version: versions[0],
+    mercury_version: versions[1],
+    boxful_snapshot: b,
+    mercury_snapshot: m,
+    fee_cents: fee,
+    fee_note,
+    created_by: auth.user.id,
+  });
   if (writeErr) return fail(bankError(writeErr));
   return done(
     "Conciliación confirmada. Ambos movimientos quedaron vinculados 1:1.",

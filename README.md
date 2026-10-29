@@ -121,7 +121,16 @@ los saldos de Drop ni realiza transferencias.
 1. Registrar la liquidación Boxful: referencia única, fecha, PDF privado (hasta
    15 MB) y monto enviado en USD. Si el PDF usa otra moneda, guardar también
    el monto y moneda originales; los USD corresponden a la conversión de esa
-   transferencia, no a una cotización actual. La captura de datos es manual.
+   transferencia, no a una cotización actual. Al cargar el PDF se proponen
+     fecha, referencia e importe mediante lectura directa del texto. La persona
+     revisa y corrige los campos antes de guardar; nunca se guarda ni se concilia
+     automáticamente. Los valores ambiguos quedan pendientes, sin calcular USD
+     a partir de otra moneda ni descontar comisiones. Se muestran citas del PDF.
+     Para escaneos o formatos que requieren interpretación se intenta la
+     integración Anthropic de Ajustes, o AI Gateway de Vercel mediante OIDC;
+     esa alternativa requiere credenciales y saldo del proveedor. Si no está
+     disponible, se conserva la propuesta parcial y se permite captura manual.
+     La lectura directa admite hasta 40 páginas y no envía el PDF a terceros.
 2. Registrar el abono Mercury con su referencia/ID, fecha, monto neto recibido
    en USD, remitente y cuenta bancaria.
 3. En una fila de la pestaña **Mercury**, abrir **Vincular Boxful**. El selector

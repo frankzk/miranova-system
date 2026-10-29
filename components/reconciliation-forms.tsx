@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   prepareBankPdf,
+  readBankPdf,
   reconcileBank,
   reverseBankMatch,
   saveBankEntry,
@@ -23,6 +24,11 @@ import {
 } from "@/lib/reconciliation";
 import { SubmitButton } from "./submit-button";
 import { useSheet } from "./side-sheet";
+import {
+  applyBoxfulProposal,
+  type BoxfulAutofill,
+  type BoxfulReadResult,
+} from "@/lib/boxful-document";
 
 function Message({ state }: { state: BankState }) {
   return state ? (
@@ -55,15 +61,68 @@ export function BankEntryForm({
   entry?: BankEntry;
 }) {
   const [state, run, saving] = useActionState(saveBankEntry, null);
-  const [currency, setCurrency] = useState(entry?.original_currency ?? "USD");
+  const [fields, setFields] = useState<BoxfulAutofill>({
+    reference: entry?.reference ?? "",
+    occurred_on: entry?.occurred_on ?? (source === "mercury" ? today : ""),
+    amount: entry ? decimal(entry.amount_cents) : "",
+    original_currency: entry?.original_currency ?? "USD",
+    original_amount:
+      entry && entry.original_currency !== "USD"
+        ? decimal(entry.original_amount_cents)
+        : "",
+  });
+  const currency = fields.original_currency;
+  const setField = (key: keyof BoxfulAutofill, value: string) =>
+    setFields((current) => ({ ...current, [key]: value }));
   const [uploading, setUploading] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [read, setRead] = useState<BoxfulReadResult | null>(null);
+  const requestId = useRef(0);
   const [uploadError, setUploadError] = useState("");
   const [pdf, setPdf] = useState<{ path: string; name: string } | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
   useCloseOnSave(state);
+  useEffect(
+    () => () => {
+      requestId.current++;
+    },
+    [],
+  );
+
+  async function readPdf(
+    document: { path: string; name: string },
+    beforeRead: BoxfulAutofill = fields,
+  ) {
+    const id = ++requestId.current;
+    setReading(true);
+    setRead(null);
+    try {
+      const result = await readBankPdf(company, document.path);
+      if (id !== requestId.current) return;
+      setRead(result);
+      if (result.ok)
+        setFields((current) =>
+          applyBoxfulProposal(current, beforeRead, result.proposal.fields),
+        );
+    } catch {
+      if (id === requestId.current)
+        setRead({
+          ok: false,
+          msg: "No se pudo leer el PDF. Puedes volver a intentarlo o llenar los datos manualmente.",
+        });
+    } finally {
+      if (id === requestId.current) setReading(false);
+    }
+  }
 
   async function upload(file: File) {
     setUploadError("");
-    setPdf(null);
     if (
       !file.name.toLowerCase().endsWith(".pdf") ||
       file.size <= 0 ||
@@ -72,9 +131,22 @@ export function BankEntryForm({
       setUploadError("Selecciona un PDF de hasta 15 MB.");
       return;
     }
+    const uploadId = ++requestId.current;
+    setPdf(null);
+    setRead(null);
+    setPreview(URL.createObjectURL(file));
+    const empty = {
+      reference: "",
+      occurred_on: "",
+      amount: "",
+      original_currency: "USD",
+      original_amount: "",
+    };
+    setFields(empty);
     setUploading(true);
     try {
       const start = await prepareBankPdf(company, file.name, file.size);
+      if (uploadId !== requestId.current) return;
       if (!start.ok) {
         setUploadError(start.msg);
         return;
@@ -88,7 +160,11 @@ export function BankEntryForm({
         body,
       });
       if (!result.ok) throw new Error("upload");
-      setPdf({ path: start.path, name: file.name });
+      if (uploadId !== requestId.current) return;
+      const document = { path: start.path, name: file.name };
+      setPdf(document);
+      setUploading(false);
+      await readPdf(document, empty);
     } catch {
       setUploadError("No se pudo cargar el PDF. Vuelve a seleccionarlo.");
     } finally {
@@ -112,7 +188,7 @@ export function BankEntryForm({
           <input
             type="file"
             accept="application/pdf,.pdf"
-            disabled={uploading || saving}
+            disabled={uploading || reading || saving}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void upload(file);
@@ -121,18 +197,92 @@ export function BankEntryForm({
           <span className="hint" role="status">
             {uploading
               ? "Cargando PDF…"
-              : pdf
-                ? `${pdf.name} · cargado`
-                : "Hasta 15 MB. Registra los datos tal como aparecen en el comprobante."}
+              : reading
+                ? "Leyendo fecha, referencia e importe del PDF…"
+                : pdf
+                  ? `${pdf.name} · cargado`
+                  : "Hasta 15 MB. La fecha, referencia e importe se completan al subirlo para que los revises."}
           </span>
         </label>
       )}
       <input type="hidden" name="document_path" value={pdf?.path ?? ""} />
       <input type="hidden" name="document_name" value={pdf?.name ?? ""} />
+      {preview && (
+        <a href={preview} target="_blank" rel="noreferrer" className="btn">
+          Abrir PDF para revisar ↗
+        </a>
+      )}
       {uploadError && (
         <p className="im-msg" data-ok={false} role="alert">
           {uploadError}
         </p>
+      )}
+      {reading && (
+        <p className="banner" data-tone="info" role="status">
+          <span className="spinner" aria-hidden="true" /> Leyendo el
+          comprobante… Los datos aparecerán aquí para revisarlos antes de
+          guardar.
+        </p>
+      )}
+      {read && (
+        <div className="bank-autofill-result">
+          <p
+            className="banner"
+            data-tone={read.ok ? "info" : "warning"}
+            role={read.ok ? "status" : "alert"}
+          >
+            {read.ok
+              ? "Lectura terminada. Revisa la fecha, referencia e importe propuestos contra el PDF antes de guardar."
+              : read.msg}
+          </p>
+          {read.ok && read.proposal.warnings.length > 0 && (
+            <ul
+              className="bank-read-warnings"
+              aria-label="Avisos de la lectura"
+            >
+              {read.proposal.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+          {read.ok && Object.keys(read.proposal.evidence).length > 0 && (
+            <details className="bank-read-evidence">
+              <summary>Ver datos encontrados en el PDF</summary>
+              <dl className="bank-audit-data">
+                {Object.entries(read.proposal.evidence).map(
+                  ([key, evidence]) => (
+                    <div key={key}>
+                      <dt>
+                        {
+                          (
+                            {
+                              reference: "Referencia",
+                              occurred_on: "Fecha",
+                              amount: "Importe USD",
+                              original_currency: "Moneda original",
+                              original_amount: "Monto original",
+                            } as Record<string, string>
+                          )[key]
+                        }
+                      </dt>
+                      <dd>{evidence}</dd>
+                    </div>
+                  ),
+                )}
+              </dl>
+            </details>
+          )}
+          {!read.ok && pdf && (
+            <button
+              type="button"
+              className="btn"
+              disabled={reading || uploading || saving}
+              onClick={() => void readPdf(pdf)}
+            >
+              Volver a leer PDF
+            </button>
+          )}
+        </div>
       )}
       {entry?.document_path && (
         <a
@@ -144,148 +294,162 @@ export function BankEntryForm({
           Ver PDF original
         </a>
       )}
-      <div className="bank-field-grid">
-        <label className="field bank-wide">
-          <span>
-            {source === "boxful"
-              ? "Referencia de liquidación / transferencia"
-              : "ID o referencia de transacción Mercury"}
-          </span>
-          <input
-            className="input"
-            name="reference"
-            required
-            maxLength={160}
-            defaultValue={entry?.reference}
-            placeholder={
-              source === "boxful"
-                ? "Referencia única del comprobante"
-                : "Identificador del abono en Mercury"
-            }
-          />
-          <span className="hint">
-            Debe ser única para este origen y empresa, aunque dos pagos tengan
-            el mismo monto.
-          </span>
-        </label>
-        <label className="field">
-          <span>
-            {source === "boxful" ? "Fecha de transferencia" : "Fecha del abono"}
-          </span>
-          <input
-            className="input"
-            name="occurred_on"
-            type="date"
-            max={today}
-            required
-            defaultValue={entry?.occurred_on ?? today}
-          />
-        </label>
-        <label className="field">
-          <span>
-            {source === "boxful"
-              ? "Importe enviado · USD"
-              : "Importe recibido · USD"}
-          </span>
-          <input
-            className="input"
-            name="amount"
-            inputMode="decimal"
-            required
-            placeholder="0.00"
-            defaultValue={entry ? decimal(entry.amount_cents) : ""}
-          />
-          <span className="hint">
-            {source === "boxful"
-              ? "Monto de la transferencia en USD, antes de la comisión bancaria."
-              : "El abono neto que aparece en Mercury."}
-          </span>
-        </label>
-        {source === "boxful" && (
-          <>
-            <label className="field">
-              <span>Moneda original del PDF</span>
-              <select
-                className="select"
-                name="original_currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                {ORIGINAL_CURRENCIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </label>
-            {currency !== "USD" && (
+      <fieldset
+        className="bank-form-fields"
+        disabled={uploading || reading || saving}
+      >
+        <legend className="sr-only">Datos de la transferencia</legend>
+        <div className="bank-field-grid">
+          <label className="field bank-wide">
+            <span>
+              {source === "boxful"
+                ? "Referencia de liquidación / transferencia"
+                : "ID o referencia de transacción Mercury"}
+            </span>
+            <input
+              className="input"
+              name="reference"
+              required
+              maxLength={160}
+              value={fields.reference}
+              onChange={(event) => setField("reference", event.target.value)}
+              placeholder={
+                source === "boxful"
+                  ? "Referencia única del comprobante"
+                  : "Identificador del abono en Mercury"
+              }
+            />
+            <span className="hint">
+              Debe ser única para este origen y empresa, aunque dos pagos tengan
+              el mismo monto.
+            </span>
+          </label>
+          <label className="field">
+            <span>
+              {source === "boxful"
+                ? "Fecha de transferencia"
+                : "Fecha del abono"}
+            </span>
+            <input
+              className="input"
+              name="occurred_on"
+              type="date"
+              max={today}
+              required
+              value={fields.occurred_on}
+              onChange={(event) => setField("occurred_on", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>
+              {source === "boxful"
+                ? "Importe enviado · USD"
+                : "Importe recibido · USD"}
+            </span>
+            <input
+              className="input"
+              name="amount"
+              inputMode="decimal"
+              required
+              placeholder="0.00"
+              value={fields.amount}
+              onChange={(event) => setField("amount", event.target.value)}
+            />
+            <span className="hint">
+              {source === "boxful"
+                ? "Monto de la transferencia en USD, antes de la comisión bancaria."
+                : "El abono neto que aparece en Mercury."}
+            </span>
+          </label>
+          {source === "boxful" && (
+            <>
               <label className="field">
-                <span>Monto original · {currency}</span>
-                <input
-                  className="input"
-                  name="original_amount"
-                  inputMode="decimal"
-                  required
-                  placeholder="0.00"
-                  defaultValue={
-                    entry && entry.original_currency !== "USD"
-                      ? decimal(entry.original_amount_cents)
-                      : ""
+                <span>Moneda original del PDF</span>
+                <select
+                  className="select"
+                  name="original_currency"
+                  value={currency}
+                  onChange={(e) =>
+                    setField("original_currency", e.target.value)
                   }
-                />
-                <span className="hint">
-                  La conversión a USD corresponde a esta transferencia, no a una
-                  tasa actual.
-                </span>
+                >
+                  {ORIGINAL_CURRENCIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
               </label>
-            )}
-          </>
-        )}
-        <label className="field">
-          <span>
-            {source === "mercury" ? "Remitente" : "Emisor / descripción"}
-          </span>
-          <input
-            className="input"
-            name="counterparty"
-            maxLength={200}
-            required={source === "mercury"}
-            defaultValue={
-              entry?.counterparty ?? (source === "boxful" ? "Boxful" : "")
-            }
-            placeholder="Como aparece en el movimiento"
-          />
-        </label>
-        <label className="field">
-          <span>
-            {source === "mercury"
-              ? "Cuenta Mercury"
-              : "Cuenta destino (opcional)"}
-          </span>
-          <input
-            className="input"
-            name="bank_account"
-            maxLength={100}
-            required={source === "mercury"}
-            defaultValue={entry?.bank_account}
-            placeholder="Ej.: Checking · últimos 4 dígitos"
-          />
-        </label>
-        <label className="field bank-wide">
-          <span>Notas (opcional)</span>
-          <textarea
-            className="input"
-            name="notes"
-            rows={3}
-            maxLength={2000}
-            defaultValue={entry?.notes}
-            placeholder="Detalle de la transferencia o conversión aplicada"
-          />
-        </label>
-      </div>
+              {currency !== "USD" && (
+                <label className="field">
+                  <span>Monto original · {currency}</span>
+                  <input
+                    className="input"
+                    name="original_amount"
+                    inputMode="decimal"
+                    required
+                    placeholder="0.00"
+                    value={fields.original_amount}
+                    onChange={(event) =>
+                      setField("original_amount", event.target.value)
+                    }
+                  />
+                  <span className="hint">
+                    La conversión a USD corresponde a esta transferencia, no a
+                    una tasa actual.
+                  </span>
+                </label>
+              )}
+            </>
+          )}
+          <label className="field">
+            <span>
+              {source === "mercury" ? "Remitente" : "Emisor / descripción"}
+            </span>
+            <input
+              className="input"
+              name="counterparty"
+              maxLength={200}
+              required={source === "mercury"}
+              defaultValue={
+                entry?.counterparty ?? (source === "boxful" ? "Boxful" : "")
+              }
+              placeholder="Como aparece en el movimiento"
+            />
+          </label>
+          <label className="field">
+            <span>
+              {source === "mercury"
+                ? "Cuenta Mercury"
+                : "Cuenta destino (opcional)"}
+            </span>
+            <input
+              className="input"
+              name="bank_account"
+              maxLength={100}
+              required={source === "mercury"}
+              defaultValue={entry?.bank_account}
+              placeholder="Ej.: Checking · últimos 4 dígitos"
+            />
+          </label>
+          <label className="field bank-wide">
+            <span>Notas (opcional)</span>
+            <textarea
+              className="input"
+              name="notes"
+              rows={3}
+              maxLength={2000}
+              defaultValue={entry?.notes}
+              placeholder="Detalle de la transferencia o conversión aplicada"
+            />
+          </label>
+        </div>
+      </fieldset>
       <Message state={state} />
       <SubmitButton
         className="btn btn-primary"
         pending="Guardando…"
-        disabled={uploading || (source === "boxful" && !entry && !pdf)}
+        disabled={
+          uploading || reading || (source === "boxful" && !entry && !pdf)
+        }
       >
         {entry
           ? "Guardar cambios"

@@ -100,6 +100,11 @@ for (const user of ["andrea", "analista"]) {
     (await call(user, "prepareBankPdf", {}, ["miranova", "qa.pdf", 200])).ok,
     false,
   );
+  assert.equal(
+    (await call(user, "readBankPdf", {}, ["miranova", "miranova/forged.pdf"]))
+      .ok,
+    false,
+  );
 }
 console.log(
   "PASS: direct server actions and PDF uploads require reconciliation permission",
@@ -150,6 +155,33 @@ body.set("", pdf, "qa-bank.pdf");
 assert.equal(
   (await fetch(base + prepared.url, { method: "PUT", body })).status,
   200,
+);
+const proposed = await call("dueno", "readBankPdf", {}, [
+  "miranova",
+  prepared.path,
+]);
+assert.equal(proposed.ok, true, proposed.msg);
+assert.equal(proposed.proposal.fields.reference, "BOXFUL-DEMO-104");
+assert.equal(proposed.proposal.fields.occurred_on, "2026-10-28");
+assert.equal(proposed.proposal.fields.amount, "6377.06");
+assert.ok(
+  !(await page("dueno")).text.includes('"reference":"BOXFUL-DEMO-104"'),
+  "Reading saved a transfer without confirmation",
+);
+for (const args of [
+  ["mireva", prepared.path],
+  [
+    "miranova",
+    prepared.path.replace(
+      /\/[a-f0-9-]{36}\//,
+      "/a0000000-0000-4000-8000-000000000002/",
+    ),
+  ],
+  ["miranova", "../forged.pdf"],
+])
+  assert.equal((await call("dueno", "readBankPdf", {}, args)).ok, false);
+console.log(
+  "PASS: PDF proposal without saving; wrong company, owner and path rejected",
 );
 const pdfSaved = await call("dueno", "saveBankEntry", {
   ...boxful,
