@@ -109,6 +109,50 @@ ni variables nuevas. La clave privilegiada de Supabase permanece en el servidor.
 
 ## Seguridad
 
+### Conciliación bancaria
+
+El menú **Conciliación bancaria** (`/reconciliation`) tiene un permiso propio,
+**Conciliación bancaria**, que el dueño puede otorgar en Ajustes → Usuarios.
+El selector de empresa separa los registros de Miranova y Mireva. Hay dos pestañas,
+**Mercury** y **Boxful**, cada una con su tabla de todos los registros y filtros de
+estado. El selector de cuentas Drop no afecta estas tablas. La sección no modifica
+los saldos de Drop ni realiza transferencias.
+
+1. Registrar la liquidación Boxful: referencia única, fecha, PDF privado (hasta
+   15 MB) y monto enviado en USD. Si el PDF usa otra moneda, guardar también
+   el monto y moneda originales; los USD corresponden a la conversión de esa
+   transferencia, no a una cotización actual. La captura de datos es manual.
+2. Registrar el abono Mercury con su referencia/ID, fecha, monto neto recibido
+   en USD, remitente y cuenta bancaria.
+3. En una fila de la pestaña **Mercury**, abrir **Vincular Boxful**. El selector
+   muestra las transferencias Boxful disponibles de esa empresa, con fecha,
+   referencia, importe, diferencia y acceso al PDF. Buscar y seleccionar la
+   transferencia que corresponde, y confirmar el cruce 1:1:
+   **Boxful USD = Mercury USD + comisión USD**.
+   La comisión se escribe y justifica explícitamente. Los candidatos se ordenan
+   por monto y fecha; nunca se concilian automáticamente. Montos iguales muestran
+   una advertencia para que se verifiquen las referencias. Los movimientos
+   vinculados permanecen visibles en ambas tablas, con su contraparte y comisión.
+
+La base valida centavos enteros, empresa, origen, versiones y exclusividad de
+ambos movimientos, incluidos los intentos simultáneos. Los registros conciliados
+no pueden editarse ni anularse hasta revertir el cruce con motivo. Se conservan
+las versiones de los movimientos al conciliar y una auditoría de altas,
+correcciones, anulaciones y reversiones. La vista Actividad muestra los últimos
+100 eventos; el historial completo permanece en la base.
+
+Aplicar `supabase/migrations/20261029184347_bank_reconciliation.sql` antes de
+desplegar. Crea las tablas `bank_entries`, `bank_matches`, `bank_audit` y el bucket
+privado `bank-documents`, sin acceso de clientes públicos. Los PDFs se sirven
+tras verificar el permiso, con enlaces firmados de 2 minutos. No necesita nuevas
+variables de entorno ni conexión directa a Mercury.
+
+Verificación: `node --test --experimental-strip-types lib/reconciliation.test.ts
+lib/access.test.ts`, `npm run typecheck` y `npm run build`. Con el servidor local
+de fixtures en el puerto 3100, ejecutar `node scripts/check-bank-access.mjs`.
+Las restricciones reales se prueban ejecutando `scripts/check-bank-database.sql`
+entre `BEGIN` y `ROLLBACK`; no deja transacciones de prueba en la base.
+
 Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
 
 Las fichas de costos admiten USD, GTQ y HNL. En lempiras se usa automáticamente
