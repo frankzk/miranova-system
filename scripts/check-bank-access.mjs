@@ -285,3 +285,23 @@ for (const reference of [boxful.reference, fields.reference]) {
 console.log(
   "PASS: reversal and void forms; successful QA entries removed from pending lists",
 );
+
+const moveFields = { ...fields, reference: `QA-MOVE-${suffix}`, notes: "Empresa por confirmar. Registro provisional de prueba." };
+assert.equal((await call("dueno", "saveBankEntry", moveFields)).ok, true);
+const movePage = (await page("dueno")).text;
+const moveId = movePage.match(new RegExp('"id":"([a-f0-9-]{36})"[^{}]*"reference":"' + moveFields.reference + '"'))?.[1];
+assert.ok(moveId);
+const move = { ...moveFields, id: moveId, version: "1", target_company: "mireva", company_reason: "Empresa verificada en comprobante", company_confirmed: "on" };
+assert.equal((await call("dueno", "saveBankEntry", { ...move, company_confirmed: "" })).ok, false);
+assert.equal((await call("dueno", "saveBankEntry", { ...move, company_reason: "" })).ok, false);
+assert.equal((await call("dueno", "saveBankEntry", { ...move, target_company: "INVALID" })).ok, false);
+assert.equal((await call("andrea", "saveBankEntry", move)).ok, false);
+const moved = await call("dueno", "saveBankEntry", move);
+assert.equal(moved.ok, true, moved.msg);
+const movedPage = (await page("dueno", "/reconciliation?company=mireva")).text;
+assert.ok(movedPage.includes(moveId));
+assert.ok(movedPage.includes(moveFields.reference));
+assert.ok(movedPage.includes("Cambio de empresa: miranova"));
+assert.equal((await call("dueno", "saveBankEntry", move)).ok, false, "stale source/version rejected");
+assert.equal((await call("dueno", "voidBankEntry", { company: "mireva", id: moveId, version: "2", reason: "QA completada" })).ok, true);
+console.log("PASS: Mercury company change requires permission, explicit confirmation, reason and current version");

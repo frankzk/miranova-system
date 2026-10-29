@@ -62,3 +62,17 @@ set local role service_role;
 update public.bank_entries set notes='QA service role' where id='f9000000-0000-4000-8000-000000000004';
 reset role;
 select 'PASS: exact cents, 1:1 uniqueness, companies, versions, reversal, audit, RLS and service role' as result;
+
+-- Clasificar un abono nuevo conserva sus datos y su ID; un historial previo impide moverlo.
+update public.bank_entries set company='mireva',notes='QA empresa confirmada' where id='f9000000-0000-4000-8000-000000000004';
+do $$ begin
+  if not exists(select 1 from public.bank_entries where id='f9000000-0000-4000-8000-000000000004' and company='mireva' and amount_cents=99750 and reference='QA-M2') then raise exception 'Move changed original transaction'; end if;
+  if not exists(select 1 from public.bank_audit where entity_id='f9000000-0000-4000-8000-000000000004' and company='mireva' and operation='edited') then raise exception 'Move missing audit'; end if;
+end $$;
+update public.bank_entries set company='miranova' where id='f9000000-0000-4000-8000-000000000004';
+select pg_temp.expect_bank_error($q$update public.bank_entries set company='mireva' where id='f9000000-0000-4000-8000-000000000002'$q$, 'sin historial');
+select pg_temp.expect_bank_error($q$update public.bank_entries set company='mireva' where id='f9000000-0000-4000-8000-000000000001'$q$, 'sin historial');
+insert into public.bank_entries(company,source,reference,occurred_on,amount_cents,original_currency,original_amount_cents,counterparty,bank_account,created_by,updated_by) values
+('mireva','mercury','QA-M2','2026-10-28',99750,'USD',99750,'QA','Checking QA','f9000000-0000-4000-8000-000000000099','f9000000-0000-4000-8000-000000000099');
+select pg_temp.expect_bank_error($q$update public.bank_entries set company='mireva' where id='f9000000-0000-4000-8000-000000000004'$q$, 'bank_entries_company_source_reference_key_key');
+select 'PASS: Mercury move preserves identity, amounts, audit, destination uniqueness and reconciliation history' as result;

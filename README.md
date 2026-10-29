@@ -153,7 +153,11 @@ La base valida centavos enteros, empresa, origen, versiones y exclusividad de
 ambos movimientos, incluidos los intentos simultáneos. Los registros conciliados
 no pueden editarse ni anularse hasta revertir el cruce con motivo. Se conservan
 las versiones de los movimientos al conciliar y una auditoría de altas,
-correcciones, anulaciones y reversiones. La vista Actividad muestra los últimos
+  correcciones, anulaciones y reversiones. Un abono Mercury sin PDF, sin anular y
+  que nunca se haya conciliado puede cambiar de empresa desde Detalle, con motivo
+  y confirmación explícita; conserva ID, importe, referencia y auditoría. Aplicar
+  `supabase/migrations/20261029220114_move_unmatched_mercury_company.sql` para habilitarlo.
+  La vista Actividad muestra los últimos
 100 eventos; el historial completo permanece en la base.
 
 Aplicar `supabase/migrations/20261029184347_bank_reconciliation.sql` antes de
