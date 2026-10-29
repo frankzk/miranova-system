@@ -309,6 +309,8 @@ const CTX: FixtureCtx = {
 // separadas de los módulos, y así ven los mismos datos (p. ej. un usuario recién creado)
 const g = globalThis as { __miranovaFixtureTables?: Record<string, Row[]> };
 const EXTRA_TABLES: Record<string, Row[]> = (g.__miranovaFixtureTables ??= Object.assign({}, ...MODULES.map((m) => m.tables ?? {})));
+// HMR conserva los datos existentes e incorpora tablas de módulos añadidos al servidor abierto.
+for (const module of MODULES) for (const [name, rows] of Object.entries(module.tables ?? {})) EXTRA_TABLES[name] ??= rows;
 
 /** Archivos de Storage en memoria (ruta → tipo y bytes), compartidos con app/api/dev-storage. */
 export type DevFile = { type: string; data: Uint8Array; created_at: string };

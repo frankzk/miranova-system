@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permissi
   { href: "/imports", label: "Compras", icon: IconShip, perm: "imports", match: (p: string) => p.startsWith("/imports") },
   { href: "/requests", label: "Solicitudes", icon: IconInbox, perm: "requests", match: (p: string) => p.startsWith("/requests") },
   { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
+  { href: "/reconciliation", label: "Conciliación bancaria", icon: IconMoney, perm: "reconciliation", match: (p: string) => p.startsWith("/reconciliation") },
   { href: "/profit/costs", label: "Costos de productos", icon: IconBox, perm: "product_costs", match: (p: string) => p.startsWith("/profit/costs") },
   { href: "/profit/prices", label: "Precios comerciales", icon: IconMoney, perm: "product_prices", match: (p: string) => p.startsWith("/profit/prices") },
   { href: "/profit", label: "Rentabilidad", icon: IconTrend, perm: "profit", match: (p: string) => p === "/profit" },

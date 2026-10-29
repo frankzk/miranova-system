@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   { key: "requests", label: "Solicitudes", hint: "Lo que piden las tiendas (producto, cantidad y países): verlas, cargarlas y cambiar su estado" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
+  { key: "reconciliation", label: "Conciliación bancaria", hint: "Registrar PDFs de Boxful y abonos Mercury; conciliar, revertir y consultar el historial de Mireva y Miranova" },
   { key: "product_costs", label: "Costos de productos", hint: "Crear y editar costos, importación, recolección y traslado; vincular productos por cuenta. No incluye precios comerciales ni utilidades" },
   { key: "product_prices", label: "Precios comerciales", hint: "Consultar y editar precios comunidad y usuarios por cuenta. No incluye costos, márgenes ni utilidades" },
   { key: "profit", label: "Rentabilidad", hint: "Consultar costos, precios, márgenes y utilidad real de lo entregado. La edición requiere Costos de productos o Precios comerciales" },

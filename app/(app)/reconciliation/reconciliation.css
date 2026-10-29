@@ -1,0 +1,641 @@
+.bank-page {
+  --bank-space: 20px;
+}
+.bank-source-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+.bank-source-tabs {
+  display: flex;
+  gap: 18px;
+}
+.bank-source-tabs > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  padding: 12px 2px;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+.bank-source-tabs > button[aria-selected="true"] {
+  color: var(--accent-ink);
+}
+.bank-source-tabs > button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+.bank-source-tabs > button[aria-selected="true"] .tag {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.bank-register-help {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  margin: 0 0 16px;
+}
+.bank-register-table {
+  min-width: 800px;
+}
+.bank-register-table .bank-date-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.bank-ledger > .panel-head {
+  gap: 16px;
+}
+.bank-linked-entry > .btn {
+  padding-left: 0;
+  margin-top: 4px;
+}
+.bank-link-trigger {
+  white-space: nowrap;
+  color: var(--accent-ink);
+}
+.bank-link-trigger .tag {
+  color: var(--ink-3);
+}
+.bank-link-popover {
+  z-index: 80;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float);
+}
+.bank-link-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.bank-link-head h2 {
+  font-size: var(--t-md);
+  font-weight: 600;
+  margin: 0;
+}
+.bank-link-head p {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  margin: 5px 0 0;
+}
+.bank-link-body {
+  padding: 18px;
+}
+.bank-anchor-abono {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-sm);
+}
+.bank-anchor-abono > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.bank-anchor-abono > div strong {
+  overflow-wrap: anywhere;
+}
+.bank-anchor-abono > strong {
+  white-space: nowrap;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bank-anchor-abono span,
+.bank-anchor-abono small {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  font-weight: 400;
+}
+.bank-candidates {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  max-height: 290px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.bank-candidate {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.bank-candidate:last-child {
+  border-bottom: 0;
+}
+.bank-candidate:hover {
+  background: var(--bg-app);
+}
+.bank-candidate[data-selected="true"] {
+  background: var(--accent-soft);
+}
+.bank-candidate > label {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  cursor: pointer;
+}
+.bank-candidate input {
+  margin: 4px 0 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.bank-candidate-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.bank-candidate-info strong {
+  font-size: var(--t-sm);
+  overflow-wrap: anywhere;
+}
+.bank-candidate small {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+.bank-candidate-money {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bank-candidate-money strong {
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+.bank-candidate-pdf {
+  display: inline-block;
+  margin: 8px 0 0 23px;
+  font-size: var(--t-xs);
+}
+.bank-link-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.bank-selected-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .bank-source-nav {
+    gap: 8px;
+  }
+  .bank-source-tabs {
+    gap: 14px;
+  }
+  .bank-source-tabs > button {
+    font-size: var(--t-sm);
+  }
+  .bank-source-nav > .btn {
+    font-size: var(--t-xs);
+    padding: 0 6px;
+  }
+  .bank-ledger > .panel-head {
+    align-items: start;
+    flex-direction: column;
+  }
+  .bank-link-head,
+  .bank-link-body {
+    padding: 14px;
+  }
+  .bank-candidate-money {
+    max-width: 115px;
+  }
+}
+.bank-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0;
+}
+.bank-toolbar > p {
+  font-size: var(--t-sm);
+  max-width: 52ch;
+  margin: 0;
+}
+.bank-toolbar .actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.bank-metrics .value {
+  font-size: 24px;
+}
+.bank-scope-note {
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  margin: -8px 0 24px;
+}
+.bank-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.bank-view-controls .btn {
+  box-shadow: none;
+  background: transparent;
+  border-color: transparent;
+}
+.bank-view-controls .btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: var(--line);
+}
+.bank-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 0 0 20px;
+  flex-wrap: wrap;
+}
+.bank-search {
+  flex: 1;
+  min-width: 200px;
+}
+.bank-filters .field {
+  gap: 5px;
+}
+.bank-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.bank-rule .pill {
+  flex-shrink: 0;
+}
+.bank-rule p {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  margin: 0;
+  max-width: 85ch;
+}
+.bank-ledgers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.bank-ledger {
+  min-width: 0;
+}
+.bank-ledger .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bank-table-scroll {
+  overflow-x: auto;
+}
+.bank-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+.bank-table th {
+  color: var(--ink-3);
+  background: var(--bg-app);
+  font-size: var(--t-xs);
+  font-weight: 550;
+  text-align: left;
+}
+.bank-table th,
+.bank-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.bank-table th.num,
+.bank-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bank-table tr:last-child td {
+  border-bottom: 0;
+}
+.bank-table tbody tr:hover {
+  background: var(--bg-app);
+}
+.bank-table strong {
+  font-weight: 550;
+}
+.bank-date,
+.bank-meta {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  margin-top: 4px;
+}
+.bank-date {
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.bank-ref {
+  display: block;
+  overflow-wrap: anywhere;
+  max-width: 32ch;
+}
+.bank-meta {
+  max-width: 35ch;
+  overflow-wrap: anywhere;
+}
+.bank-amount {
+  white-space: nowrap;
+}
+.bank-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: start;
+}
+.bank-ledger-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding: 13px 16px;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.bank-empty {
+  padding: 36px 24px;
+}
+.bank-empty strong {
+  font-weight: 550;
+}
+.bank-empty p {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  max-width: 55ch;
+  margin: 8px 0 0;
+}
+.bank-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+.bank-form > .btn {
+  align-self: start;
+}
+.bank-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 14px;
+}
+.bank-wide {
+  grid-column: 1 / -1;
+}
+.bank-form .field {
+  min-width: 0;
+  gap: 6px;
+}
+.bank-form textarea.input {
+  height: auto;
+  padding: 10px;
+  resize: vertical;
+  min-height: 80px;
+}
+.bank-upload {
+  padding: 16px;
+  background: var(--bg-app);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r);
+}
+.bank-upload input {
+  max-width: 100%;
+  font-size: var(--t-sm);
+}
+.bank-source-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.bank-source-summary .eyebrow {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+.bank-source-summary strong {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bank-source-summary small {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.bank-source-summary a {
+  font-size: var(--t-sm);
+}
+.bank-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bank-compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.bank-compare span,
+.bank-compare small {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+.bank-compare strong {
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bank-equation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.bank-equation[data-balanced="true"] {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.bank-confirm {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+.bank-confirm input {
+  margin-top: 5px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.bank-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bank-activity > li {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  padding: 18px;
+  border-top: 1px solid var(--line);
+  gap: 20px;
+}
+.bank-activity li > div {
+  min-width: 0;
+  flex: 1;
+}
+.bank-activity strong {
+  font-size: var(--t-md);
+  font-weight: 550;
+}
+.bank-activity p {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  margin: 5px 0;
+}
+.bank-activity details {
+  font-size: var(--t-sm);
+  margin-top: 12px;
+}
+.bank-activity summary,
+.bank-void summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.bank-snapshot {
+  font-size: var(--t-sm);
+  margin-top: 12px;
+}
+.bank-snapshot summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.bank-snapshot-title {
+  font-size: var(--t-sm);
+  font-weight: 550;
+  margin: 18px 0 4px;
+}
+.bank-audit-data {
+  display: flex;
+  flex-direction: column;
+  margin: 12px 0 0;
+  font-size: var(--t-sm);
+}
+.bank-audit-data > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 30%) minmax(0, 1fr);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+  gap: 12px;
+}
+.bank-audit-data dt {
+  color: var(--ink-3);
+}
+.bank-audit-data dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.bank-void {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.bank-void summary {
+  margin-bottom: 18px;
+  color: var(--danger);
+}
+@media (max-width: 1250px) {
+  .bank-ledgers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bank-toolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 640px) {
+  .bank-metrics .value {
+    font-size: 20px;
+  }
+  .bank-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bank-wide {
+    grid-column: auto;
+  }
+  .bank-rule {
+    align-items: start;
+  }
+  .bank-filters {
+    gap: 10px;
+  }
+  .bank-search {
+    flex-basis: 100%;
+  }
+  .bank-filters .field:not(.bank-search) {
+    flex: 1;
+    min-width: 0;
+  }
+  .bank-table th,
+  .bank-table td {
+    padding: 12px 10px;
+  }
+  .bank-table .bank-ref {
+    max-width: 21ch;
+  }
+  .bank-view-controls .btn {
+    min-height: 36px;
+  }
+}
