@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
 import { fmtAgo, fmtInt, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { demandByProduct, filterRequests, inScope, inView, isOverdue, parseRequestFilters, REQUEST_VIEWS } from "@/lib/store-requests";
+import { REQUEST_STATUSES, norm, requestItems, demandByProduct, filterRequests, inScope, inView, isOverdue, parseRequestFilters, REQUEST_VIEWS } from "@/lib/store-requests";
 import { listRequests, requestCountries, requestFormOptions } from "@/lib/store-requests-data";
 import { deleteRequest, saveRequest, setRequestStatus } from "./actions";
 import "../imports/imports.css";
@@ -23,7 +23,7 @@ const day = (ymd: string, today: string) =>
     .format(new Date(`${ymd}T12:00:00Z`))
     .replace(/\./g, "");
 
-const TOP = 8;
+
 
 export default async function RequestsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, all, countries, sp] = await Promise.all([requirePermission("requests"), listRequests(), requestCountries(), searchParams]);
@@ -109,18 +109,34 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             <h2 id="rq-demand-h">Lo más pedido</h2>
             <span className="aside">{fmtInt(units)} unidades en {fmtInt(rows.length)} {rows.length === 1 ? "solicitud" : "solicitudes"} · {f.view.label.toLowerCase()}</span>
           </div>
-          <ol className="rq-demand-list">
-            {demand.slice(0, TOP).map((d) => (
-              <li key={d.product}>
-                <span className="rq-d-name" title={d.product}>{d.product}</span>
-                <span className="rq-d-units"><b>{fmtInt(d.units)}</b> u.</span>
-                <span className="rq-d-meta">
-                  {d.stores} {d.stores === 1 ? "tienda" : "tiendas"} · {countryList(d.countries)}
-                </span>
-              </li>
-            ))}
-          </ol>
-          {demand.length > TOP && <p className="panel-note subtle">Y {demand.length - TOP} productos más en la lista.</p>}
+          <div className="rq-demand-scroll" tabIndex={0} role="region" aria-label="Cantidades por producto y país">
+            <table className="table rq-demand-table">
+              <caption className="sr-only">Cantidad solicitada, reparto por país, total repartido y estado de las solicitudes.</caption>
+              <thead><tr><th scope="col">Producto</th><th scope="col" className="r">Cantidad</th>
+                {countries.map((c) => <th scope="col" className="r" key={c.code}>{c.name}</th>)}
+                <th scope="col" className="r">Total</th><th scope="col">Estado</th></tr></thead>
+              <tbody>{demand.map((d) => {
+                const sources = rows.filter((r) => requestItems(r).some((it) => norm(it.product) === norm(d.product)));
+                return <tr key={norm(d.product)}>
+                  <th scope="row"><span className="rq-product-name">{d.product}</span><span className="sub">{d.stores} {d.stores === 1 ? "tienda" : "tiendas"}</span></th>
+                  <td className="num strong">{fmtInt(d.units)}</td>
+                  {countries.map((c) => <td key={c.code} className="num">{d.country_quantities[c.code] !== undefined ? fmtInt(d.country_quantities[c.code]) : d.unallocated > 0 && d.countries.includes(c.code) ? "—" : "0"}</td>)}
+                  <td className="num strong">{fmtInt(d.allocated)}{d.unallocated > 0 && <span className="sub rq-pending-allocation">{fmtInt(d.unallocated)} por repartir</span>}</td>
+                  <td className="rq-summary-state">
+                    <div className="rq-state-list">{REQUEST_STATUSES.filter((s) => d.statuses[s.id]).map((s) => <span className="pill" data-tone={s.tone} key={s.id}>{s.label}{Object.keys(d.statuses).length > 1 ? ": " + fmtInt(d.statuses[s.id]!) : ""}</span>)}</div>
+                    <details className="rq-manage"><summary>Gestionar solicitudes</summary>
+                      <p className="sub">El estado se aplica a todos los productos de cada solicitud.</p>
+                      {sources.map((r) => <div className="rq-manage-row" key={r.id}>
+                        <span>{r.store_name}</span><RequestStatusSelect key={r.id + r.status} action={setRequestStatus} id={r.id} status={r.status} />
+                        <SideSheet trigger="Editar reparto" triggerClass="btn btn-ghost btn-sm" title={r.store_name} sub="Productos y cantidades por país">{form(r)}</SideSheet>
+                      </div>)}
+                    </details>
+                  </td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+          <p className="panel-note subtle">Cantidad: unidades solicitadas. Total: suma repartida entre países. «—» indica un reparto pendiente. Completa las cantidades con «Gestionar solicitudes → Editar reparto».</p>
         </section>
       )}
 

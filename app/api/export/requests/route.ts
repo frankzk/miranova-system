@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
-import { demandByProduct, filterRequests, parseRequestFilters, requestStatus } from "@/lib/store-requests";
+import { REQUEST_STATUSES, requestAllocation, demandByProduct, filterRequests, parseRequestFilters, requestStatus } from "@/lib/store-requests";
 import { listRequests, requestCountries } from "@/lib/store-requests-data";
 import { buildXlsx, XLSX_TYPE, type Cell } from "@/lib/xlsx";
 
@@ -23,9 +23,14 @@ export async function GET(req: NextRequest) {
     r.items.map((it, i) => [
       r.requested_at, r.arrival_at, r.store_name, r.owner_name, names(r.countries), r.origin_country, it.product, it.quantity,
       r.items.length > 1 ? `${i + 1} de ${r.items.length}` : null, requestStatus(r.status).label, r.notes, r.created_by_name, day(r.created_at),
+      ...codes.map((c) => requestAllocation(it, r.countries)[c] ?? (r.countries.includes(c) ? null : 0)),
+      Object.values(requestAllocation(it, r.countries)).reduce((a, b) => a + b, 0),
     ]),
   );
-  const demand: Cell[][] = demandByProduct(rows, codes).map((d) => [d.product, d.units, d.requests, d.stores, names(d.countries), day(d.last)]);
+  const demand: Cell[][] = demandByProduct(rows, codes).map((d) => [d.product, d.units,
+    ...codes.map((c) => d.country_quantities[c] ?? (d.unallocated > 0 && d.countries.includes(c) ? null : 0)), d.allocated,
+    REQUEST_STATUSES.filter((s) => d.statuses[s.id]).map((s) => `${s.label}: ${d.statuses[s.id]}`).join(" · "),
+    d.unallocated, d.requests, d.stores, day(d.last)]);
 
   const book = buildXlsx([
     {
@@ -36,14 +41,17 @@ export async function GET(req: NextRequest) {
         { header: "Cantidad", width: 11 }, { header: "Producto del pedido", width: 12 }, { header: "Estado", width: 12 }, { header: "Notas", width: 40 },
         { header: "Cargada por", width: 18 },
         { header: "Cargada el", width: 12 },
+        ...countries.map((c) => ({ header: c.name, width: 13 })), { header: "Total repartido", width: 14 },
       ],
       rows: list,
     },
     {
       name: "Lo más pedido",
       columns: [
-        { header: "Producto", width: 40 }, { header: "Unidades", width: 11 }, { header: "Solicitudes", width: 12 }, { header: "Tiendas", width: 10 },
-        { header: "Países", width: 30 }, { header: "Última", width: 12 },
+        { header: "Producto", width: 40 }, { header: "Cantidad", width: 11 },
+        ...countries.map((c) => ({ header: c.name, width: 13 })), { header: "Total", width: 12 },
+        { header: "Estado", width: 40 }, { header: "Por repartir", width: 12 },
+        { header: "Solicitudes", width: 12 }, { header: "Tiendas", width: 10 }, { header: "Última", width: 12 },
       ],
       rows: demand,
     },

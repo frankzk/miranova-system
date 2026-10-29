@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import { IconClose, IconPlus } from "./icons";
-import { MAX_ITEMS, norm, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestItem, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
+import { MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestItem, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
@@ -48,7 +48,7 @@ export function RequestForm({
   // filas de producto: no controladas (cada una con su clave); el total se recalcula al escribir
   const seq = useRef(0);
   const first = v.items?.length ? v.items : v.product ? [{ product: v.product, quantity: v.quantity ?? 0 }] : [{ product: "", quantity: 0 }];
-  const [lines, setLines] = useState(() => first.map((it) => ({ key: seq.current++, product: it.product, quantity: it.quantity ? String(it.quantity) : "" })));
+  const [lines, setLines] = useState(() => first.map((it) => ({ key: seq.current++, product: it.product, quantity: it.quantity ? String(it.quantity) : "", allocation: Object.fromEntries(Object.entries(requestAllocation(it, v.countries ?? picked)).map(([c, n]) => [c, String(n)])) })));
   const linesRef = useRef<HTMLDivElement>(null);
   const [total, setTotal] = useState(() => first.reduce((t, it) => t + (it.quantity || 0), 0));
   const recount = () => {
@@ -57,7 +57,7 @@ export function RequestForm({
   };
   useEffect(recount, [lines.length]);
   const addLine = () => {
-    setLines((l) => (l.length >= MAX_ITEMS ? l : [...l, { key: seq.current++, product: "", quantity: "" }]));
+    setLines((l) => (l.length >= MAX_ITEMS ? l : [...l, { key: seq.current++, product: "", quantity: "", allocation: {} }]));
     // el foco va al producto de la fila nueva
     requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line:last-child input[name="product"]')?.focus());
   };
@@ -126,7 +126,7 @@ export function RequestForm({
           </div>
           <div ref={linesRef} onInput={recount}>
             {lines.map((l, i) => (
-              <div key={l.key} className="rq-line">
+              <div key={l.key} className="rq-line-block"><div className="rq-line">
                 <input
                   className="input" name="product" defaultValue={l.product} maxLength={160} required={i === 0} list={`${uid}-products`} autoComplete="off"
                   placeholder={i === 0 ? "Ej.: Drenaje linfático en gotas" : "Otro producto"} aria-label={`Producto ${i + 1}`}
@@ -141,6 +141,16 @@ export function RequestForm({
                     <IconClose />
                   </button>
                 ) : <span aria-hidden />}
+              </div>
+                <input type="hidden" name="country_quantities" value={JSON.stringify(picked.length > 1 ? Object.fromEntries(Object.entries(l.allocation).filter(([c]) => picked.includes(c))) : {})} />
+                {picked.length > 1 && <fieldset className="rq-allocation"><legend>Reparto del producto {i + 1} por país</legend>
+                  <div className="rq-allocation-fields">{countries.filter((c) => picked.includes(c.code)).map((c) => <label className="field" key={c.code}>
+                    <span>{c.name}</span><input className="input" inputMode="numeric" pattern="[0-9][0-9,]*" placeholder="0"
+                      aria-label={`${c.name}, producto ${i + 1}`} value={l.allocation[c.code] ?? ""}
+                      onChange={(e) => { const value = e.currentTarget.value; setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, allocation: { ...x.allocation, [c.code]: value } } : x)); }} />
+                  </label>)}</div>
+                  <p className="hint">Total repartido: {Object.entries(l.allocation).filter(([c]) => picked.includes(c)).reduce((sum, [, n]) => sum + (Number(n.replace(/[,\s]/g, "")) || 0), 0).toLocaleString("en-US")} u. Puede quedar pendiente, pero no superar lo solicitado.</p>
+                </fieldset>}
               </div>
             ))}
           </div>
