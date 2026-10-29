@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { authorizeAction } from "@/lib/auth";
-import { automaticHnlFx, cleanProfitProduct, type MarketInput } from "@/lib/profit";
+import { automaticCostFx, cleanProfitProduct, parseMoney, type MarketInput } from "@/lib/profit";
 import { cleanCostProduct, costMarketWrites } from "@/lib/profit-access";
 import { can } from "@/lib/permissions";
 import { marketAccounts } from "@/lib/profit-data";
@@ -47,7 +47,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
   const id = field(form, "id");
   if (id && !UUID.test(id)) return fail(GONE);
   const accounts = await marketAccounts();
-  const hnlFx = automaticHnlFx(accounts);
+  const hnlFx = automaticCostFx(accounts, "HNL"), gtqFx = automaticCostFx(accounts, "GTQ");
   if (field(form, "cost_currency") === "HNL" && hnlFx === null) {
     return fail("Todavía no hay un tipo de cambio de lempiras sincronizado. Vuelve a intentar después de sincronizar la cuenta de Honduras.");
   }
@@ -56,8 +56,17 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
     markets[a.id] = {
       carrier: field(form, `m_${a.id}_carrier`),
       transfer_cost: field(form, `m_${a.id}_transfer`),
+      transfer_currency: field(form, `m_${a.id}_transfer_currency`) || field(form, "cost_currency") || "USD",
       qty_in: field(form, `m_${a.id}_qty`),
     };
+  }
+  const baseCurrency = field(form, "cost_currency") || "USD";
+  const usedCurrencies = new Set([baseCurrency]);
+  if ((parseMoney(field(form, "import_cost")) ?? 0) > 0) usedCurrencies.add(field(form, "import_currency") || baseCurrency);
+  if ((parseMoney(field(form, "pickup_cost")) ?? 0) > 0) usedCurrencies.add(field(form, "pickup_currency") || baseCurrency);
+  for (const m of Object.values(markets)) if ((parseMoney(m.transfer_cost) ?? 0) > 0) usedCurrencies.add(m.transfer_currency || baseCurrency);
+  for (const currency of ["GTQ", "HNL"] as const) {
+    if (usedCurrencies.has(currency) && automaticCostFx(accounts, currency) === null) return fail(`Falta una tasa automática sincronizada para ${currency}. Sincroniza la cuenta antes de guardar.`);
   }
   // el producto elegido en cada cuenta y los demás que se dejaron marcados, como "cuenta|product_key"
   const links = [
@@ -68,7 +77,9 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
     {
       name: field(form, "name"),
       cost_currency: field(form, "cost_currency"),
-      fx_gtq_per_usd: field(form, "fx_gtq_per_usd"),
+      fx_gtq_per_usd: gtqFx === null ? "" : String(gtqFx),
+      import_currency: field(form, "import_currency") || field(form, "cost_currency") || "USD",
+      pickup_currency: field(form, "pickup_currency") || field(form, "cost_currency") || "USD",
       fx_hnl_per_usd: hnlFx === null ? "" : String(hnlFx),
       unit_cost: field(form, "unit_cost"),
       import_cost: field(form, "import_cost"),

@@ -8,9 +8,8 @@ import { requirePermission } from "@/lib/auth";
 import { fmtInt, todayIn } from "@/lib/format";
 import { can, permissionFlags } from "@/lib/permissions";
 import { costProduct, type CostProduct } from "@/lib/profit-access";
-import { defaultGtqRate } from "@/lib/lab-purchases-data";
 import {
-  automaticHnlFx, carrierLabel, costSymbol, costFx, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
+  automaticCostFx, carrierLabel, costSymbol, costFx, FULFILLMENT_USD, normName, profitPeriod, unitCosts, windowStart,
   type Carrier, type MarketAccount, type ProfitProduct,
 } from "@/lib/profit";
 import { listProfitProducts, marketAccounts, profitCatalog, profitDelivered } from "@/lib/profit-data";
@@ -33,10 +32,9 @@ const money = (n: number | null, c: ProfitProduct["cost_currency"]) => (n === nu
 export default async function ProfitCostsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, sp] = await Promise.all([requirePermission("product_costs"), searchParams]);
   const today = todayIn();
-  const [accounts, products, fx, catalog] = await Promise.all([
+  const [accounts, products, catalog] = await Promise.all([
     marketAccounts(),
     listProfitProducts().then((ps) => ps.map(costProduct)),
-    defaultGtqRate().catch(() => 7.75),
     // Keep historical products available for linking. Only catalog names/keys reach the form.
     profitDelivered(windowStart(today, profitPeriod("mes", today)), "delivered").then(profitCatalog),
   ]);
@@ -67,7 +65,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
   // "Crear ficha" desde Entregados sin ficha: viene con el producto de la plataforma elegido
   const nuevo = one(sp, "nuevo");
   const seed = nuevo ? catalog.find((c) => `${c.account_id}|${c.product_key}` === nuevo && !taken[nuevo]) : undefined;
-  const hnlFx = automaticHnlFx(accounts);
+  const hnlFx = automaticCostFx(accounts, "HNL"), fx = automaticCostFx(accounts, "GTQ");
   const form = (v?: Partial<CostProduct>) => (
     <ProfitForm
       action={saveProfitProduct} v={v} accounts={accounts} catalog={catalog} taken={taken}
@@ -148,7 +146,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
                           {p.unit_cost === null ? <span className="pill" data-tone="warning">Falta el costo</span> : (
                             <>
                               {money(p.unit_cost, p.cost_currency)}
-                              {p.import_cost ? <> + {money(p.import_cost, p.cost_currency)} importación</> : null}
+                              {p.import_cost ? <> + {money(p.import_cost, p.import_currency ?? p.cost_currency)} importación</> : null}
                               {p.cost_currency !== "USD" && costFx(p) && <> · {costSymbol(p.cost_currency)}{costFx(p)} por USD</>}
                             </>
                           )}
@@ -218,7 +216,7 @@ export default async function ProfitCostsPage({ searchParams }: { searchParams: 
       </div>
       <p className="footnote">
         Costo total = costo + importación. Costo final = costo total + recolección en Guatemala + traslado al país + fulfillment
-        ({usd(1.2)} por pedido, fijo). Los costos en lempiras usan automáticamente el tipo de cambio actual sincronizado de Drop, también en Rentabilidad y Excel. Los costos en quetzales usan la tasa de la ficha. Todos los costos de una ficha usan la moneda seleccionada.
+        ({usd(1.2)} por pedido, fijo). Los costos en lempiras usan automáticamente el tipo de cambio actual sincronizado de Drop, también en Rentabilidad y Excel. Los quetzales también usan la tasa sincronizada. Cada costo tiene su propia moneda.
       </p>
     </div>
   );
