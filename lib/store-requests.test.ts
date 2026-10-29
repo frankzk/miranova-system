@@ -73,6 +73,34 @@ test("lo más pedido: suma por producto aunque se escriba distinto, con tiendas 
   assert.equal(d[0].last, "2026-10-05T10:00:00Z");
 });
 
+test("reparto: cantidades por país, total parcial y estados mixtos sin duplicar pedidos compartidos", () => {
+  const [d] = demandByProduct([
+    req({ id: "shared", quantity: 300, countries: ["HN", "GT"], items: [{ product: "Drenaje", quantity: 300, country_quantities: { HN: 100, GT: 150 } }] }),
+    req({ id: "legacy", quantity: 200, countries: ["HN", "SV"], status: "in_progress" }),
+    req({ id: "single", quantity: 50, countries: ["HN"], status: "done" }),
+  ], ALLOWED);
+  assert.equal(d.units, 550);
+  assert.deepEqual(d.country_quantities, { HN: 150, GT: 150 });
+  assert.equal(d.allocated, 300);
+  assert.equal(d.unallocated, 250);
+  assert.deepEqual(d.statuses, { pending: 300, in_progress: 200, done: 50 });
+});
+
+test("reparto: valida enteros, destinos seleccionados y que no supere lo solicitado", () => {
+  const base = { store_name: "Tienda", countries: ["HN", "GT"], requested_at: "2026-10-01" };
+  const invalidSplits: Record<string, string>[] = [{ HN: "301" }, { HN: "-1" }, { HN: "0.5" }, { HN: "abc" }, { SV: "1" }, { HN: "100", GT: "201" }];
+  for (const split of invalidSplits) {
+    const r = cleanRequest({ ...base, items: [{ product: "P", quantity: "300", country_quantities: split }] }, ALLOWED);
+    assert.equal(r.ok, false, JSON.stringify(split));
+  }
+  const r = cleanRequest({ ...base, items: [
+    { product: "P", quantity: "300", country_quantities: { HN: "100", GT: "150" } },
+    { product: "p", quantity: "100", country_quantities: { HN: "50", GT: "50" } },
+  ] }, ALLOWED);
+  assert.ok(r.ok);
+  if (r.ok) assert.deepEqual(r.row.items, [{ product: "P", quantity: 400, country_quantities: { HN: 150, GT: 200 } }]);
+});
+
 test("sugerencias de tiendas: una por nombre, dueño más reciente y sus países", () => {
   const s = storeSuggestions([
     { name: "Vital Market", person: "Ana", country: "HN", last_at: "2026-09-01", orders90: 50 },

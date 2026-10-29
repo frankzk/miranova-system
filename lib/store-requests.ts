@@ -2,9 +2,9 @@
 // qué países), para saber qué traer. Sin base de datos ni Next: sirve en servidor, cliente y pruebas.
 
 export const REQUEST_STATUSES = [
-  { id: "pending", label: "Pendiente", tone: "warning" },
-  { id: "in_progress", label: "En proceso", tone: "info" },
-  { id: "done", label: "Atendida", tone: "success" },
+  { id: "pending", label: "Solicitado", tone: "warning" },
+  { id: "in_progress", label: "En tránsito", tone: "info" },
+  { id: "done", label: "Llegó a Drop", tone: "success" },
   { id: "dropped", label: "Descartada", tone: "neutral" },
 ] as const;
 
@@ -17,7 +17,13 @@ export const isRequestStatus = (v: unknown): v is RequestStatus => REQUEST_STATU
 export const requestStatus = (id: string) => REQUEST_STATUSES.find((s) => s.id === id) ?? REQUEST_STATUSES[0];
 
 /** Una línea del pedido: producto y cantidad. */
-export type RequestItem = { product: string; quantity: number };
+export type RequestItem = { product: string; quantity: number; country_quantities?: Record<string, number> };
+
+/** Single-country legacy requests have an unambiguous destination. Never duplicate a shared quantity. */
+export function requestAllocation(item: RequestItem, countries: readonly string[]): Record<string, number> {
+  const entries = Object.entries(item.country_quantities ?? {}).filter(([c, n]) => countries.includes(c) && Number.isSafeInteger(n) && n > 0);
+  return entries.length ? Object.fromEntries(entries) : countries.length === 1 ? { [countries[0]]: item.quantity } : {};
+}
 
 export type StoreRequest = {
   id: string;
@@ -78,7 +84,7 @@ const MAX_QTY = 10_000_000;
  */
 export function cleanRequest(
   input: {
-    store_name?: string; owner_name?: string; countries?: string[]; items?: { product?: string; quantity?: string }[]; notes?: string;
+    store_name?: string; owner_name?: string; countries?: string[]; items?: { product?: string; quantity?: string; country_quantities?: Record<string, string> }[]; notes?: string;
     requested_at?: string; arrival_at?: string; origin_country?: string;
   },
   allowed: readonly string[],
@@ -87,8 +93,8 @@ export function cleanRequest(
   const text = (v: string | undefined, max: number) => (v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
   const store_name = text(input.store_name, 120);
   if (!store_name) return { ok: false, msg: "Escribe el nombre de la tienda." };
-  const lines = (input.items ?? []).map((i) => ({ product: text(i.product, 160), raw: (i.quantity ?? "").trim().replace(/[,\s]/g, "") }));
-  const filled = lines.filter((l) => l.product || l.raw);
+  const lines = (input.items ?? []).map((i) => ({ product: text(i.product, 160), raw: (i.quantity ?? "").trim().replace(/[,\s]/g, ""), allocation: i.country_quantities }));
+  const filled = lines.filter((l) => l.product || l.raw || Object.values(l.allocation ?? {}).some((v) => String(v).trim()));
   if (!filled.length) return { ok: false, msg: "Escribe qué producto pide." };
   if (filled.length > MAX_ITEMS) return { ok: false, msg: `Son demasiados productos: máximo ${MAX_ITEMS} por solicitud.` };
   const many = filled.length > 1;
@@ -98,9 +104,24 @@ export function cleanRequest(
     const of = many ? ` de “${l.product}”` : "";
     if (!/^\d+$/.test(l.raw) || Number(l.raw) < 1) return { ok: false, msg: `La cantidad${of} debe ser un número entero mayor que cero.` };
     const qty = Number(l.raw);
+    const allocation: Record<string, number> = {};
+    for (const [country, value] of Object.entries(l.allocation ?? {})) {
+      if (!allowed.includes(country) || !(input.countries ?? []).includes(country)) return { ok: false, msg: `El reparto de ${l.product} incluye un país no seleccionado: ${country}.` };
+      const raw = String(value).replace(/[,\s]/g, "");
+      if (!raw) continue;
+      if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) > MAX_QTY) return { ok: false, msg: `El reparto de ${l.product} debe usar cantidades enteras entre 0 y ${MAX_QTY}.` };
+      if (Number(raw) > 0) allocation[country] = Number(raw);
+    }
+    if (Object.values(allocation).reduce((a, b) => a + b, 0) > qty) return { ok: false, msg: `El total repartido de ${l.product} supera la cantidad solicitada.` };
     const same = items.find((i) => norm(i.product) === norm(l.product));
-    if (same) same.quantity += qty;
-    else items.push({ product: l.product, quantity: qty });
+    if (same) {
+      const hasAllocation = Object.keys(same.country_quantities ?? {}).length > 0 || Object.keys(allocation).length > 0;
+      const previous = hasAllocation ? requestAllocation(same, input.countries ?? []) : {};
+      same.quantity += qty;
+      const next = hasAllocation ? requestAllocation({ product: l.product, quantity: qty, country_quantities: allocation }, input.countries ?? []) : {};
+      for (const [c, q] of Object.entries(next)) previous[c] = (previous[c] ?? 0) + q;
+      if (Object.keys(previous).length) same.country_quantities = previous;
+    } else items.push({ product: l.product, quantity: qty, ...(Object.keys(allocation).length ? { country_quantities: allocation } : {}) });
     if ((same?.quantity ?? qty) > MAX_QTY) return { ok: false, msg: `La cantidad${of} es demasiado grande.` };
   }
   const product = items[0].product;
@@ -150,6 +171,10 @@ export type ProductDemand = {
   /** Países pedidos, en el orden de `order` (los de las cuentas). */
   countries: string[];
   last: string;
+  country_quantities: Record<string, number>;
+  allocated: number;
+  unallocated: number;
+  statuses: Partial<Record<RequestStatus, number>>;
 };
 
 /**
@@ -157,14 +182,16 @@ export type ProductDemand = {
  * solicitudes, cuántas tiendas distintas y en qué países. De más a menos unidades.
  */
 export function demandByProduct(rows: readonly StoreRequest[], order: readonly string[] = []): ProductDemand[] {
-  const groups = new Map<string, { product: string; units: number; requests: number; stores: Set<string>; countries: Set<string>; last: string }>();
+  const groups = new Map<string, { product: string; units: number; requests: number; stores: Set<string>; countries: Set<string>; last: string; country_quantities: Record<string, number>; statuses: Partial<Record<RequestStatus, number>> }>();
   for (const r of rows) {
     for (const it of requestItems(r)) {
       const key = norm(it.product);
-      const g = groups.get(key) ?? { product: it.product, units: 0, requests: 0, stores: new Set<string>(), countries: new Set<string>(), last: "" };
+      const g = groups.get(key) ?? { product: it.product, units: 0, requests: 0, stores: new Set<string>(), countries: new Set<string>(), last: "", country_quantities: {}, statuses: {} };
       g.units += it.quantity;
       g.requests += 1;
       g.stores.add(norm(r.store_name));
+      for (const [c, n] of Object.entries(requestAllocation(it, r.countries))) g.country_quantities[c] = (g.country_quantities[c] ?? 0) + n;
+      g.statuses[r.status] = (g.statuses[r.status] ?? 0) + it.quantity;
       for (const c of r.countries) g.countries.add(c);
       if (r.created_at > g.last) {
         g.last = r.created_at;
@@ -182,6 +209,10 @@ export function demandByProduct(rows: readonly StoreRequest[], order: readonly s
       stores: g.stores.size,
       countries: [...g.countries].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)),
       last: g.last,
+      country_quantities: g.country_quantities,
+      allocated: Object.values(g.country_quantities).reduce((a, b) => a + b, 0),
+      unallocated: g.units - Object.values(g.country_quantities).reduce((a, b) => a + b, 0),
+      statuses: g.statuses,
     }))
     .sort((a, b) => b.units - a.units || b.requests - a.requests || a.product.localeCompare(b.product, "es"));
 }
@@ -217,7 +248,7 @@ export function storeSuggestions(
 /** Pestañas de la lista. */
 export const REQUEST_VIEWS = [
   { id: "abiertas", label: "Abiertas", statuses: OPEN_STATUSES },
-  { id: "atendidas", label: "Atendidas", statuses: ["done"] },
+  { id: "atendidas", label: "Llegó a Drop", statuses: ["done"] },
   { id: "descartadas", label: "Descartadas", statuses: ["dropped"] },
   { id: "todas", label: "Todas", statuses: null },
 ] as const satisfies readonly { id: string; label: string; statuses: readonly RequestStatus[] | null }[];

@@ -20,7 +20,18 @@ const GONE = "Esa solicitud ya no existe.";
 function itemsFrom(form: FormData) {
   const products = form.getAll("product").map(String);
   const quantities = form.getAll("quantity").map(String);
-  return products.map((product, i) => ({ product, quantity: quantities[i] ?? "" }));
+  const allocations = form.getAll("country_quantities").map(String);
+  return products.map((product, i) => {
+    let country_quantities: Record<string, string> = {};
+    try {
+      const raw = allocations[i] || "{}";
+      if (raw.length > 2000) throw new Error("Too large");
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid allocation");
+      country_quantities = parsed;
+    } catch { country_quantities = { INVALID: "1" }; }
+    return { product, quantity: quantities[i] ?? "", country_quantities };
+  });
 }
 
 /** Nueva o editada: tienda, dueño, países, producto, cantidad, fechas, origen y notas (al editar, también el estado). */
@@ -49,7 +60,7 @@ export async function saveRequest(_prev: RequestFormState, form: FormData): Prom
   if (status && !isRequestStatus(status)) return fail("Estado no válido.");
   const now = new Date().toISOString();
   const { items, ...row } = c.row;
-  const lines = (requestId: string) => items.map((it, position) => ({ request_id: requestId, position, product: it.product, quantity: it.quantity }));
+  const lines = (requestId: string) => items.map((it, position) => ({ request_id: requestId, position, product: it.product, quantity: it.quantity, country_quantities: it.country_quantities ?? {} }));
   if (id) {
     const { data, error } = await db()
       .from("store_requests")

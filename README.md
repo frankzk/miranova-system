@@ -140,3 +140,17 @@ Comprueba rutas, exportaciones, acciones directas sin permiso y conservación de
 - `/api/ingest` exige `INGEST_API_KEY`; `/api/cron/sync` exige `CRON_SECRET`.
 - Las contraseñas de las plataformas nunca se muestran ni salen del servidor.
 - Los datos de clientes son personales: no compartas la API key ni el panel.
+
+## Solicitudes por país
+
+«Lo más pedido» compara Producto, Cantidad solicitada, unidades por país, Total repartido y Estado.
+El reparto se registra por producto desde Gestionar solicitudes → Editar reparto. Se aceptan
+repartos parciales; nunca pueden superar lo solicitado. Las cantidades compartidas antiguas
+quedan pendientes, sin duplicarlas entre países. Un destino único permite deducir el reparto.
+Los estados operativos son Solicitado, En tránsito y Llegó a Drop; se conserva el archivo
+de descartadas. Si varias solicitudes de un producto tienen estados distintos, se muestran
+por separado con sus cantidades. Cambiar un estado afecta a toda esa solicitud. Excel
+conserva el mismo desglose.
+
+Aplicar la migración request_country_quantities antes de desplegar. Verificar localmente
+con datos sintéticos: `node scripts/check-request-allocation.mjs` (servidor de fixtures en 3100).

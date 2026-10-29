@@ -16,7 +16,7 @@ export async function listRequests(): Promise<RequestRow[]> {
   const [{ data, error }, users, lines] = await Promise.all([
     db().from("store_requests").select("*").order("created_at", { ascending: false }).limit(5000),
     db().from("app_users").select("id, name"),
-    db().from("store_request_items").select("request_id, position, product, quantity").order("position").limit(50000),
+    db().from("store_request_items").select("request_id, position, product, quantity, country_quantities").order("position").limit(50000),
   ]);
   if (error) {
     if (missingTable(error)) return [];
@@ -25,8 +25,8 @@ export async function listRequests(): Promise<RequestRow[]> {
   // sin la migración 0047 no hay líneas: cada solicitud tiene su producto del resumen
   if (lines.error && !missingTable(lines.error)) throw lines.error;
   const byRequest = new Map<string, RequestItem[]>();
-  for (const l of (lines.data ?? []) as { request_id: string; position: number; product: string; quantity: number }[]) {
-    byRequest.set(l.request_id, [...(byRequest.get(l.request_id) ?? []), { product: l.product, quantity: Number(l.quantity) }]);
+  for (const l of (lines.data ?? []) as { request_id: string; position: number; product: string; quantity: number; country_quantities?: Record<string, number> }[]) {
+    byRequest.set(l.request_id, [...(byRequest.get(l.request_id) ?? []), { product: l.product, quantity: Number(l.quantity), country_quantities: l.country_quantities ?? {} }]);
   }
   const names = new Map(((users.data ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]));
   const localDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa" }).format(new Date(iso));
