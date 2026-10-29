@@ -3,6 +3,7 @@ import { extractText, getDocumentProxy } from "unpdf";
 import { boxfulProposal, type BoxfulReadResult } from "./boxful-document.ts";
 import { parseBoxfulText } from "./boxful-text.ts";
 import { readBoxfulPdf } from "./boxful-document-ai.ts";
+import { parseBacTransfer } from "./boxful-bac.ts";
 
 /** Lee texto localmente primero. Solo recurre a IA si faltan datos inequívocos. */
 export async function readBoxfulDocument(bytes: Uint8Array, key: string | null | (() => Promise<string | null>), scope: string, today: string): Promise<BoxfulReadResult> {
@@ -22,7 +23,7 @@ export async function readBoxfulDocument(bytes: Uint8Array, key: string | null |
       extraction(),
       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 15_000); }),
     ]);
-    const read = parseBoxfulText(text);
+    const read = parseBacTransfer(text) ?? parseBoxfulText(text);
     const proposal = boxfulProposal(read, today);
     partial = { ok: true, proposal };
     if (read.kind === "multiple_transfers" || (proposal.fields.reference && proposal.fields.occurred_on && proposal.fields.amount && proposal.fields.original_currency)) return partial;
@@ -32,6 +33,13 @@ export async function readBoxfulDocument(bytes: Uint8Array, key: string | null |
     // PDF escaneado, protegido o sin texto utilizable: alternativa visual.
   }
   finally { clearTimeout(timer); }
+  const { readBacScan } = await import("./boxful-ocr.ts");
+  const scanned = await readBacScan(bytes);
+  if (scanned) {
+    partial = { ok: true, proposal: boxfulProposal(scanned, today) };
+    // No enviar a IA un comprobante BAC reconocido; los campos dudosos se revisan.
+    return partial;
+  }
   const resolvedKey = typeof key === "function" ? await key().catch(() => null) : key;
   const visual = await readBoxfulPdf(bytes, resolvedKey, scope, today);
   if (visual.ok) return visual;
