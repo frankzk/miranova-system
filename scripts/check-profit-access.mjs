@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const base = "http://localhost:3100";
+const base = `http://localhost:${Number(process.env.MIRANOVA_TEST_PORT || 3100)}`;
 const HN = "11111111-1111-4111-8111-111111111111";
 const GT = "22222222-2222-4222-8222-222222222222";
 const id = "e0000000-0000-4000-8000-000000000001";
@@ -97,5 +97,15 @@ assert.ok(hnlPage.includes("$2.84"));
 assert.equal((await action("costos", "saveProfitProduct", { ...costs, cost_currency: "HNL", fx_hnl_per_usd: "" })).ok, true);
 assert.equal((await page("analista", "/api/export/profit")).res.status, 200);
 console.log("PASS: HNL automatic rate overrides forged/missing form rates, conversion display and export");
+const mixed = await action("costos", "saveProfitProduct", { ...costs,
+  cost_currency: "USD", unit_cost: "4", import_cost: "1", import_currency: "USD", pickup_cost: "4", pickup_currency: "GTQ",
+  fx_gtq_per_usd: "9999", fx_hnl_per_usd: "9999", [`m_${HN}_transfer`]: "26.3852", [`m_${HN}_transfer_currency`]: "HNL" });
+assert.equal(mixed.ok, true, mixed.msg);
+const mixedPage = (await page("costos", "/profit/costs")).text;
+assert.ok(mixedPage.includes('"pickup_currency":"GTQ"'));
+assert.ok(mixedPage.includes('"transfer_currency":"HNL"'));
+assert.ok(mixedPage.includes("$7.72"));
+assert.equal((await action("costos", "saveProfitProduct", { ...costs, import_currency: "INVALID" })).ok, false);
+console.log("PASS: purchase USD + pickup GTQ + transfer HNL round-trip with server-controlled quotes");
 await action("costos", "saveProfitProduct", { ...costs, unit_cost: "3.1" });
 await action("precios", "saveProductPrices", { id, [`m_${HN}_pc`]: "300", [`m_${HN}_pu`]: "319", [`m_${GT}_pc`]: "95", [`m_${GT}_pu`]: "98.89" });

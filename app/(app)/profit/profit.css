@@ -93,3 +93,7 @@
   .pf-unlinked .pf-actions { justify-content: flex-start; flex-wrap: wrap; }
   .pf-unlinked .pf-link { justify-content: flex-start; }
 }
+.pf-cost-entry { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pf-cost-entry legend { font-size: 13px; color: var(--ink-2); font-weight: 550; margin-bottom: 6px; padding: 0; }
+.pf-cost-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 6px; }
+.pf-cost-entry > .hint { display: block; font-size: 11px; color: var(--ink-3); margin-top: 4px; }

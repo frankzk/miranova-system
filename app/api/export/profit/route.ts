@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
         a?.currency ?? null, m?.price_community ?? null, m?.price_users ?? null,
         r2(e?.community?.profit ?? null), pct(e?.community?.margin ?? null), r2(e?.users?.profit ?? null), pct(e?.users?.margin ?? null),
         m?.qty_in ?? null, r2(e?.investment ?? null), p.notes,
+        p.import_currency ?? p.cost_currency, p.pickup_currency ?? p.cost_currency, m?.transfer_currency ?? p.cost_currency,
+        p.fx_gtq_per_usd, p.fx_hnl_per_usd ?? null,
       ]);
     }
   }
@@ -107,6 +109,8 @@ export async function GET(req: NextRequest) {
         { header: "Moneda de la cuenta", width: 10 }, { header: "Precio comunidad", width: 11 }, { header: "Precio usuarios", width: 11 },
         usd("Rentabilidad comunidad"), { header: "Margen comunidad %", width: 11 }, usd("Rentabilidad usuarios"), { header: "Margen usuarios %", width: 11 },
         { header: "Cantidad ingresada", width: 11 }, usd("Inversión"), { header: "Notas", width: 30 },
+        { header: "Moneda importación", width: 15 }, { header: "Moneda recolección", width: 15 }, { header: "Moneda traslado", width: 15 },
+        { header: "GTQ por USD (automático)", width: 18 }, { header: "HNL por USD (automático)", width: 18 },
       ],
       rows: costs,
     },

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useId, useState } from "react";
 import {
-  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, parseMoney, suggestLinks, unitCosts,
+  CARRIERS, COST_CURRENCIES, FULFILLMENT_USD, costSymbol, costToUsd, parseMoney, suggestLinks, unitCosts,
   type CatalogItem, type Carrier, type CostCurrency, type MarketAccount,
 } from "@/lib/profit";
 import type { CostProduct } from "@/lib/profit-access";
@@ -25,7 +25,28 @@ const val = (s: string) => {
 };
 const usd = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; qty: string };
+type MarketState = { link: string; touched: boolean; carrier: string; transfer: string; transferCurrency: CostCurrency; qty: string };
+
+function CostEntry({ label, name, amount, currency, onAmount, onCurrency, rates }: {
+  label: string; name: string; amount: string; currency: CostCurrency;
+  onAmount: (value: string) => void; onCurrency: (value: CostCurrency) => void;
+  rates: { fx_gtq_per_usd: number | null; fx_hnl_per_usd: number | null };
+}) {
+  const id = useId();
+  const converted = costToUsd({ cost_currency: currency, ...rates }, val(amount));
+  return <fieldset className="field pf-cost-entry"><legend>{label} <span className="hint">por unidad</span></legend>
+    <div className="pf-cost-inputs">
+      <label className="sr-only" htmlFor={`${id}-amount`}>Importe de {label.toLowerCase()}</label>
+      <input id={`${id}-amount`} className="input" name={name} value={amount} onChange={(e) => onAmount(e.currentTarget.value)} inputMode="decimal" placeholder="0.00" />
+      <label className="sr-only" htmlFor={`${id}-currency`}>Moneda de {label.toLowerCase()}</label>
+      <select id={`${id}-currency`} className="select" name={name === "unit_cost" ? "cost_currency" : name.replace(/_cost$/, "_currency").replace(/_transfer$/, "_transfer_currency")}
+        value={currency} onChange={(e) => onCurrency(e.currentTarget.value as CostCurrency)}>
+        {COST_CURRENCIES.map((c) => <option value={c.id} key={c.id}>{c.id} ({c.symbol})</option>)}
+      </select>
+    </div>
+    <span className="hint">{amount ? converted === null ? "Falta tasa sincronizada" : `Equivale a ${usd(converted)} USD` : "Selecciona la moneda en que se paga este costo"}</span>
+  </fieldset>;
+}
 
 /**
  * Ficha de costos de un producto: costos comunes (en dólares o quetzales) y, por cuenta, el producto
@@ -44,7 +65,7 @@ export function ProfitForm({
   /** transportista más usado por país, para cuentas nuevas */
   carrierDefaults: Record<string, Carrier>;
   /** quetzales por dólar para una ficha nueva */
-  defaultFx: number;
+  defaultFx: number | null;
   defaultHnlFx: number | null;
   names: string[];
 }) {
@@ -54,10 +75,9 @@ export function ProfitForm({
   const isNew = !v.id;
   const [name, setName] = useState(v.name ?? "");
   const [currency, setCurrency] = useState<CostCurrency>(v.cost_currency ?? "USD");
-  const [fxByCurrency, setFxByCurrency] = useState({
-    USD: "", GTQ: str(v.fx_gtq_per_usd ?? defaultFx), HNL: str(v.fx_hnl_per_usd ?? defaultHnlFx),
-  });
-  const fx = currency === "HNL" ? str(defaultHnlFx) : fxByCurrency[currency];
+  const rates = { fx_gtq_per_usd: defaultFx, fx_hnl_per_usd: defaultHnlFx };
+  const [importCurrency, setImportCurrency] = useState<CostCurrency>(v.import_currency ?? v.cost_currency ?? "USD");
+  const [pickupCurrency, setPickupCurrency] = useState<CostCurrency>(v.pickup_currency ?? v.cost_currency ?? "USD");
   const [cost, setCost] = useState(str(v.unit_cost));
   const [imp, setImp] = useState(str(v.import_cost));
   const [pickup, setPickup] = useState(str(v.pickup_cost));
@@ -66,7 +86,7 @@ export function ProfitForm({
     const owner = taken[`${c.account_id}|${c.product_key}`];
     return !owner || owner === v.id;
   };
-  const optionsOf = (aid: string) => catalog.filter((c) => c.account_id === aid && free(c));
+  const optionsOf = (aid: string) => catalog.filter((c) => c.account_id === aid);
   const initial = (a: MarketAccount): MarketState => {
     const m = v.markets?.find((x) => x.account_id === a.id);
     const link = v.links?.find((l) => l.account_id === a.id)?.product_key ?? "";
@@ -75,6 +95,7 @@ export function ProfitForm({
       touched: !!link,
       carrier: m ? m.carrier ?? "" : a.country === "GT" ? "" : carrierDefaults[a.country ?? ""] ?? "",
       transfer: str(m?.transfer_cost),
+      transferCurrency: m?.transfer_currency ?? v.cost_currency ?? "USD",
       qty: str(m?.qty_in),
     };
   };
@@ -118,14 +139,16 @@ export function ProfitForm({
 
   const base = {
     cost_currency: currency,
-    fx_gtq_per_usd: currency === "GTQ" ? val(fx) : null,
-    fx_hnl_per_usd: currency === "HNL" ? val(fx) : null,
+    ...rates,
+    import_currency: importCurrency,
+    pickup_currency: pickupCurrency,
     unit_cost: val(cost),
     import_cost: val(imp),
     pickup_cost: val(pickup),
   };
   const c = unitCosts(base);
-  const sym = costSymbol(currency);
+  const needsRate = (cur: CostCurrency) => cur === "GTQ" ? !defaultFx : cur === "HNL" ? !defaultHnlFx : false;
+  const missingRate = needsRate(currency) || ((val(imp) ?? 0) > 0 && needsRate(importCurrency)) || ((val(pickup) ?? 0) > 0 && needsRate(pickupCurrency)) || Object.values(markets).some((m) => (val(m.transfer) ?? 0) > 0 && needsRate(m.transferCurrency));
 
   return (
     <StickyForm state={state} action={run} className="im-form pf-form">
@@ -138,40 +161,15 @@ export function ProfitForm({
             maxLength={160} required list={`${uid}-names`} autoComplete="off" placeholder="Ej.: Drenaje linfático en gotas 100 ml"
           />
         </label>
-        <label className="field">
-          <span>Moneda de los costos</span>
-          <select className="select" name="cost_currency" value={currency} onChange={(e) => setCurrency(e.currentTarget.value as CostCurrency)}>
-            {COST_CURRENCIES.map((x) => <option key={x.id} value={x.id}>{x.label} ({x.symbol})</option>)}
-          </select>
-        </label>
-        {currency !== "USD" ? (
-          <label className="field">
-            <span>Tipo de cambio <span className="hint">{sym} por USD{currency === "HNL" ? " · Automático" : ""}</span></span>
-            <input className="input" name={currency === "HNL" ? "fx_hnl_per_usd" : "fx_gtq_per_usd"} value={fx}
-              onChange={(e) => { const value = e.currentTarget.value; setFxByCurrency((cur) => ({ ...cur, [currency]: value })); }}
-              inputMode="decimal" placeholder={currency === "HNL" ? "Pendiente de sincronización" : `${sym} por 1 USD`} required readOnly={currency === "HNL"} />
-            {currency === "HNL" && <span className="hint">{defaultHnlFx ? "Se actualiza con la sincronización del catálogo de Drop Honduras. Los cálculos usan la última tasa disponible." : "Todavía no hay una tasa sincronizada. Sincroniza la cuenta de Honduras para guardar costos en lempiras."}</span>}
-          </label>
-        ) : (
-          <p className="pf-note">Traslado, recolección y costos van en dólares. Los precios se gestionan con el permiso Precios comerciales.</p>
-        )}
-        <label className="field">
-          <span>Costo <span className="hint">por unidad, {sym}</span></span>
-          <input className="input" name="unit_cost" value={cost} onChange={(e) => setCost(e.currentTarget.value)} inputMode="decimal" placeholder="2.50" />
-        </label>
-        <label className="field">
-          <span>Costo de importación <span className="hint">por unidad, si aplica</span></span>
-          <input className="input" name="import_cost" value={imp} onChange={(e) => setImp(e.currentTarget.value)} inputMode="decimal" placeholder="0.00" />
-        </label>
-        <label className="field">
-          <span>Recolección en Guatemala <span className="hint">por unidad, {sym}</span></span>
-          <input className="input" name="pickup_cost" value={pickup} onChange={(e) => setPickup(e.currentTarget.value)} inputMode="decimal" placeholder="0.00" />
-        </label>
+        <CostEntry label="Compra del producto" name="unit_cost" amount={cost} currency={currency} onAmount={setCost} onCurrency={setCurrency} rates={rates} />
+        <CostEntry label="Importación" name="import_cost" amount={imp} currency={importCurrency} onAmount={setImp} onCurrency={setImportCurrency} rates={rates} />
+        <CostEntry label="Recolección en Guatemala" name="pickup_cost" amount={pickup} currency={pickupCurrency} onAmount={setPickup} onCurrency={setPickupCurrency} rates={rates} />
+        <p className="pf-note wide">Conversión automática: {defaultFx ? "Q" + defaultFx + " por USD" : "GTQ pendiente de sincronizar"} · {defaultHnlFx ? "L" + defaultHnlFx + " por USD" : "HNL pendiente de sincronizar"}. Cada importe se convierte por separado usando las tasas sincronizadas.</p>
         <p className="pf-calc wide">
           Costo total: <b>{c.cost_total === null ? "—" : usd(c.cost_total)}</b>
-          {c.cost_total !== null && c.pickup > 0 && <> · con recolección <b>{usd(c.cost_total + c.pickup)}</b></>}
+          {c.cost_total !== null && c.pickup !== null && c.pickup > 0 && <> · con recolección <b>{usd(c.cost_total + c.pickup)}</b></>}
           {" "}· Fulfillment <b>{usd(FULFILLMENT_USD)}</b> por pedido (fijo)
-          {currency !== "USD" && !val(fx) && <span className="hint"> · falta el tipo de cambio</span>}
+          {missingRate && <span className="hint"> · falta una tasa sincronizada para los costos seleccionados</span>}
         </p>
       </div>
 
@@ -180,7 +178,7 @@ export function ProfitForm({
         {accounts.map((a) => {
           const m = markets[a.id];
           const options = optionsOf(a.id);
-          const landed = unitCosts(base, { transfer_cost: val(m.transfer) }).landed;
+          const landed = unitCosts(base, { transfer_cost: val(m.transfer), transfer_currency: m.transferCurrency }).landed;
           const active = !!(m.link || m.transfer || m.qty || extras.some((x) => x.account_id === a.id));
           return (
             <details key={a.id} className="pf-market" open={active || undefined}>
@@ -195,9 +193,10 @@ export function ProfitForm({
                   <span>Producto en la plataforma</span>
                   <select className="select" name={`link_${a.id}`} value={m.link} onChange={(e) => chooseLink(a.id, e.currentTarget.value)}>
                     <option value="">— No se vende en esta cuenta —</option>
-                    {options.map((o) => <option key={o.product_key} value={o.product_key}>{o.name}</option>)}
+                    {options.map((o) => <option key={o.product_key} value={o.product_key} disabled={!free(o)}>{o.name}{!free(o) ? " · Ya vinculado a otra ficha" : ""}</option>)}
                   </select>
                 </label>
+                <p className="hint pf-span2">Si el producto indica «Ya vinculado», edita su ficha existente en Costos de productos.</p>
                 {extras.filter((x) => x.account_id === a.id).map((x) => (
                   <label key={x.product_key} className="check pf-span2">
                     <input type="checkbox" name="links_extra" value={`${a.id}|${x.product_key}`} defaultChecked />
@@ -211,10 +210,8 @@ export function ProfitForm({
                     {CARRIERS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
                   </select>
                 </label>
-                <label className="field">
-                  <span>Traslado <span className="hint">por unidad, {sym}</span></span>
-                  <input className="input" name={`m_${a.id}_transfer`} value={m.transfer} onChange={(e) => patch(a.id, { transfer: e.currentTarget.value })} inputMode="decimal" placeholder="0.00" />
-                </label>
+                <CostEntry label={"Traslado a " + a.name} name={`m_${a.id}_transfer`} amount={m.transfer} currency={m.transferCurrency}
+                  onAmount={(value) => patch(a.id, { transfer: value })} onCurrency={(value) => patch(a.id, { transferCurrency: value })} rates={rates} />
                 <label className="field">
                   <span>Cantidad ingresada <span className="hint">unidades</span></span>
                   <input className="input" name={`m_${a.id}_qty`} value={m.qty} onChange={(e) => patch(a.id, { qty: e.currentTarget.value })} inputMode="numeric" pattern="[0-9][0-9,]*" placeholder="0" />
@@ -235,7 +232,7 @@ export function ProfitForm({
       </label>
       <datalist id={`${uid}-names`}>{names.map((n) => <option key={n} value={n} />)}</datalist>
       <Msg state={state} />
-      <SubmitButton className="btn btn-primary" pending="Guardando…" disabled={currency === "HNL" && !defaultHnlFx}>{isNew ? "Guardar ficha" : "Guardar"}</SubmitButton>
+      <SubmitButton className="btn btn-primary" pending="Guardando…" disabled={missingRate}>{isNew ? "Guardar ficha" : "Guardar"}</SubmitButton>
     </StickyForm>
   );
 }

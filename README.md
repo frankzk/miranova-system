@@ -155,11 +155,15 @@ entre `BEGIN` y `ROLLBACK`; no deja transacciones de prueba en la base.
 
 Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
 
-Las fichas de costos admiten USD, GTQ y HNL. En lempiras se usa automáticamente
-la tasa actual del catálogo sincronizado de Drop Honduras (L por USD), al guardar
-y consultar fichas, rentabilidad y Excel, incluidas las fichas existentes. El servidor
-ignora tasas HNL enviadas desde el formulario; si falta la tasa sincronizada, bloquea
-el guardado y deja los cálculos sin tasa disponible. La tasa GTQ continúa en la ficha.
+Compra, importación, recolección y cada traslado admiten monedas independientes
+(USD, GTQ y HNL). Cada importe se convierte por separado antes de sumarlo en USD.
+GTQ y HNL usan tasas automáticas del catálogo sincronizado, al guardar y consultar
+costos, rentabilidad y Excel. El servidor ignora tasas enviadas por el formulario.
+Si falta una tasa necesaria, bloquea el guardado y deja la conversión sin dato.
+La migración conserva la moneda original de los importes ya registrados; no cambia
+sus cantidades. El selector muestra los productos que ya tienen ficha con el aviso
+«Ya vinculado a otra ficha». La revisión de referencias de Honduras está en
+`docs/productos-honduras-costos.md`.
 
 - **Costos de productos** (`product_costs`, `/profit/costs`): crear y editar fichas,
   costos, traslados, cantidades y vínculos. No recibe precios comerciales ni utilidades.
