@@ -57,6 +57,10 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
       carrier: field(form, `m_${a.id}_carrier`),
       transfer_cost: field(form, `m_${a.id}_transfer`),
       transfer_currency: field(form, `m_${a.id}_transfer_currency`) || field(form, "cost_currency") || "USD",
+      ...(form.has(`m_${a.id}_collection`) ? {
+        collection_cost: field(form, `m_${a.id}_collection`),
+        collection_currency: field(form, `m_${a.id}_collection_currency`) || field(form, `m_${a.id}_transfer_currency`) || field(form, "cost_currency") || "USD",
+      } : {}),
       qty_in: field(form, `m_${a.id}_qty`),
     };
   }
@@ -65,6 +69,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
   if ((parseMoney(field(form, "import_cost")) ?? 0) > 0) usedCurrencies.add(field(form, "import_currency") || baseCurrency);
   if ((parseMoney(field(form, "pickup_cost")) ?? 0) > 0) usedCurrencies.add(field(form, "pickup_currency") || baseCurrency);
   for (const m of Object.values(markets)) if ((parseMoney(m.transfer_cost) ?? 0) > 0) usedCurrencies.add(m.transfer_currency || baseCurrency);
+  for (const m of Object.values(markets)) if ((parseMoney(m.collection_cost) ?? 0) > 0) usedCurrencies.add(m.collection_currency || m.transfer_currency || baseCurrency);
   for (const currency of ["GTQ", "HNL"] as const) {
     if (usedCurrencies.has(currency) && automaticCostFx(accounts, currency) === null) return fail(`Falta una tasa automática sincronizada para ${currency}. Sincroniza la cuenta antes de guardar.`);
   }
@@ -111,7 +116,7 @@ export async function saveProfitProduct(_prev: ProfitFormState, form: FormData):
   const existing = await db().from("profit_markets").select("account_id").eq("product_id", productId);
   if (existing.error) return fail(`No se pudo leer las cuentas: ${existing.error.message}`);
   const known = new Set(accounts.map((a) => a.id));
-  const ids = [...new Set([...c.markets.map((m) => m.account_id), ...c.links.map((l) => l.account_id),
+  const ids = [...new Set([...c.markets.filter((m) => m.carrier || m.transfer_cost !== null || m.collection_cost != null || m.qty_in !== null).map((m) => m.account_id), ...c.links.map((l) => l.account_id),
     ...(existing.data ?? []).map((m: { account_id: string }) => m.account_id).filter((id: string) => known.has(id))])];
   if (ids.length) {
     const { error } = await db().from("profit_markets").upsert(costMarketWrites(productId, c.markets, ids), { onConflict: "product_id,account_id" });

@@ -170,7 +170,7 @@ entre `BEGIN` y `ROLLBACK`; no deja transacciones de prueba en la base.
 
 Rentabilidad se divide en tres permisos independientes en Ajustes → Usuarios:
 
-Compra, importación, recolección y cada traslado admiten monedas independientes
+Compra, importación, recolección en GT, cada traslado y la recolecta por cuenta admiten monedas independientes
 (USD, GTQ y HNL). Cada importe se convierte por separado antes de sumarlo en USD.
 GTQ y HNL usan tasas automáticas del catálogo sincronizado, al guardar y consultar
 costos, rentabilidad y Excel. El servidor ignora tasas enviadas por el formulario.
@@ -179,6 +179,12 @@ La migración conserva la moneda original de los importes ya registrados; no cam
 sus cantidades. El selector muestra los productos que ya tienen ficha con el aviso
 «Ya vinculado a otra ficha». La revisión de referencias de Honduras está en
 `docs/productos-honduras-costos.md`.
+En cada cuenta, **Recolecta** registra el importe por unidad por separado del
+traslado. Ambos entran una sola vez en costo final, inversión y rentabilidad,
+y se exportan con importe y moneda propios. Por ejemplo, L19 de traslado más
+L3.50 de recolecta conservan el mismo costo que L22.50 juntos. Los importes ya
+guardados no se desglosan automáticamente. Aplicar
+`supabase/migrations/20261029203851_market_collection_cost.sql` antes de desplegar.
 
 - **Costos de productos** (`product_costs`, `/profit/costs`): crear y editar fichas,
   costos, traslados, cantidades y vínculos. No recibe precios comerciales ni utilidades.

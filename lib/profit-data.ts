@@ -12,14 +12,14 @@ const missing = (e: { code?: string }) => ["42P01", "PGRST205", "PGRST202", "428
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
 
 type ProductRow = Omit<ProfitProduct, "markets" | "links">;
-type MarketRow = { product_id: string; account_id: string; carrier: string | null; transfer_cost: unknown; transfer_currency?: string | null; price_community: unknown; price_users: unknown; qty_in: unknown };
+type MarketRow = { product_id: string; account_id: string; carrier: string | null; transfer_cost: unknown; transfer_currency?: string | null; collection_cost?: unknown; collection_currency?: string | null; price_community: unknown; price_users: unknown; qty_in: unknown };
 type LinkRow = { product_id: string; account_id: string; product_key: string };
 
 /** Todas las fichas de costos, por nombre, con sus cuentas y los productos de la plataforma vinculados. */
 export async function listProfitProducts(): Promise<ProfitProduct[]> {
   const [p, m, l, accounts] = await Promise.all([
     db().from("profit_products").select("id, name, cost_currency, import_currency, pickup_currency, fx_gtq_per_usd, fx_hnl_per_usd, unit_cost, import_cost, pickup_cost, notes").order("name").limit(5000),
-    db().from("profit_markets").select("product_id, account_id, carrier, transfer_cost, transfer_currency, price_community, price_users, qty_in").limit(50000),
+    db().from("profit_markets").select("product_id, account_id, carrier, transfer_cost, transfer_currency, collection_cost, collection_currency, price_community, price_users, qty_in").limit(50000),
     db().from("profit_links").select("product_id, account_id, product_key").limit(50000),
     marketAccounts(),
   ]);
@@ -36,6 +36,8 @@ export async function listProfitProducts(): Promise<ProfitProduct[]> {
       carrier: isCarrier(r.carrier) ? r.carrier : null,
       transfer_cost: num(r.transfer_cost),
       transfer_currency: isCostCurrency(r.transfer_currency) ? r.transfer_currency : null,
+      collection_cost: num(r.collection_cost),
+      collection_currency: isCostCurrency(r.collection_currency) ? r.collection_currency : null,
       price_community: num(r.price_community),
       price_users: num(r.price_users),
       qty_in: num(r.qty_in),

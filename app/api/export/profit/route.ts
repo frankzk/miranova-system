@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
         m?.qty_in ?? null, r2(e?.investment ?? null), p.notes,
         p.import_currency ?? p.cost_currency, p.pickup_currency ?? p.cost_currency, m?.transfer_currency ?? p.cost_currency,
         p.fx_gtq_per_usd, p.fx_hnl_per_usd ?? null,
+        m?.collection_cost ?? null, m?.collection_currency ?? m?.transfer_currency ?? p.cost_currency,
+        r2(e?.collection ?? null),
       ]);
     }
   }
@@ -111,6 +113,7 @@ export async function GET(req: NextRequest) {
         { header: "Cantidad ingresada", width: 11 }, usd("Inversión"), { header: "Notas", width: 30 },
         { header: "Moneda importación", width: 15 }, { header: "Moneda recolección", width: 15 }, { header: "Moneda traslado", width: 15 },
         { header: "GTQ por USD (automático)", width: 18 }, { header: "HNL por USD (automático)", width: 18 },
+        { header: "Recolecta por cuenta", width: 17 }, { header: "Moneda recolecta por cuenta", width: 19 }, usd("Recolecta por cuenta"),
       ],
       rows: costs,
     },

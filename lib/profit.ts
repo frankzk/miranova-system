@@ -31,6 +31,8 @@ export type ProfitMarket = {
   carrier: Carrier | null;
   transfer_cost: number | null;
   transfer_currency?: CostCurrency | null;
+  collection_cost?: number | null;
+  collection_currency?: CostCurrency | null;
   price_community: number | null;
   price_users: number | null;
   qty_in: number | null;
@@ -102,18 +104,20 @@ export type UnitCosts = {
   cost_total: number | null;
   pickup: number | null;
   transfer: number | null;
-  /** puesto en el país: costo total + recolección + traslado (null si falta el costo) */
+  collection: number | null;
+  /** puesto en el país: costo total + recolección GT + traslado + recolecta local */
   landed: number | null;
 };
 
 /** Costos por unidad en dólares; sin cuenta, sin traslado. */
-export function unitCosts(p: Omit<ProfitProduct, "id" | "name" | "notes" | "markets" | "links">, m?: Pick<ProfitMarket, "transfer_cost" | "transfer_currency"> | null): UnitCosts {
+export function unitCosts(p: Omit<ProfitProduct, "id" | "name" | "notes" | "markets" | "links">, m?: Pick<ProfitMarket, "transfer_cost" | "transfer_currency" | "collection_cost" | "collection_currency"> | null): UnitCosts {
   const purchase = costToUsd(p, p.unit_cost);
   const imported = costToUsd(p, p.import_cost ?? 0, p.import_currency ?? p.cost_currency);
   const base = purchase === null || imported === null ? null : purchase + imported;
   const pickup = costToUsd(p, p.pickup_cost ?? 0, p.pickup_currency ?? p.cost_currency);
   const transfer = costToUsd(p, m?.transfer_cost ?? 0, m?.transfer_currency ?? p.cost_currency);
-  return { cost_total: base, pickup, transfer, landed: base === null || pickup === null || transfer === null ? null : base + pickup + transfer };
+  const collection = costToUsd(p, m?.collection_cost ?? 0, m?.collection_currency ?? m?.transfer_currency ?? p.cost_currency);
+  return { cost_total: base, pickup, transfer, collection, landed: base === null || pickup === null || transfer === null || collection === null ? null : base + pickup + transfer + collection };
 }
 
 export type UnitProfit = { price_usd: number; profit: number; margin: number | null };
@@ -157,7 +161,7 @@ export function parseMoney(s: string | undefined): number | null {
   return /^\d+(\.\d+)?$|^\.\d+$/.test(clean) ? Number(clean) : NaN;
 }
 
-export type MarketInput = { carrier?: string; transfer_cost?: string; transfer_currency?: string; price_community?: string; price_users?: string; qty_in?: string };
+export type MarketInput = { carrier?: string; transfer_cost?: string; transfer_currency?: string; collection_cost?: string; collection_currency?: string; price_community?: string; price_users?: string; qty_in?: string };
 export type ProfitInput = {
   name?: string; cost_currency?: string; fx_gtq_per_usd?: string; fx_hnl_per_usd?: string; unit_cost?: string; import_cost?: string; pickup_cost?: string; notes?: string;
   import_currency?: string; pickup_currency?: string;
@@ -176,7 +180,7 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
   if (name.length > 160) return fail("El nombre es demasiado largo (máximo 160 caracteres).");
   const cost_currency = isCostCurrency(input.cost_currency) ? input.cost_currency : "USD";
   if (input.cost_currency && !isCostCurrency(input.cost_currency)) return fail("Selecciona una moneda de costos válida.");
-  for (const currency of [input.import_currency, input.pickup_currency, ...Object.values(input.markets ?? {}).map((m) => m.transfer_currency)]) {
+  for (const currency of [input.import_currency, input.pickup_currency, ...Object.values(input.markets ?? {}).flatMap((m) => [m.transfer_currency, m.collection_currency])]) {
     if (currency && !isCostCurrency(currency)) return fail("Selecciona una moneda válida para cada costo.");
   }
   const import_currency = isCostCurrency(input.import_currency) ? input.import_currency : cost_currency;
@@ -184,7 +188,7 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
   const needs = (currency: CostCurrency) => cost_currency === currency ||
     (import_currency === currency && (parseMoney(input.import_cost) ?? 0) > 0) ||
     (pickup_currency === currency && (parseMoney(input.pickup_cost) ?? 0) > 0) ||
-    Object.values(input.markets ?? {}).some((m) => (m.transfer_currency || cost_currency) === currency && (parseMoney(m.transfer_cost) ?? 0) > 0);
+    Object.values(input.markets ?? {}).some((m) => ((m.transfer_currency || cost_currency) === currency && (parseMoney(m.transfer_cost) ?? 0) > 0) || ((m.collection_currency || m.transfer_currency || cost_currency) === currency && (parseMoney(m.collection_cost) ?? 0) > 0));
 
   const money = (label: string, s: string | undefined, prefix = ""): { ok: true; n: number | null } | { ok: false; msg: string } => {
     const n = parseMoney(s);
@@ -226,6 +230,8 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
     const pre = `${a.name}: `;
     const transfer = money("el traslado", m.transfer_cost, pre);
     if (!transfer.ok) return fail(transfer.msg);
+    const collection = money("la recolecta", m.collection_cost, pre);
+    if (!collection.ok) return fail(collection.msg);
     const pc = money("el precio comunidad", m.price_community, pre);
     if (!pc.ok) return fail(pc.msg);
     const pu = money("el precio usuarios", m.price_users, pre);
@@ -237,8 +243,10 @@ export function cleanProfitProduct(input: ProfitInput, accounts: Pick<MarketAcco
     const carrier = isCarrier(m.carrier) ? m.carrier : null;
     const round = (n: number | null) => (n === null ? null : round2(n));
     const row: ProfitMarket = { account_id: a.id, carrier, transfer_cost: transfer.n, price_community: round(pc.n), price_users: round(pu.n), qty_in: qty,
-      ...(m.transfer_currency ? { transfer_currency: m.transfer_currency as CostCurrency } : {}) };
-    if (carrier || row.transfer_cost !== null || row.price_community !== null || row.price_users !== null || row.qty_in !== null) markets.push(row);
+      ...(m.transfer_currency ? { transfer_currency: m.transfer_currency as CostCurrency } : {}),
+      ...(m.collection_cost !== undefined ? { collection_cost: collection.n } : {}),
+      ...(m.collection_currency ? { collection_currency: m.collection_currency as CostCurrency } : {}) };
+    if (carrier || row.transfer_cost !== null || row.collection_cost != null || row.price_community !== null || row.price_users !== null || row.qty_in !== null || m.collection_cost !== undefined) markets.push(row);
   }
 
   const known = new Set(accounts.map((a) => a.id));

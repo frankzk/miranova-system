@@ -62,7 +62,11 @@ for (const [user, names] of Object.entries({
 }
 console.log("PASS: forged direct server actions denied for every restricted role");
 
+// Reset synthetic prices so a previously interrupted QA run can be repeated safely.
+assert.equal((await action("precios", "saveProductPrices", { id, [`m_${HN}_pc`]: "300", [`m_${HN}_pu`]: "319", [`m_${GT}_pc`]: "95", [`m_${GT}_pu`]: "98.89" })).ok, true);
+
 const costs = { id, name: "Drenaje linfático DLG", cost_currency: "USD", unit_cost: "4.1", import_cost: "0.4", pickup_cost: "0.25",
+  [`m_${HN}_collection`]: "",
   [`m_${HN}_carrier`]: "raulito", [`m_${HN}_transfer`]: "0.6", [`m_${HN}_qty`]: "1200", [`m_${GT}_qty`]: "400",
   [`link_${HN}`]: "name:PRODUCTO EXCLUSIVO DLG", [`link_${GT}`]: "name:PRODUCTO EXCLUSIVO DLG",
   [`m_${HN}_pc`]: "999999", [`m_${HN}_pu`]: "999999" };
@@ -107,5 +111,35 @@ assert.ok(mixedPage.includes('"transfer_currency":"HNL"'));
 assert.ok(mixedPage.includes("$7.72"));
 assert.equal((await action("costos", "saveProfitProduct", { ...costs, import_currency: "INVALID" })).ok, false);
 console.log("PASS: purchase USD + pickup GTQ + transfer HNL round-trip with server-controlled quotes");
+const separated = { ...costs, unit_cost: "4", import_cost: "1", pickup_cost: "0.25", pickup_currency: "USD",
+  [`m_${HN}_transfer`]: "19", [`m_${HN}_transfer_currency`]: "HNL", [`m_${HN}_collection`]: "3.50", [`m_${HN}_collection_currency`]: "HNL" };
+assert.equal((await action("costos", "saveProfitProduct", separated)).ok, true);
+const collectionPage = (await page("costos", "/profit/costs")).text;
+assert.ok(collectionPage.includes('"collection_cost":3.5'));
+assert.ok(collectionPage.includes('"collection_currency":"HNL"'));
+assert.ok(collectionPage.includes("Recolecta"));
+const { [`m_${HN}_collection`]: omittedAmount, [`m_${HN}_collection_currency`]: omittedCurrency, ...legacyForm } = separated;
+assert.equal((await action("costos", "saveProfitProduct", legacyForm)).ok, true);
+assert.ok((await page("costos", "/profit/costs")).text.includes('"collection_cost":3.5'));
+assert.equal((await action("precios", "saveProductPrices", { id, [`m_${HN}_pu`]: "319", [`m_${HN}_collection`]: "999" })).ok, true);
+assert.ok((await page("costos", "/profit/costs")).text.includes('"collection_cost":3.5'));
+assert.ok(!(await page("precios", "/profit/prices")).text.includes('"collection_cost"'));
+assert.equal((await action("costos", "saveProfitProduct", { ...separated, [`m_${HN}_collection`]: "-3.50" })).ok, false);
+assert.equal((await action("costos", "saveProfitProduct", { ...separated, [`m_${HN}_collection_currency`]: "INVALID" })).ok, false);
+const collectionExport = await (await fetch(base + "/api/export/profit", { headers: { Cookie: cookies.analista } })).arrayBuffer();
+const { inflateRawSync } = await import("node:zlib");
+const zip = Buffer.from(collectionExport);
+let o = 0, xml = "";
+while (o + 30 < zip.length && zip.readUInt32LE(o) === 0x04034b50) {
+  const method = zip.readUInt16LE(o + 8), size = zip.readUInt32LE(o + 18), nameLen = zip.readUInt16LE(o + 26), extraLen = zip.readUInt16LE(o + 28);
+  const name = zip.subarray(o + 30, o + 30 + nameLen).toString();
+  const start = o + 30 + nameLen + extraLen, data = zip.subarray(start, start + size);
+  if (name.endsWith(".xml")) xml += (method === 8 ? inflateRawSync(data) : data).toString();
+  o = start + size;
+}
+assert.ok(xml.includes("Recolecta por cuenta"), "Excel must show the separate collection");
+assert.equal((await action("costos", "saveProfitProduct", { ...separated, [`m_${HN}_collection`]: "" })).ok, true);
+assert.ok(!(await page("costos", "/profit/costs")).text.includes('"collection_cost":3.5'));
+console.log("PASS: separate collection round-trip, legacy preservation, price isolation, validation, Excel and explicit clearing");
 await action("costos", "saveProfitProduct", { ...costs, unit_cost: "3.1" });
 await action("precios", "saveProductPrices", { id, [`m_${HN}_pc`]: "300", [`m_${HN}_pu`]: "319", [`m_${GT}_pc`]: "95", [`m_${GT}_pu`]: "98.89" });
