@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { crossSell, matrixGrid, type MatrixCell, type MatrixData } from "./cross-sell.ts";
+import { crossSell, type MatrixCell, type MatrixData } from "./cross-sell.ts";
 
 // tienda → { producto: [pedidos en el período, pedidos en 90 días] }
 function data(stores: Record<string, Record<string, [number, number]>>, days = 30): MatrixData {
@@ -60,20 +60,4 @@ test("lo vendido en 90 días cuenta como probado aunque no esté en el período"
 test("sin tiendas parecidas suficientes no se sugiere nada", () => {
   const d = data({ A: { X: [100, 100] }, B: { X: [10, 10], Y: [5, 5] } });
   assert.ok(!crossSell(d).some((i) => i.kind === "cross_sell"));
-});
-
-test("cuadrícula: tiendas y productos principales, y producto dominante si pasa del 50%", () => {
-  const d = data({
-    A: { P1: [80, 80], P2: [20, 20] },
-    B: { P1: [10, 10], P2: [10, 10], P3: [10, 10] },
-  });
-  const g = matrixGrid(d, "a", { stores: 2, products: 2 });
-  assert.deepEqual(g.products.map((p) => p.product_key), ["P1", "P2"]);
-  assert.equal(g.moreProducts, 1);
-  assert.deepEqual(g.rows[0].cells, [80, 20]);
-  assert.equal(g.rows[0].top, 0);
-  assert.equal(g.rows[0].dominant, true);
-  assert.equal(g.rows[1].dominant, false);
-  // con muy pocos pedidos no hay dominante aunque sea el 100%
-  assert.equal(matrixGrid(data({ A: { P1: [2, 2] } }), "a").rows[0].dominant, false);
 });

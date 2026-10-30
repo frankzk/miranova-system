@@ -1,5 +1,6 @@
 import "server-only";
 import type { MatrixData } from "./cross-sell";
+import { normalizeCompare, type CmpData } from "./store-compare";
 import { db } from "./supabase";
 import { synced } from "./synced-cache";
 
@@ -15,3 +16,8 @@ async function storeProductMatrixQuery(account: string | undefined, days: number
 }
 
 export const storeProductMatrix = synced("store_product_matrix", storeProductMatrixQuery);
+
+/** Lo mismo con el período anterior, el ritmo de cada tienda y su último contacto (Tienda × producto comparativo). */
+export async function storeProductCompare(account: string | undefined, days: number): Promise<CmpData> {
+  return normalizeCompare(await storeProductMatrix(account, days));
+}
