@@ -1,6 +1,5 @@
-// Matriz tienda × producto y venta cruzada. Datos de la función SQL `store_product_matrix`;
-// aquí solo se arma la cuadrícula y se buscan oportunidades, para poder probarlo.
-// También lo usa la pantalla de Oportunidades (crossSell).
+// Venta cruzada con los datos de la función SQL `store_product_matrix` (la cuadrícula comparativa
+// está en store-compare.ts). La usan Tienda × producto y Oportunidades. Puro, para poder probarlo.
 
 export type MatrixStore = {
   account_id: string;
@@ -23,12 +22,6 @@ export type MatrixData = {
 };
 
 export const MATRIX_RULES = {
-  maxStores: 30,
-  maxProducts: 12,
-  /** Producto dominante: al menos esta parte de los pedidos de la tienda. */
-  dominant: 0.5,
-  /** …y solo en tiendas con al menos estos pedidos (1 de 1 no es dominante). */
-  dominantMin: 5,
   /** Tienda de volumen alto: pedidos por día en el período… */
   highPerDay: 1,
   /** …o de las primeras N de su cuenta, con al menos estos pedidos. */
@@ -42,31 +35,6 @@ export const MATRIX_RULES = {
 } as const;
 
 const key = (...xs: string[]) => xs.join("|");
-
-export type GridRow = { store: MatrixStore; cells: number[]; top: number | null; dominant: boolean };
-export type Grid = { account_id: string; products: MatrixProduct[]; rows: GridRow[]; moreStores: number; moreProducts: number };
-
-/** Cuadrícula de una cuenta: tiendas principales × productos principales del período. */
-export function matrixGrid(data: MatrixData, accountId: string, opts: { stores?: number; products?: number } = {}): Grid {
-  const maxS = opts.stores ?? MATRIX_RULES.maxStores;
-  const maxP = opts.products ?? MATRIX_RULES.maxProducts;
-  const allStores = data.stores.filter((s) => s.account_id === accountId && s.orders > 0).sort((a, b) => b.orders - a.orders);
-  const allProducts = data.products.filter((p) => p.account_id === accountId && p.orders > 0).sort((a, b) => b.orders - a.orders);
-  const stores = allStores.slice(0, maxS);
-  const products = allProducts.slice(0, maxP);
-  const mine = data.cells.filter((c) => c.account_id === accountId);
-  const n = new Map(mine.map((c) => [key(c.store_id, c.product_key), c.n]));
-  // producto principal de cada tienda, entre todos sus productos (no solo las columnas visibles)
-  const best = new Map<string, MatrixCell>();
-  for (const c of mine) if (c.n > (best.get(c.store_id)?.n ?? 0)) best.set(c.store_id, c);
-  const rows = stores.map((store) => {
-    const cells = products.map((p) => n.get(key(store.store_id, p.product_key)) ?? 0);
-    const b = best.get(store.store_id);
-    const top = b ? products.findIndex((p) => p.product_key === b.product_key) : -1;
-    return { store, cells, top: top >= 0 ? top : null, dominant: !!b && store.orders >= MATRIX_RULES.dominantMin && b.n / store.orders >= MATRIX_RULES.dominant };
-  });
-  return { account_id: accountId, products, rows, moreStores: allStores.length - stores.length, moreProducts: allProducts.length - products.length };
-}
 
 export type CrossSellItem = {
   kind: "cross_sell" | "single_product";

@@ -1,5 +1,5 @@
-// Panel lateral de una tienda (?ficha=<cuenta>:<tienda>), compartido por Salud de tiendas y
-// Tiendas nuevas: contacto y seguimiento sin salir del listado.
+// Panel lateral de una tienda (?ficha=<cuenta>:<tienda>), compartido por Salud de tiendas,
+// Tiendas nuevas y Tienda × producto: contacto y seguimiento sin salir del listado.
 import { Suspense } from "react";
 import { Drawer } from "@/components/client";
 import { StoreDrawer } from "@/components/store-drawer";
@@ -46,6 +46,8 @@ type Props = {
   me: string;
   canOrders: boolean;
   canEdit: boolean;
+  /** Sección propia de la pantalla que abre el panel (p. ej. hábitos de compra en Tienda × producto). */
+  extra?: React.ReactNode;
 };
 
 export function StoreDrawerSlot({ ficha, name, ...rest }: Props) {
@@ -58,7 +60,7 @@ export function StoreDrawerSlot({ ficha, name, ...rest }: Props) {
 }
 
 /** Carga la ficha y el contacto de la tienda (lo único que el panel necesita). */
-async function StoreDrawerPanel({ data, row, typical, closeHref, me, canOrders, canEdit }: Omit<Props, "ficha" | "name">) {
+async function StoreDrawerPanel({ data, row, typical, closeHref, me, canOrders, canEdit, extra }: Omit<Props, "ficha" | "name">) {
   const [d, contact] = await data;
   if (!d) return null;
   return (
@@ -71,6 +73,7 @@ async function StoreDrawerPanel({ data, row, typical, closeHref, me, canOrders, 
         closeHref={closeHref}
         me={me}
         canOrders={canOrders}
+        extra={extra}
         actions={canEdit ? { contact: { save: saveContact, link: linkStore, unlink: unlinkStore, merge: mergeContacts }, followup: { add: addFollowup, update: updateFollowup } } : null}
       />
     </Drawer>

@@ -23,6 +23,8 @@ export type StoreDrawerProps = {
   closeHref: string;
   me: string;
   canOrders: boolean;
+  /** Sección propia de la pantalla que abre el panel (p. ej. hábitos en Tienda × producto), bajo las cifras. */
+  extra?: React.ReactNode;
   /** null = solo lectura (sin permiso de Editar tiendas). */
   actions: {
     contact: { save: Action<ContactState>; link: Action<ContactState>; unlink: Action<ContactState>; merge: Action<ContactState> };
@@ -30,7 +32,7 @@ export type StoreDrawerProps = {
   } | null;
 };
 
-export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders, actions }: StoreDrawerProps) {
+export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders, extra, actions }: StoreDrawerProps) {
   const { store: s, kpis: k } = d;
   const full = storeHref(s.account_id, s.store_id);
   const closed = k.delivered30 + k.failed30;
@@ -72,6 +74,8 @@ export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders,
           <div><dt>Ticket 30 d</dt><dd>{k.ticket === null ? "—" : fmtMoney(k.ticket, s.currency, { compact: true })}</dd></div>
           <div><dt>Entrega 30 d</dt><dd>{delivery === null ? "—" : `${delivery}%`}</dd></div>
         </dl>
+
+        {extra}
 
         {ops.length > 0 && (
           <div className="section">
