@@ -5,7 +5,9 @@
 --   since/held_days: desde cuándo lo tiene apartado sin que el saldo vuelva a 0 (un 0 de menos de un
 --                    día no cuenta: al ajustar una solicitud Drop libera y vuelve a apartar en segundos)
 --   last_at/last_day/days_since: su último pedido (no cancelado) de ese producto y días desde ese día local
---   orders_since:    pedidos de ese producto desde que lo privatizó (0 = no lo estrenó)
+--   orders_since:    pedidos de ese producto desde que lo privatizó (0 = no lo estrenó). Si falta guardado
+--                    el movimiento que lo apartó, desde el último 0 guardado (no deja fuera el pedido
+--                    detrás de la primera salida de ese stock)
 --   n7:              pedidos de ese producto en los últimos 7 días (con hoy)
 --   n14_before/active_before: pedidos en los 14 días y días con pedidos en los 7 días que terminan en su
 --                    último pedido (el ritmo que llevaba antes de frenarse)
@@ -38,20 +40,30 @@ returns jsonb language sql stable as $$
     from xmov x
     window w as (partition by account_id, product_external_id, seller_id, variant order by occurred_at, number nulls first, external_id)
   ),
-  -- por variante: saldo actual (último movimiento) y desde cuándo lo tiene apartado. Empieza al pasar
-  -- de 0 a algo (según Drop, o porque lo último guardado era 0 y falta el movimiento que lo apartó),
-  -- salvo que haya estado en 0 menos de un día; si no, desde el primer movimiento guardado con saldo
+  -- empieza a tenerlo apartado al pasar de 0 a algo (según Drop, o porque lo último guardado era 0 y
+  -- falta el movimiento que lo apartó), salvo que haya estado en 0 menos de un día
+  xstart as (
+    select x.*,
+      balance > 0 and (coalesce(prev_qty, 0) = 0 or coalesce(prev_balance, 0) = 0)
+        and (prev_at is null or occurred_at - prev_at >= interval '1 day') as is_start
+    from xseq x
+  ),
+  -- por variante: saldo actual (último movimiento) y desde cuándo lo tiene apartado (sin un inicio
+  -- claro, desde el primer movimiento guardado con saldo). Los pedidos se cuentan desde ese inicio; si
+  -- falta la reserva (el inicio es una salida de ese stock, cuyo pedido es anterior), desde el último 0
+  -- guardado; sin inicio claro, todo lo que se mira (null)
   xvar as (
     select account_id, product_external_id, seller_id, variant,
       max(balance) filter (where rn = 1) as units,
-      coalesce(
-        max(occurred_at) filter (where balance > 0 and (coalesce(prev_qty, 0) = 0 or coalesce(prev_balance, 0) = 0)
-          and (prev_at is null or occurred_at - prev_at >= interval '1 day')),
-        min(occurred_at) filter (where balance > 0)) as since
-    from xseq group by 1, 2, 3, 4
+      coalesce(max(occurred_at) filter (where is_start), min(occurred_at) filter (where balance > 0)) as since,
+      (array_agg(case when coalesce(prev_qty, 0) = 0 then occurred_at else prev_at end
+        order by occurred_at desc, external_id desc) filter (where is_start))[1] as orders_from
+    from xstart group by 1, 2, 3, 4
   ),
   held as (
-    select account_id, product_external_id, seller_id, sum(units)::int as units, min(since) filter (where units > 0) as since
+    select account_id, product_external_id, seller_id, sum(units)::int as units,
+      min(since) filter (where units > 0) as since,
+      min(coalesce(orders_from, now() - interval '180 days')) filter (where units > 0) as orders_from
     from xvar group by 1, 2, 3
     having sum(units) > 0
   ),
@@ -69,14 +81,14 @@ returns jsonb language sql stable as $$
     from held h
     join a on a.id = h.account_id
     join public.orders o on o.account_id = h.account_id and o.store_id = h.seller_id
-      and o.ordered_at >= least(h.since, now() - interval '180 days')
+      and o.ordered_at >= least(h.orders_from, now() - interval '180 days')
     join public.order_items i on i.order_id = o.id and i.product_external_id = h.product_external_id
     where public.status_group(o.status_code) is distinct from 'cancelled'
   ),
   pagg as (
     select p.account_id, p.product_external_id, p.seller_id,
       max(p.d) as last_day, max(p.ordered_at) as last_at,
-      count(distinct p.id) filter (where p.ordered_at >= h.since) as orders_since,
+      count(distinct p.id) filter (where p.ordered_at >= h.orders_from) as orders_since,
       count(distinct p.id) filter (where p.d > a.today - 7) as n7,
       -- ritmo que llevaba: pedidos y días con pedidos en los 14 / 7 días que terminan en su último pedido
       count(distinct p.id) filter (where p.d > p.lday - 14) as n14_before,

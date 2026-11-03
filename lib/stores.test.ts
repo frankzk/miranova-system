@@ -53,6 +53,10 @@ test("ordenar por mayor caída pesa los pedidos perdidos, y contactar hoy toma l
   const c = row({ name: "C", d7: 50, prev7: 40, active_prev7: 7, active7: 7 }); // crece
   assert.deepEqual(sortStores([b, c, a], "drop").map((s) => s.name), ["A", "B", "C"]);
   assert.deepEqual(toContact([c, b, a]).map((s) => s.name), ["A", "B"]);
+  // más días sin vender: una tienda sin ninguna venta va primero
+  const never = row({ name: "Nunca", days_since: null, d7: 0 });
+  const old = row({ name: "Hace 90", days_since: 90, d7: 0 });
+  assert.deepEqual(sortStores([old, a, never], "silent").map((s) => s.name), ["Nunca", "Hace 90", "A"]);
 });
 
 test("crecimiento fuerte, producto ganador y tienda de un solo producto", () => {

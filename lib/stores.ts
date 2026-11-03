@@ -188,7 +188,8 @@ export function sortStores(rows: StoreRow[], sort: StoreSort): StoreRow[] {
     vendor_desc: (s) => -nz(s.vendor_per_order, -Infinity),
     skus_desc: (s) => -s.skus30,
     skus_asc: (s) => s.skus30,
-    silent: (s) => -nz(s.days_since, -Infinity),
+    // sin ninguna venta (p. ej. una tienda con privatizado que nunca vendió): la que más lleva
+    silent: (s) => -nz(s.days_since, Infinity),
   };
   const k = key[sort];
   return [...rows].sort((a, b) => k(a) - k(b) || b.d7 - a.d7 || a.name.localeCompare(b.name, "es"));

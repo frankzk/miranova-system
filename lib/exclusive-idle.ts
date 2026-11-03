@@ -265,7 +265,9 @@ export function idleStoreRow(x: StoreExclusive, currency: string): StoreRow {
  * unidades (así 3 u. que dejó de pautar no se ven "Al día", y 2 u. sueltas no tapan 36 u. al día).
  */
 export function leadItem(s: StoreExclusive): ExclusiveItem {
-  return s.worst ?? s.items.reduce((a, b) => (b.units > a.units ? b : a));
+  // con las mismas unidades, lo que no se vende antes que lo nuevo, y lo nuevo antes que lo al día
+  const rank: Record<ExclusiveState, number> = { stopped: 0, sleeping: 1, fresh: 2, ok: 3 };
+  return s.worst ?? s.items.reduce((a, b) => (b.units > a.units || (b.units === a.units && rank[b.state] < rank[a.state]) ? b : a));
 }
 
 /** Estado de la tienda en texto (exportación): "Dejó de pautar", "Al día", "Dejó de pautar (no avisa: menos de 5 u.)"… */

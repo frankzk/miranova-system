@@ -12,7 +12,9 @@ import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
-import { alertingStores, byUrgency, idleStoreRow, insertOp, privatizedByStore, privatizedOp, type ExclusiveOp, type StoreExclusive } from "@/lib/exclusive-idle";
+import {
+  alertingStores, byUrgency, EXCLUSIVE_RULES, idleStoreRow, insertOp, privatizedByStore, privatizedOp, type ExclusiveOp, type StoreExclusive,
+} from "@/lib/exclusive-idle";
 import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
@@ -338,12 +340,12 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
           <div className="empty">
             <h3>
               {px
-                ? searching || g ? "Ninguna de estas tiendas tiene su privatizado sin pautar" : "Todo lo privatizado se está vendiendo"
+                ? searching || g ? "Ninguna de estas tiendas tiene su privatizado sin pautar" : "Ninguna tienda tiene su privatizado sin pautar"
                 : all.length === 0 ? "Aún no hay tiendas" : searching && pool.length === 0 ? (q ? `Ninguna tienda coincide con “${q}”` : "Ninguna de las tiendas elegidas en esta vista") : "Ninguna tienda en este estado"}
             </h3>
             <p>
               {px
-                ? "Las tiendas con stock privatizado tuvieron pedidos de ese producto ayer u hoy (o lo privatizaron hace menos de 3 días)."
+                ? `Aquí salen las tiendas con ${EXCLUSIVE_RULES.minUnits} u. o más privatizadas que llevan al menos un día completo sin pedidos de ese producto, o que no lo venden desde que lo privatizaron.`
                 : all.length === 0
                 ? "Cuando lleguen órdenes con dropshipper en los últimos 60 días, aparecerán aquí."
                 : searching && pool.length === 0
