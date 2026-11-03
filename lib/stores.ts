@@ -231,7 +231,11 @@ export function toContact(rows: StoreRow[], limit = 5): StoreRow[] {
 }
 
 /** Filtros de la URL de Salud de tiendas (los mismos para la página y la exportación). */
-export type StoreFilters = { h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort };
+export type StoreFilters = {
+  h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort;
+  /** pestaña "Privatizado sin pautar" (?px=1): excluye el filtro por estado */
+  px?: boolean;
+};
 
 type Params = Record<string, string | string[] | undefined>;
 const first = (p: Params, k: string) => {
@@ -244,12 +248,14 @@ export function parseStoreFilters(p: Params): StoreFilters {
   const s = first(p, "sort");
   const g = first(p, "g");
   const t = p.t;
+  const px = first(p, "px") === "1";
   return {
-    h: h && h in HEALTH ? (h as Health) : undefined,
+    h: !px && h && h in HEALTH ? (h as Health) : undefined,
     g: g === "con" || g === "sin" ? g : undefined,
     q: first(p, "q")?.slice(0, 80),
     t: [...new Set((Array.isArray(t) ? t : t ? [t] : []).map((x) => x.trim()).filter(Boolean))].slice(0, 50),
     sort: s && s in STORE_SORTS ? (s as StoreSort) : "d7_desc",
+    ...(px ? { px } : {}),
   };
 }
 

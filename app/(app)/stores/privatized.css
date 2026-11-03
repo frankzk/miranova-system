@@ -1,0 +1,43 @@
+/* Lo privatizado a cada tienda (Salud de tiendas): celda, pestaña y sección del panel lateral. */
+
+.ops li[data-kind="exclusive"]::before { background: var(--warning-dot); }
+.ops li[data-kind="exclusive"][data-priority="1"]::before { background: var(--danger-dot); }
+
+/* celda compacta: estado + unidades en una línea */
+.px-col { white-space: nowrap; }
+.px-compact { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-xs); color: var(--ink-2); }
+.px-compact .pill { font-size: var(--t-xs); }
+.px-meta { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* pestaña "Privatizado sin pautar": una línea por producto */
+td.px-col[data-expanded] { white-space: normal; min-width: 240px; max-width: 340px; }
+.px-cell { display: flex; flex-direction: column; gap: 4px; }
+.px-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.px-items li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: var(--t-xs); line-height: 1.35; }
+.px-items li:not([data-alert]) { opacity: 0.75; }
+.px-items .pill { font-size: 11px; padding-block: 1px; }
+.px-items .px-name { font-weight: 600; color: var(--ink); }
+.px-ctx { font-size: var(--t-xs); color: var(--ink-3); }
+.px-do { font-size: var(--t-xs); font-weight: 550; color: var(--ink-2); }
+
+.px-summary { margin: -4px 0 12px; font-size: var(--t-sm); color: var(--ink-2); }
+
+/* tarjetas (celular) */
+.store-cards dl .px-dl { grid-column: 1 / -1; align-items: baseline; }
+.store-cards dl .px-dl dd { text-align: right; min-width: 0; }
+.store-cards dl .px-dl .px-compact { flex-wrap: wrap; justify-content: flex-end; }
+/* en la pestaña, una línea por producto: debajo de la etiqueta y a lo ancho */
+.store-cards dl .px-dl:has(.px-cell) { flex-direction: column; gap: 4px; }
+.store-cards dl .px-dl:has(.px-cell) dd { text-align: left; width: 100%; }
+
+/* panel lateral */
+.px-section .px-ctx { margin: 0 0 8px; }
+.px-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.px-list li { padding: 10px 0; border-top: 1px solid var(--line); }
+.px-list li:first-child { border-top: 0; padding-top: 2px; }
+.px-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.px-row .px-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.px-facts { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: var(--t-sm); color: var(--ink-2); }
+.px-action { margin: 6px 0 0; font-size: var(--t-sm); font-weight: 550; color: var(--ink); }
+.px-list li[data-alert] .px-action { color: var(--danger); }
+.px-foot { margin: 8px 0 0; font-size: var(--t-xs); color: var(--ink-3); }

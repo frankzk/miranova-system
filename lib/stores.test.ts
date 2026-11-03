@@ -100,6 +100,9 @@ test("filtros de la URL de Salud de tiendas: los mismos para la página y el Exc
   const f = parseStoreFilters({ h: "alert", g: "con", q: " velora ", t: ["hn:1", "hn:1", " gt:2 "], sort: "ticket_desc" });
   assert.deepEqual(f, { h: "alert", g: "con", q: "velora", t: ["hn:1", "gt:2"], sort: "ticket_desc" });
   assert.deepEqual(parseStoreFilters({ h: "otra", g: "x", sort: "nada" }), { h: undefined, g: undefined, q: undefined, t: [], sort: "d7_desc" });
+  // pestaña "Privatizado sin pautar": no se combina con un estado
+  assert.deepEqual(parseStoreFilters({ px: "1", h: "alert", g: "sin" }), { h: undefined, g: "sin", q: undefined, t: [], sort: "d7_desc", px: true });
+  assert.equal(parseStoreFilters({ px: "0" }).px, undefined);
 
   const a = row({ account_id: "hn", store_id: "1", name: "Velora", d7: 3 });
   const b = row({ account_id: "hn", store_id: "2", name: "Nutralix", d7: 9 });

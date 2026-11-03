@@ -2,6 +2,7 @@
 // Así cada sección simula lo suyo sin tocar lib/dev-fixtures.ts.
 import { fixtures as business } from "./business";
 import { fixtures as contacts } from "./contacts";
+import { fixtures as exclusive } from "./exclusive";
 import { fixtures as followups } from "./followups";
 import { fixtures as imports } from "./imports";
 import { fixtures as inventory } from "./inventory";
@@ -20,4 +21,4 @@ import type { FixtureModule } from "./types";
 import { fixtures as users } from "./users";
 import { fixtures as wallets } from "./wallets";
 
-export const MODULES: FixtureModule[] = [stores, overview, storeDetail, followups, productPerformance, matrix, opportunities, business, inventory, contacts, users, media, wallets, imports, requests, labs, profit, reconciliation];
+export const MODULES: FixtureModule[] = [stores, overview, storeDetail, followups, productPerformance, matrix, opportunities, business, inventory, contacts, users, media, wallets, imports, requests, labs, profit, reconciliation, exclusive];

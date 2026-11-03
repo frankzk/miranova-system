@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeDirectory, storeProfiles } from "@/lib/contacts";
+import { alertingStores, EXCLUSIVE_STATES, idleStoreRow, insertOp, itemLine, privatizedByStore, privatizedOp } from "@/lib/exclusive-idle";
+import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { followupIndex } from "@/lib/followups";
 import { storeHealth, storePeriod } from "@/lib/queries";
 import { prevPhrase, storePeriodChoice } from "@/lib/store-period";
@@ -10,8 +12,8 @@ import { formatPhone, storeEmail, whatsappChat } from "@/lib/store-contacts";
 import { storeHref } from "@/lib/store-links";
 import type { FollowupSummary } from "@/lib/store-metrics";
 import {
-  applyStoreFilters, change, classify, deliveryRate, filterStores, HEALTH, opportunities, parseStoreFilters, periodView, storeKey, typicalTickets,
-  withPeriodStores, type StoreRow,
+  applyStoreFilters, change, classify, deliveryRate, filterStores, HEALTH, opportunities, parseStoreFilters, periodView, sortStores, storeKey,
+  typicalTickets, withPeriodStores, type StoreRow,
 } from "@/lib/stores";
 import { buildXlsx, XLSX_TYPE, type Cell } from "@/lib/xlsx";
 
@@ -63,9 +65,13 @@ export async function GET(req: NextRequest) {
   // el período de la página: sus cifras van en las columnas de pedidos, variación, días activos y promedios
   const pc = storePeriodChoice(params, scope.tz);
 
-  const [healthRows, contacts, directory, followups, profiles, period] = await Promise.all([
+  const [healthRows, contacts, directory, followups, profiles, period, exclusive] = await Promise.all([
     storeHealth(scope.account), contactsByStore(), storeDirectory(), followupIndex(scope.account), storeProfiles(),
     pc.custom ? storePeriod({ account: scope.account, from: pc.range.from, to: pc.range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,
+    exclusiveIdle(scope.account).catch((e) => {
+      console.error("exclusive_idle", e);
+      return [];
+    }),
   ]);
   const all = period ? withPeriodStores(healthRows, period) : healthRows;
   const view = period ? periodView(period) : (s: StoreRow) => s;
@@ -98,13 +104,26 @@ export async function GET(req: NextRequest) {
     ];
   };
 
+  // lo privatizado a cada tienda; con ?px=1, solo las que dejaron de pautarlo (como la pestaña)
+  const pxBy = privatizedByStore(exclusive);
+  const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
+  const pxRows = () => {
+    const alerting = alertingStores(pxBy);
+    const pool = filterStores(alerting.map((x) => byKey.get(x.key) ?? idleStoreRow(x, currencyOf.get(x.account_id) ?? "USD")), { keys: f.t, q: f.q })
+      .filter((s) => !f.g || (f.g === "con") === hasGroup(s))
+      .map(view);
+    const rank = new Map(alerting.map((x, i) => [x.key, i]));
+    return f.sort === "d7_desc" ? pool.sort((a, b) => (rank.get(storeKey(a)) ?? 0) - (rank.get(storeKey(b)) ?? 0)) : sortStores(pool, f.sort);
+  };
+
   // hoja 1: el listado, tal como se ve
-  const rows = applyStoreFilters(all, f, hasGroup, view);
+  const rows = f.px ? pxRows() : applyStoreFilters(all, f, hasGroup, view);
   const typical = typicalTickets(all);
   const listed = rows.map((s): Cell[] => {
     // estado y avisos con la fila de salud (la semana actual); las cifras, del período
     const h = byKey.get(storeKey(s)) ?? s;
-    const ops = opportunities(h, typical[s.account_id], (n) => String(Math.round(n)));
+    const x = pxBy.get(storeKey(s));
+    const ops = insertOp(opportunities(h, typical[s.account_id], (n) => String(Math.round(n))), x ? privatizedOp(x) : null);
     const c = change(s);
     const dr = deliveryRate(s);
     return [
@@ -117,6 +136,10 @@ export async function GET(req: NextRequest) {
       s.prev7,
       c === null ? null : Math.round(c * 100),
       round(s.d7 / pc.days, 1),
+      x?.units ?? null,
+      x ? x.idle_units : null,
+      x ? (x.worst ? EXCLUSIVE_STATES[x.worst.state].label : "Al día") : null,
+      x ? x.items.map(itemLine).join("\n") : null,
       s.active7,
       s.n30,
       round(s.sales30, 2),
@@ -136,7 +159,7 @@ export async function GET(req: NextRequest) {
 
   // hoja 2: tiendas que ya trabajaron con Miranova sin ventas en 60 días (sin pedidos, o solo cancelados); misma búsqueda y grupo
   const inList = new Set(all.map((s) => contactKey(s)));
-  const dormant = f.h && f.h !== "inactive"
+  const dormant = f.px || (f.h && f.h !== "inactive")
     ? []
     : filterStores(
         directory.filter((d) => (!scope.account || d.account_id === scope.account) && !inList.has(contactKey(d)) && (!f.g || (f.g === "con") === hasGroup(d))),
@@ -166,6 +189,10 @@ export async function GET(req: NextRequest) {
         { header: pc.custom ? "Pedidos período anterior" : "Pedidos 7 días anteriores", width: 15 },
         { header: pc.custom ? `Variación (%) ${prevPhrase(pc.days)}` : "Variación 7 días (%)", width: 13 },
         { header: "Ritmo por día", width: 11 },
+        { header: "Privatizado (u.)", width: 12 },
+        { header: "Privatizado sin pedidos (u.)", width: 14 },
+        { header: "Privatizado: estado", width: 16 },
+        { header: "Privatizado: productos", width: 60 },
         { header: `Días activos (de ${pc.days})`, width: 12 },
         { header: "Pedidos 30 días", width: 13 },
         { header: "Venta 30 días", width: 14 },
