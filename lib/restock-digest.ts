@@ -41,7 +41,7 @@ function action({ plan: p }: DigestLine, today: string): string {
 }
 
 function detail({ row: r, plan: p }: DigestLine): string {
-  const parts = [`${u(r.stock)} en existencia`];
+  const parts = [`${u(r.stock)} en existencia${r.exclusive > 0 ? ` (${u(r.public_stock)} disponibles y ${u(r.exclusive)} privatizadas)` : ""}`];
   if (p.demand > 0) parts.push(`vende ${rate(p.demand)}/día`);
   parts.push(`tarda ${plural(p.lead, "día", "días")}`);
   if (p.gapDays) parts.push(`se agota ${plural(p.gapDays, "día", "días")} antes de que llegue`);

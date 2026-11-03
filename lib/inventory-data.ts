@@ -4,11 +4,21 @@ import { NO_SUPPLY, productKey, type InventoryRow, type Restock, type RestockOrd
 import { db } from "./supabase";
 import { synced } from "./synced-cache";
 
-/** Inventario por producto (ver supabase/migrations/0018_inventory_status.sql). */
+/**
+ * Inventario por producto (ver 0018_inventory_status.sql y 20261103060043_inventory_exclusive.sql):
+ * existencia total = pública + privatizada a tiendas. Sin esa migración, todo cuenta como público.
+ */
 async function inventoryStatusQuery(account?: string): Promise<InventoryRow[]> {
   const { data, error } = await db().rpc("inventory_status", { p_account: account ?? null });
   if (error) throw error;
-  return (data ?? []) as InventoryRow[];
+  return ((data ?? []) as Partial<InventoryRow>[]).map((r) => ({
+    ...(r as InventoryRow),
+    stock: Number(r.stock ?? 0),
+    public_stock: Number(r.public_stock ?? r.stock ?? 0),
+    exclusive: Number(r.exclusive ?? 0),
+    exclusive_stores: (r.exclusive_stores ?? []).map((x) => ({ ...x, units: Number(x.units), out14: Number(x.out14 ?? 0) })),
+    exclusive_unknown: r.exclusive_unknown ?? [],
+  }));
 }
 export const inventoryStatus = synced("inventory_status", inventoryStatusQuery);
 

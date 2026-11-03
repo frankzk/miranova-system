@@ -12,7 +12,16 @@ export type InventoryRow = {
   name: string;
   status: string | null;
   image_url: string | null;
+  /** existencia total en bodega: lo público + lo privatizado a tiendas */
   stock: number;
+  /** disponible para todas las tiendas (lo que muestra el catálogo de Drop) */
+  public_stock: number;
+  /** privatizado a tiendas, sumando todas */
+  exclusive: number;
+  /** cuánto tiene privatizado cada tienda (según su último movimiento exclusivo en Drop) */
+  exclusive_stores: ExclusiveStock[];
+  /** IDs de tiendas a las que Drop tiene el producto privatizado y sin movimientos guardados */
+  exclusive_unknown: string[];
   variants_count: number;
   /** unidades que salieron por pedido / volvieron por devolución */
   out14: number;
@@ -28,6 +37,48 @@ export type InventoryRow = {
   /** salida neta por día, últimos 30 días (el último es hoy) */
   daily: number[];
 };
+
+/** Inventario privatizado a una tienda (Drop: "exclusivas"). */
+export type ExclusiveStock = {
+  /** ID de la tienda en la plataforma (el mismo store_id de sus pedidos) */
+  seller_id: string;
+  name: string | null;
+  units: number;
+  /** unidades que esa tienda despachó de su inventario privatizado en 14 días */
+  out14: number;
+  /** último movimiento de ese inventario */
+  at: string | null;
+};
+
+/** Días que le alcanza a una tienda su inventario privatizado al ritmo de los últimos 14 días (null si no despachó). */
+export const exclusiveCover = (s: Pick<ExclusiveStock, "units" | "out14">): number | null => (s.out14 > 0 ? Math.floor(s.units / (s.out14 / 14)) : null);
+
+export type StoreExclusive = {
+  account_id: string;
+  account_name: string;
+  seller_id: string;
+  name: string | null;
+  units: number;
+  products: { external_id: string; name: string; units: number; out14: number; at: string | null }[];
+};
+
+/** Lo privatizado agrupado por tienda (de más a menos unidades), para ver qué tiene apartado cada una. */
+export function exclusiveByStore(rows: Pick<InventoryRow, "account_id" | "account_name" | "external_id" | "name" | "exclusive_stores">[]): StoreExclusive[] {
+  const out = new Map<string, StoreExclusive>();
+  for (const r of rows) {
+    for (const x of r.exclusive_stores) {
+      if (x.units <= 0) continue;
+      const key = `${r.account_id}:${x.seller_id}`;
+      const s = out.get(key) ?? { account_id: r.account_id, account_name: r.account_name, seller_id: x.seller_id, name: x.name, units: 0, products: [] };
+      s.units += x.units;
+      if (!s.name && x.name) s.name = x.name;
+      s.products.push({ external_id: r.external_id, name: r.name, units: x.units, out14: x.out14, at: x.at });
+      out.set(key, s);
+    }
+  }
+  for (const s of out.values()) s.products.sort((a, b) => b.units - a.units);
+  return [...out.values()].sort((a, b) => b.units - a.units);
+}
 
 /** Reposición pedida al proveedor y registrada en el panel ("Ya lo pedí"). */
 export type RestockOrder = {

@@ -470,6 +470,7 @@ async function syncStockMovements(
 
   let added = 0;
   let sampled = Boolean(acc.debug?.stock_movements_sample);
+  let failed: string | null = null;
   for (const productId of queue) {
     if (Date.now() > deadline) break;
     const { data: known } = await db()
@@ -479,27 +480,39 @@ async function syncStockMovements(
       .eq("product_external_id", productId);
     const seen = new Set((known ?? []).map((r: { external_id: string }) => r.external_id));
 
-    for (let page = 1; page <= MAX_MOVEMENT_PAGES && Date.now() < deadline; page++) {
-      const { payload } = await withSession((s) => fetchPage(s, productId, page));
-      if (!sampled) {
-        // muestra de la respuesta real, para revisar el mapeo de campos
-        const fresh = (await getAccount(acc.id))!;
-        await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), stock_movements_sample: JSON.stringify(payload).slice(0, 4000) } });
-        sampled = true;
+    try {
+      for (let page = 1; page <= MAX_MOVEMENT_PAGES && Date.now() < deadline; page++) {
+        const { payload } = await withSession((s) => fetchPage(s, productId, page));
+        if (!sampled) {
+          // muestra de la respuesta real, para revisar el mapeo de campos
+          const fresh = (await getAccount(acc.id))!;
+          await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), stock_movements_sample: JSON.stringify(payload).slice(0, 4000) } });
+          sampled = true;
+        }
+        const list = extractMovements(payload);
+        const fresh = list.filter((m) => !seen.has(m.external_id));
+        if (fresh.length) {
+          const rows = fresh.map((m) => ({ ...m, account_id: acc.id, product_external_id: productId }));
+          const { error: e } = await db().from("stock_movements").upsert(rows, { onConflict: "account_id,product_external_id,external_id", ignoreDuplicates: true });
+          if (e) throw e;
+          added += fresh.length;
+          for (const m of fresh) seen.add(m.external_id);
+        }
+        // se detiene al llegar a movimientos ya guardados o a la última página
+        if (fresh.length < list.length || list.length < STOCK_MOVEMENTS_PAGE_SIZE) break;
       }
-      const list = extractMovements(payload);
-      const fresh = list.filter((m) => !seen.has(m.external_id));
-      if (fresh.length) {
-        const rows = fresh.map((m) => ({ ...m, account_id: acc.id, product_external_id: productId }));
-        const { error: e } = await db().from("stock_movements").upsert(rows, { onConflict: "account_id,product_external_id,external_id", ignoreDuplicates: true });
-        if (e) throw e;
-        added += fresh.length;
-        for (const m of fresh) seen.add(m.external_id);
-      }
-      // se detiene al llegar a movimientos ya guardados o a la última página
-      if (fresh.length < list.length || list.length < STOCK_MOVEMENTS_PAGE_SIZE) break;
+    } catch (e) {
+      if (e instanceof SessionExpired) throw e;
+      // un producto que Drop ya borró (404) o una caída momentánea no frena a los demás: antes, el
+      // mismo producto quedaba primero en la fila y trababa los movimientos de toda la cuenta
+      failed = `${productId}: ${e instanceof Error ? e.message : String(e)}`;
     }
     await db().from("products").update({ movements_sync_at: new Date().toISOString() }).eq("account_id", acc.id).eq("external_id", productId);
+  }
+  // el último error queda a la vista en el diagnóstico; si esta vez no hubo, se limpia
+  if (failed || acc.debug?.stock_movements_error) {
+    const fresh = (await getAccount(acc.id))!;
+    await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), stock_movements_error: failed ?? undefined } });
   }
   return added;
 }

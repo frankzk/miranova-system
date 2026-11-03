@@ -57,3 +57,27 @@
 .drawer .kv .spark { width: 100%; max-width: 280px; height: 28px; }
 .rs-digest { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .rs-digest .rs-msg { max-width: 360px; text-align: right; }
+
+/* inventario privatizado a tiendas (Drop: "exclusivas") */
+.inv-split { white-space: nowrap; }
+.inv-split [data-zero] { color: var(--danger); font-weight: 550; }
+.inv-excl { margin-bottom: 18px; }
+.inv-excl > summary { list-style: none; cursor: pointer; padding-bottom: 12px; }
+.inv-excl > summary::-webkit-details-marker { display: none; }
+.inv-excl > summary h2::after { content: " ▾"; color: var(--ink-4); font-size: var(--t-sm); }
+.inv-excl:not([open]) > summary h2::after { content: " ▸"; }
+.inv-excl-stores { list-style: none; margin: 0; padding: 0; }
+.inv-excl-store { padding: 12px 18px; border-top: 1px solid var(--line); }
+.inv-excl-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
+.inv-excl-head a { color: var(--ink); }
+.inv-excl-head a:hover { color: var(--accent-ink); }
+.inv-excl-head .u { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; }
+.inv-excl-head .sub { flex-basis: 100%; font-size: var(--t-xs); color: var(--ink-3); }
+.inv-excl-products { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.inv-excl-products li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; font-size: var(--t-sm); }
+.inv-excl-products a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.inv-excl-products a:hover { color: var(--accent-ink); }
+.inv-excl-products .v { font-variant-numeric: tabular-nums; color: var(--ink); }
+.inv-excl-products .sub { grid-column: 1 / -1; font-size: var(--t-xs); color: var(--ink-3); margin-top: -2px; }
+.inv-excl-list .sub { font-size: var(--t-xs); color: var(--ink-3); }
+.inv-excl-note { margin: 10px 0 0; font-size: var(--t-xs); }

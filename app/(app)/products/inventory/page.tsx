@@ -7,14 +7,16 @@ import { CancelRestockForm, LeadTimeForm, RestockOrderForm, SendDigestForm } fro
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
+import { storeProfiles } from "@/lib/contacts";
 import { fmtInt, fmtShort, todayHN } from "@/lib/format";
 import {
-  addDays, dayLabel, INVENTORY_RULES, shortDate, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL, reorderPlan, returnRate,
-  urgency, type InventoryRow, type ReorderLevel, type ReorderPlan,
+  addDays, dayLabel, exclusiveByStore, exclusiveCover, INVENTORY_RULES, shortDate, LEAD_SOURCE, LEVEL_ORDER, productKey, REORDER, REORDER_LEVEL,
+  reorderPlan, returnRate, urgency, type InventoryRow, type ReorderLevel, type ReorderPlan,
 } from "@/lib/inventory";
 import { inventoryStatus, inventorySupply } from "@/lib/inventory-data";
 import { can } from "@/lib/permissions";
 import { getScope } from "@/lib/scope";
+import { storeHref } from "@/lib/store-links";
 import { cancelRestockOrder, placeRestockOrder, saveLeadTime, sendDigestNow } from "./actions";
 import "./inventory.css";
 
@@ -57,8 +59,18 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     return (Array.isArray(v) ? v[0] : v) ?? "";
   };
   const scope = await getScope(accounts);
-  const [all, supply] = await Promise.all([inventoryStatus(scope.account), inventorySupply(scope.account)]);
+  const [all, supply, profiles] = await Promise.all([
+    inventoryStatus(scope.account),
+    inventorySupply(scope.account),
+    storeProfiles().catch((e) => (console.error("inventario: tiendas", e), [])),
+  ]);
   const today = todayHN();
+  const canStores = can(user, "stores");
+  // nombre de cada tienda: el que manda Drop en el movimiento o, si no viene, el de sus pedidos
+  const storeName = new Map(profiles.map((p) => [`${p.account_id}:${p.store_id}`, p.name]));
+  const nameOf = (accountId: string, sellerId: string, name?: string | null) => name || storeName.get(`${accountId}:${sellerId}`) || "Tienda sin nombre";
+  const byStore = exclusiveByStore(all);
+  const exclusiveUnits = byStore.reduce((t, s) => t + s.units, 0);
 
   const plans = new Map(all.map((r) => [r, reorderPlan(r, supply, today)]));
   const planOf = (r: InventoryRow) => plans.get(r)!;
@@ -90,7 +102,11 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <div className="page">
       <PageHead
         title="Inventario"
-        sub={<>{fmtInt(all.length)} productos · {scope.label} · cuándo pedir según la venta reciente y lo que tarda en llegar cada reposición</>}
+        sub={<>
+          {fmtInt(all.length)} productos · {scope.label}
+          {exclusiveUnits > 0 && <> · {u(exclusiveUnits)} privatizadas a {fmtInt(byStore.length)} {byStore.length === 1 ? "tienda" : "tiendas"}</>}
+          {" "}· cuándo pedir según la venta reciente y lo que tarda en llegar cada reposición
+        </>}
         actions={user.is_owner && <SendDigestForm action={sendDigestNow} />}
       />
       <ProductsSubnav />
@@ -150,6 +166,41 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         </section>
       )}
 
+      {byStore.length > 0 && !level && (
+        <details className="panel inv-excl" open={byStore.length <= 6 || undefined}>
+          <summary className="panel-head">
+            <h2>Privatizado por tienda</h2>
+            <span className="aside">{u(exclusiveUnits)} apartadas para {fmtInt(byStore.length)} {byStore.length === 1 ? "tienda" : "tiendas"} · solo esa tienda puede venderlas</span>
+          </summary>
+          <ul className="inv-excl-stores">
+            {byStore.map((st) => {
+              const name = nameOf(st.account_id, st.seller_id, st.name);
+              return (
+                <li key={`${st.account_id}:${st.seller_id}`} className="inv-excl-store">
+                  <div className="inv-excl-head">
+                    {canStores ? <Link className="strong" href={storeHref(st.account_id, st.seller_id)}>{name}</Link> : <span className="strong">{name}</span>}
+                    <span className="u">{u(st.units)}</span>
+                    {showAccount && <span className="sub">{st.account_name}</span>}
+                  </div>
+                  <ul className="inv-excl-products">
+                    {st.products.map((pr) => {
+                      const cover = exclusiveCover(pr);
+                      return (
+                        <li key={pr.external_id}>
+                          <Link href={href({ p: productKey(st.account_id, pr.external_id) })} scroll={false} title={pr.name}>{pr.name}</Link>
+                          <span className="v">{u(pr.units)}</span>
+                          <span className="sub">{cover === null ? "sin despachos en 14 días" : `le alcanza ~${days(cover)}`}{pr.at && <> · último movimiento {shortDate(pr.at)}</>}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+      )}
+
       <nav className="tabs" aria-label="Filtrar por nivel de inventario">
         <Link href={href({ l: undefined, p: undefined })} aria-current={!level}>Todos <span className="c">{fmtInt(all.length)}</span></Link>
         {LEVEL_ORDER.map((k) => (
@@ -204,8 +255,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                             </div>
                           </div>
                         </td>
-                        <td className="num">
+                        <td className="num" title={r.exclusive > 0 ? r.exclusive_stores.map((x) => `${nameOf(r.account_id, x.seller_id, x.name)}: ${u(x.units)}`).join(" · ") : undefined}>
                           <span className="strong">{u(r.stock)}</span>
+                          {r.exclusive > 0 && (
+                            <div className="sub inv-split">
+                              <span data-zero={r.public_stock <= 0 || undefined}>{fmtInt(r.public_stock)} disponibles</span> · {fmtInt(r.exclusive)} privatizadas
+                            </div>
+                          )}
                           {p.inTransit > 0 && <div className="sub">+{fmtInt(p.inTransit)} en camino</div>}
                         </td>
                         <td className="num">
@@ -245,15 +301,29 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         cuando la venta sube. Punto de pedido = venta por día × días que tarda en llegar + un colchón por lo que varía la venta.
         Si no fijas cuánto tarda, se usa lo medido con los pedidos que marcas como pedidos y llegan; si no hay, {REORDER.defaultLead} días.
         Un pedido deja de estar en camino cuando Drop registra la entrada de mercadería. Las importaciones cuentan como en camino
-        desde que se pagan hasta que Drop registra su entrada.
+        desde que se pagan hasta que Drop registra su entrada. La existencia suma lo disponible para todas las tiendas (lo que muestra
+        el catálogo de Drop) y lo privatizado a cada tienda, que sale de su último movimiento exclusivo en “Gestionar inventario”.
       </p>
 
-      {sel && <ProductDrawer r={sel} p={planOf(sel)} today={today} closeHref={closeHref} canImports={can(user, "imports")} />}
+      {sel && (
+        <ProductDrawer
+          r={sel} p={planOf(sel)} today={today} closeHref={closeHref} canImports={can(user, "imports")}
+          storeName={(id, name) => nameOf(sel.account_id, id, name)} storeLink={canStores ? (id) => storeHref(sel.account_id, id) : null}
+        />
+      )}
     </div>
   );
 }
 
-function ProductDrawer({ r, p, today, closeHref, canImports }: { r: InventoryRow; p: ReorderPlan; today: string; closeHref: string; canImports: boolean }) {
+function ProductDrawer({ r, p, today, closeHref, canImports, storeName, storeLink }: {
+  r: InventoryRow;
+  p: ReorderPlan;
+  today: string;
+  closeHref: string;
+  canImports: boolean;
+  storeName: (sellerId: string, name?: string | null) => string;
+  storeLink: ((sellerId: string) => string) | null;
+}) {
   const rr = returnRate(r);
   const arrived = p.orders.filter((o) => o.status === "arrived").slice(-3).reverse();
   return (
@@ -277,6 +347,14 @@ function ProductDrawer({ r, p, today, closeHref, canImports }: { r: InventoryRow
           <dl className="kv">
             <dt>Existencia</dt>
             <dd>{u(r.stock)}{p.inTransit > 0 && <span className="muted"> + {u(p.inTransit)} en camino</span>}</dd>
+            {r.exclusive > 0 && (
+              <>
+                <dt>Disponible</dt>
+                <dd>{u(r.public_stock)} <span className="muted">· para todas las tiendas</span></dd>
+                <dt>Privatizado</dt>
+                <dd>{u(r.exclusive)} <span className="muted">· {r.exclusive_stores.length === 1 ? "a una tienda" : `a ${r.exclusive_stores.length} tiendas`}</span></dd>
+              </>
+            )}
             <dt>Vende por día</dt>
             <dd>{rate(p.demand)} <span className="muted">· 7 días: {rate(p.rate7)} · 14 días: {rate(p.rate14)}</span></dd>
             <dt>Tarda en llegar</dt>
@@ -299,6 +377,36 @@ function ProductDrawer({ r, p, today, closeHref, canImports }: { r: InventoryRow
             <dd>{rr === null ? "—" : `${Math.round(rr * 100)}% en 30 días`}{rr !== null && rr >= INVENTORY_RULES.highReturns && <span className="muted"> · altas</span>}</dd>
           </dl>
         </div>
+
+        {(r.exclusive_stores.length > 0 || r.exclusive_unknown.length > 0) && (
+          <div className="section">
+            <h3>Inventario privatizado</h3>
+            <ul className="rs-orders inv-excl-list">
+              {r.exclusive_stores.map((x) => {
+                const cover = exclusiveCover(x);
+                const name = storeName(x.seller_id, x.name);
+                return (
+                  <li key={x.seller_id}>
+                    <div className="grow">
+                      {storeLink ? <Link className="strong" href={storeLink(x.seller_id)}>{name}</Link> : <span className="strong">{name}</span>}
+                      <div className="sub">
+                        {x.out14 > 0 ? `despachó ${u(x.out14)} en 14 días · le alcanza ~${days(cover!)}` : "sin despachos de este inventario en 14 días"}
+                        {x.at && <> · último movimiento {shortDate(x.at)}</>}
+                      </div>
+                    </div>
+                    <span className="strong">{u(x.units)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            {r.exclusive_unknown.length > 0 && (
+              <p className="muted inv-excl-note">
+                Drop también lo tiene privatizado a {r.exclusive_unknown.map((id) => storeName(id)).join(", ")}: sin movimientos guardados todavía,
+                no se sabe cuántas unidades tiene{r.exclusive_unknown.length === 1 ? "" : "n"}.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="section">
           <h3>Ya lo pedí</h3>
@@ -366,7 +474,7 @@ function Card({ r, p, today, showAccount, open }: { r: InventoryRow; p: ReorderP
       {showAccount && <div className="sub">{r.account_name}</div>}
       <Spark days={r.daily} />
       <dl>
-        <div><dt>Existencia</dt><dd>{u(r.stock)}</dd></div>
+        <div><dt>Existencia</dt><dd>{u(r.stock)}{r.exclusive > 0 && <span className="sub inv-split"> {fmtInt(r.public_stock)} disp. · {fmtInt(r.exclusive)} priv.</span>}</dd></div>
         <div><dt>Vende por día</dt><dd>{p.demand > 0 ? rate(p.demand) : "0"}</dd></div>
         <div><dt>En camino</dt><dd>{p.inTransit ? u(p.inTransit) : "—"}</dd></div>
         <div><dt>Pedir</dt><dd>{p.needsOrder && p.qty > 0 ? u(p.qty) : "—"}</dd></div>
