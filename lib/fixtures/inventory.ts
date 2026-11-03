@@ -3,11 +3,24 @@
 import type { FixtureCtx, FixtureModule, Row } from "./types";
 
 function inventoryStatus(args: Row, ctx: FixtureCtx) {
-  const rows = baseStatus(args, ctx);
+  const rows: Row[] = baseStatus(args, ctx);
   // para ver en local los estados de "Qué pedir": el que más sale, agotado; el segundo, con ~3 días
   const top = [...rows].filter((r) => r.out14 > 0).sort((a, b) => b.out14 - a.out14);
   if (top[0]) top[0].stock = 0;
   if (top[1]) top[1].stock = Math.max(1, Math.round((top[1].out14 / 14) * 3));
+  for (const r of rows) Object.assign(r, { public_stock: r.stock, exclusive: 0, exclusive_stores: [], exclusive_unknown: [] });
+  // inventario privatizado: el tercero con más salida tiene unidades apartadas para dos tiendas y una más sin movimientos
+  const t = top[2] ?? rows.find((r) => r !== top[0] && r !== top[1] && r.stock > 0);
+  if (t) {
+    const at = new Date(Date.now() - 2 * ctx.DAY).toISOString();
+    t.exclusive_stores = [
+      { seller_id: "name:Noelia Home", name: "Noelia Home", units: 36, out14: 27, at },
+      { seller_id: "name:ZONAHN", name: null, units: 12, out14: 0, at: new Date(Date.now() - 20 * ctx.DAY).toISOString() },
+    ];
+    t.exclusive = 48;
+    t.stock = t.public_stock + 48;
+    t.exclusive_unknown = ["name:Velora Honduras"];
+  }
   return rows;
 }
 

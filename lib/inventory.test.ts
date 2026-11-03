@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addDays, dailySpread, daysBetween, demand, inventoryAlerts, leadTime, niceUp, NO_SUPPLY, perDay7, reorderPlan, returnRate,
-  trackOrders, urgency, type InventoryRow, type RestockOrder, type Supply,
+  addDays, dailySpread, daysBetween, demand, exclusiveByStore, exclusiveCover, inventoryAlerts, leadTime, niceUp, NO_SUPPLY, perDay7,
+  reorderPlan, returnRate, trackOrders, urgency, type InventoryRow, type RestockOrder, type Supply,
 } from "./inventory.ts";
 
 const TODAY = "2026-10-04";
 const row = (p: Partial<InventoryRow>): InventoryRow => ({
   account_id: "a", account_name: "Drop Honduras", external_id: "p", code: null, name: "Producto", status: "Activo", image_url: null,
-  stock: 0, variants_count: 0, out14: 0, ret14: 0, out30: 0, ret30: 0, last_out_at: null, first_at: null, last_restock_at: null,
+  stock: 0, public_stock: 0, exclusive: 0, exclusive_stores: [], exclusive_unknown: [], variants_count: 0, out14: 0, ret14: 0, out30: 0, ret30: 0, last_out_at: null, first_at: null, last_restock_at: null,
   restocks: [], pending_orders: 0, daily: [], ...p,
 });
 // 10 u./día parejo (hoy va a medias: 3)
@@ -173,4 +173,20 @@ test("líneas de importación: solo las cierra una entrada grande o la marca de 
   const p = reorderPlan(steady({ stock: 50 }), supply([imp("en-camino", { ordered_at: "2026-09-20", eta: "2026-10-20" })]), TODAY);
   assert.equal(p.inTransit, 300);
   assert.equal(p.open[0].import?.code, "IMP-2026-001");
+});
+
+test("inventario privatizado: días que le alcanza a cada tienda y agrupado por tienda", () => {
+  assert.equal(exclusiveCover({ units: 36, out14: 27 }), 18);
+  assert.equal(exclusiveCover({ units: 100, out14: 0 }), null);
+  const noelia = { seller_id: "s1", name: "Noelia Home GT", units: 36, out14: 27, at: "2026-11-02T22:59:29Z" };
+  const rows = [
+    row({ external_id: "cint", name: "Cinturón", stock: 55, public_stock: 19, exclusive: 36, exclusive_stores: [noelia] }),
+    row({ external_id: "pel", name: "Pelador", stock: 103, public_stock: 3, exclusive: 100, exclusive_stores: [{ seller_id: "s2", name: "Vital Market", units: 100, out14: 0, at: null }] }),
+    row({ external_id: "gotas", name: "Gotas", exclusive_stores: [{ ...noelia, name: null, units: 50 }, { seller_id: "s3", name: "Vacía", units: 0, out14: 0, at: null }] }),
+  ];
+  const g = exclusiveByStore(rows);
+  assert.deepEqual(g.map((s) => [s.name, s.units, s.products.map((p) => p.external_id)]), [
+    ["Vital Market", 100, ["pel"]],
+    ["Noelia Home GT", 86, ["gotas", "cint"]],
+  ]);
 });

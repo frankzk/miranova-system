@@ -6,7 +6,7 @@ import { parseRecipients, restockDigest } from "./restock-digest.ts";
 const TODAY = "2026-10-04";
 const row = (p: Partial<InventoryRow>): InventoryRow => ({
   account_id: "a", account_name: "Drop Honduras", external_id: "p", code: null, name: "Producto", status: "Activo", image_url: null,
-  stock: 0, variants_count: 0, out14: 140, ret14: 0, out30: 300, ret30: 0, last_out_at: null, first_at: null, last_restock_at: null,
+  stock: 0, public_stock: 0, exclusive: 0, exclusive_stores: [], exclusive_unknown: [], variants_count: 0, out14: 140, ret14: 0, out30: 300, ret30: 0, last_out_at: null, first_at: null, last_restock_at: null,
   restocks: [], pending_orders: 0, daily: [...Array(29).fill(10), 3], ...p,
 });
 const order = (p: Partial<RestockOrder>): RestockOrder => ({
