@@ -54,7 +54,7 @@ returns jsonb language sql stable as $$
   xhold as (
     select x.*,
       coalesce(max(occurred_at) filter (where is_start) over v, min(occurred_at) filter (where balance > 0) over v) as hold_since,
-      coalesce((array_agg(coalesce(prev_qty, 0) = 0) filter (where is_start)
+      coalesce((array_agg(coalesce(prev_qty, 0) = 0 and reason = 'RESERVE') filter (where is_start)
         over (v order by occurred_at desc, external_id desc rows between unbounded preceding and unbounded following))[1], false) as hold_known
     from xstart x
     window v as (partition by account_id, product_external_id, seller_id, variant)

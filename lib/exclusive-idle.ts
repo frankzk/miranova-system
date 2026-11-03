@@ -81,8 +81,9 @@ export type ExclusiveItem = ExclusiveIdleRow & {
   /** días completos sin pedidos de ese producto, sin contar hoy (si no lo estrenó, desde que lo privatizó) */
   idle_days: number;
   /**
-   * no lo vendió desde que lo privatizó: sin pedidos ni salidas de ese stock desde la reserva. Solo
-   * si se sabe cuándo lo privatizó; si no, se mira su último pedido como a las demás
+   * no lo vendió desde que lo privatizó: sin pedidos ni salidas de ese stock desde la reserva, y no lo
+   * pedía en la semana antes de apartarlo. Solo si se sabe cuándo lo privatizó; si no, se mira su
+   * último pedido como a las demás
    */
   never: boolean;
   /** avisa: dejó de pautar o durmiendo, con al menos `minUnits` apartadas */
@@ -114,7 +115,11 @@ export function normalizeExclusive(rows: Partial<ExclusiveIdleRow>[]): Exclusive
 
 export function classifyExclusive(r: ExclusiveIdleRow): ExclusiveItem {
   const R = EXCLUSIVE_RULES;
-  const never = r.since_known && r.orders_since === 0 && r.dispatched_since === 0;
+  // lo pedía hasta poco antes de apartarlo (se le acabó y repuso, o lo privatizó vendiéndolo): no es
+  // "recién privatizado", se mira su último pedido
+  const before = r.days_since !== null && r.held_days !== null && r.days_since - r.held_days <= R.sleepingDays;
+  // salidas sin ningún pedido que cuente (p. ej. canceladas) no son haberlo vendido
+  const never = r.since_known && r.orders_since === 0 && (r.dispatched_since === 0 || r.days_since === null) && !before;
   let state: ExclusiveState;
   let idle: number;
   if (never) {

@@ -85,6 +85,23 @@ test("lo que no estrenó: 3 días de gracia y después durmiendo, contando desde
   const used = classifyExclusive(row({ orders_since: 0, dispatched_since: 2, held_days: 1, days_since: 6, active_before: 7 }));
   assert.equal(used.never, false);
   assert.equal(used.state, "stopped");
+  // una salida sin ningún pedido que cuente (cancelado): sigue sin estrenar, con su gracia
+  assert.equal(classifyExclusive(row({ orders_since: 0, dispatched_since: 1, held_days: 1, days_since: null })).state, "fresh");
+});
+
+test("lo pedía hasta poco antes de apartarlo: no es recién privatizado, avisa al primer día sin pedidos", () => {
+  // se le acabó el 30 oct, Drop repuso el 1 nov y no volvió a pautar (hoy 3 nov)
+  const restock = classifyExclusive(row({ orders_since: 0, dispatched_since: 0, held_days: 2, days_since: 4, active_before: 7 }));
+  assert.equal(restock.never, false);
+  assert.equal(restock.state, "stopped");
+  assert.equal(restock.priority, 1);
+  assert.equal(idleText(restock), "3 días sin pedidos");
+  // lo pedía a diario del stock general, lo privatizó el 1 nov y paró
+  const priv = classifyExclusive(row({ orders_since: 0, dispatched_since: 0, held_days: 2, days_since: 2, active_before: 7 }));
+  assert.equal(priv.state, "stopped");
+  assert.equal(idleText(priv), "1 día sin pedidos");
+  // lo vendió hace meses y lo vuelve a privatizar: eso sí es recién privatizado
+  assert.equal(classifyExclusive(row({ orders_since: 0, held_days: 2, days_since: 40 })).state, "fresh");
 });
 
 test("sin la reserva guardada no se sabe cuándo lo privatizó: ni gracia ni 'sin estrenar', se mira su último pedido", () => {
@@ -146,7 +163,7 @@ test("estado de la tienda cuando nada avisa: el del producto con más unidades, 
   assert.equal(few.worst, null);
   assert.equal(leadItem(few).state, "stopped");
   assert.equal(stateText(few), "Dejó de pautar (no avisa: menos de 5 u.)");
-  assert.equal(stateText(store([{ units: 60, orders_since: 0, held_days: 1 }])), "Recién privatizado");
+  assert.equal(stateText(store([{ units: 60, orders_since: 0, held_days: 1, days_since: null }])), "Recién privatizado");
   // 2 u. sueltas no tapan 36 u. que se venden
   assert.equal(stateText(store([{ units: 36, days_since: 0 }, { units: 2, days_since: 6 }])), "Al día");
   const innova = [...privatizedByStore(real).values()].find((s) => s.store_name === "Innova Life")!;
