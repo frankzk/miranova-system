@@ -4,10 +4,11 @@
 --   units:           saldo privatizado (último movimiento EXCLUSIVE de cada variante, como inventory_status)
 --   since/held_days: desde cuándo lo tiene apartado sin que el saldo vuelva a 0 (un 0 de menos de un
 --                    día no cuenta: al ajustar una solicitud Drop libera y vuelve a apartar en segundos)
+--   since_known:     ese inicio es la reserva desde 0 que mandó Drop. Si no la tenemos guardada (el
+--                    historial tiene huecos) since es solo lo más antiguo que vemos de ese apartado
+--   dispatched_since: salidas de ese stock (pedidos despachados) desde ese inicio
 --   last_at/last_day/days_since: su último pedido (no cancelado) de ese producto y días desde ese día local
---   orders_since:    pedidos de ese producto desde que lo privatizó (0 = no lo estrenó). Si falta guardado
---                    el movimiento que lo apartó y el primero que tenemos es una salida de ese stock,
---                    desde el pedido que despachó (no lo deja fuera)
+--   orders_since:    pedidos de ese producto hechos desde ese inicio
 --   n7:              pedidos de ese producto en los últimos 7 días (con hoy)
 --   n14_before/active_before: pedidos en los 14 días y días con pedidos en los 7 días que terminan en su
 --                    último pedido (el ritmo que llevaba antes de frenarse)
@@ -26,12 +27,8 @@ returns jsonb language sql stable as $$
       greatest(coalesce(s.balance, 0), 0) as balance,
       -- saldo antes del movimiento según Drop: no depende de tener guardado el movimiento anterior
       case when jsonb_typeof(s.raw->'previousQty') = 'number' then greatest((s.raw->>'previousQty')::numeric, 0) end as prev_qty,
-      s.occurred_at, s.number, s.external_id,
-      -- desde cuándo contar pedidos si el apartado empieza aquí: una salida de ese stock lleva detrás un
-      -- pedido hecho antes (orders.external_id = número del pedido)
-      least(s.occurred_at, o.ordered_at) as orders_anchor
+      s.occurred_at, s.number, s.external_id, s.reason
     from public.stock_movements s join a on a.id = s.account_id
-    left join public.orders o on s.reason = 'DISPATCH' and o.account_id = s.account_id and o.external_id = s.order_number
     where s.raw->>'scope' = 'EXCLUSIVE' and s.raw->'seller'->>'id' is not null
   ),
   -- movimiento anterior guardado de la misma variante (con la misma hora, el id de Drop da el orden)
@@ -52,22 +49,30 @@ returns jsonb language sql stable as $$
         and (prev_at is null or occurred_at - prev_at >= interval '1 day') as is_start
     from xseq x
   ),
-  -- por variante: saldo actual (último movimiento) y desde cuándo lo tiene apartado (sin un inicio
-  -- claro, desde el primer movimiento guardado con saldo). Sus pedidos se cuentan desde ese mismo
-  -- movimiento o, si es una salida (falta guardada la reserva), desde el pedido que despachó
+  -- inicio del apartado actual de cada variante: el último inicio (sin uno claro, el primer movimiento
+  -- guardado con saldo) y si ese inicio es la reserva desde 0 que mandó Drop (si no, no lo sabemos)
+  xhold as (
+    select x.*,
+      coalesce(max(occurred_at) filter (where is_start) over v, min(occurred_at) filter (where balance > 0) over v) as hold_since,
+      coalesce((array_agg(coalesce(prev_qty, 0) = 0) filter (where is_start)
+        over (v order by occurred_at desc, external_id desc rows between unbounded preceding and unbounded following))[1], false) as hold_known
+    from xstart x
+    window v as (partition by account_id, product_external_id, seller_id, variant)
+  ),
+  -- por variante: saldo actual (último movimiento), inicio del apartado y salidas de ese stock desde entonces
   xvar as (
     select account_id, product_external_id, seller_id, variant,
       max(balance) filter (where rn = 1) as units,
-      coalesce(max(occurred_at) filter (where is_start), min(occurred_at) filter (where balance > 0)) as since,
-      coalesce(
-        (array_agg(orders_anchor order by occurred_at desc, external_id desc) filter (where is_start))[1],
-        (array_agg(orders_anchor order by occurred_at, external_id) filter (where balance > 0))[1]) as orders_from
-    from xstart group by 1, 2, 3, 4
+      min(hold_since) as since,
+      bool_and(hold_known) as since_known,
+      count(*) filter (where reason = 'DISPATCH' and occurred_at >= hold_since) as dispatched
+    from xhold group by 1, 2, 3, 4
   ),
   held as (
     select account_id, product_external_id, seller_id, sum(units)::int as units,
       min(since) filter (where units > 0) as since,
-      min(orders_from) filter (where units > 0) as orders_from
+      coalesce(bool_and(since_known) filter (where units > 0), false) as since_known,
+      coalesce(sum(dispatched) filter (where units > 0), 0)::int as dispatched_since
     from xvar group by 1, 2, 3
     having sum(units) > 0
   ),
@@ -85,14 +90,14 @@ returns jsonb language sql stable as $$
     from held h
     join a on a.id = h.account_id
     join public.orders o on o.account_id = h.account_id and o.store_id = h.seller_id
-      and o.ordered_at >= least(h.orders_from, now() - interval '180 days')
+      and o.ordered_at >= least(h.since, now() - interval '180 days')
     join public.order_items i on i.order_id = o.id and i.product_external_id = h.product_external_id
     where public.status_group(o.status_code) is distinct from 'cancelled'
   ),
   pagg as (
     select p.account_id, p.product_external_id, p.seller_id,
       max(p.d) as last_day, max(p.ordered_at) as last_at,
-      count(distinct p.id) filter (where p.ordered_at >= h.orders_from) as orders_since,
+      count(distinct p.id) filter (where p.ordered_at >= h.since) as orders_since,
       count(distinct p.id) filter (where p.d > a.today - 7) as n7,
       -- ritmo que llevaba: pedidos y días con pedidos en los 14 / 7 días que terminan en su último pedido
       count(distinct p.id) filter (where p.d > p.lday - 14) as n14_before,
@@ -115,7 +120,7 @@ returns jsonb language sql stable as $$
     select h.account_id, a.name as account_name, a.today,
       h.seller_id as store_id, coalesce(so.dropshipper, n.name, h.seller_id) as store_name,
       h.product_external_id, coalesce(pr.name, h.product_external_id) as product_name, pr.code as product_code,
-      h.units, h.since, a.today - (h.since at time zone a.timezone)::date as held_days,
+      h.units, h.since, a.today - (h.since at time zone a.timezone)::date as held_days, h.since_known, h.dispatched_since,
       g.last_at, g.last_day, a.today - g.last_day as days_since,
       coalesce(g.orders_since, 0) as orders_since, coalesce(g.n7, 0) as n7,
       coalesce(g.n14_before, 0) as n14_before, coalesce(g.active_before, 0) as active_before,

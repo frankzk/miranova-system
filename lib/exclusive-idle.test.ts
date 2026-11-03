@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { describeAlert } from "./alerts.ts";
 import {
-  alertingStores, byUrgency, cellText, classifyExclusive, coverText, exclusiveAlerts, idleStoreRow, idleText, insertOp, leadItem, normalizeExclusive,
+  alertingStores, byUrgency, cellText, classifyExclusive, coverText, exclusiveAlerts, idleStoreRow, idleText, insertOp, itemAction, leadItem, normalizeExclusive,
   privatizedByStore, privatizedOp, stateText, storeContext,
   type ExclusiveIdleRow,
 } from "./exclusive-idle.ts";
@@ -16,7 +16,7 @@ const day = (d: number) => new Date(Date.parse(TODAY) - d * 86_400_000).toISOStr
 
 const row = (p: Partial<ExclusiveIdleRow>): ExclusiveIdleRow => ({
   account_id: HN, account_name: NAMES[p.account_id ?? HN], today: TODAY, store_id: "s1", store_name: "Tienda", product_external_id: "p1",
-  product_name: "Producto", product_code: null, units: 50, since: null, held_days: 30, last_at: null,
+  product_name: "Producto", product_code: null, units: 50, since: null, held_days: 30, since_known: true, dispatched_since: 0, last_at: null,
   last_day: p.days_since === null || p.days_since === undefined ? null : day(p.days_since),
   days_since: 1, orders_since: 10, n7: 5, n14_before: 14, active_before: 5, store_last_at: null, store_days_since: 1, movements_sync_at: null,
   ...p,
@@ -24,11 +24,11 @@ const row = (p: Partial<ExclusiveIdleRow>): ExclusiveIdleRow => ({
 
 // Producción, 3 nov 2026 (exclusive_idle): tienda, producto, unidades, días desde su último pedido,
 // pedidos desde que lo privatizó, pedidos en las 2 semanas antes de frenarse, días activos antes, días
-// desde el último pedido de la tienda y días que lo lleva apartado (un 0 de menos de un día, como el
-// que deja Drop al ajustar una solicitud, no corta el apartado: GREEN PHARMA y Vitalo sí lo vendieron;
-// a Trendyhaus le falta guardado el movimiento que lo apartó: apartado desde el primero con saldo,
-// 15 oct, una salida de ese stock; sus pedidos, desde el pedido que despachó, para no dejarlo fuera)
-const REAL: [string, string, string, number, number | null, number, number, number, number | null, number][] = [
+// desde el último pedido de la tienda, días que lo lleva apartado y (si es false) que falta guardada la
+// reserva. Un 0 de menos de un día, como el que deja Drop al ajustar una solicitud, no corta el
+// apartado: GREEN PHARMA y Vitalo sí lo vendieron. A Trendyhaus le falta la reserva: lo más antiguo que
+// vemos de su apartado es una salida del 15 oct, así que no se sabe cuándo lo privatizó
+const REAL: [string, string, string, number, number | null, number, number, number, number | null, number, boolean?][] = [
   [SV, "Easy_SV", "BRASIER SIN AROS", 254, 28, 9, 9, 3, 2, 33],
   [SV, "GREEN PHARMA SV", "Drenaje Linfático", 66, 38, 19, 37, 7, 19, 41],
   [SV, "Nexuss LLC SV", "Drenaje Linfático", 3, 1, 46, 14, 5, 1, 36],
@@ -43,7 +43,7 @@ const REAL: [string, string, string, number, number | null, number, number, numb
   [HN, "Innova Life", "Cinturón sin Hebilla", 31, 0, 90, 41, 7, 0, 26],
   [HN, "Innova Life", "Set de Pelador", 12, 0, 138, 158, 7, 0, 12],
   [HN, "Nutralix", "DRENAJE LINFÁTICO", 288, 4, 4, 59, 2, 4, 12],
-  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 25, 21, 6, 2, 19],
+  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 24, 21, 6, 2, 19, false],
   [HN, "Velora Honduras", "DRENAJE LINFÁTICO", 275, 5, 393, 82, 4, 4, 33],
   [HN, "Velora Honduras", "AutoGrip 360", 157, 42, 30, 2, 1, 4, 67],
   [HN, "ZONAHN", "THYROID SUPPORT", 289, 13, 8, 8, 4, 6, 20],
@@ -53,8 +53,8 @@ const REAL: [string, string, string, number, number | null, number, number, numb
   [HN, "ZONAHN", "Flycleanse", 131, 66, 41, 8, 2, 6, 89],
   [HN, "ZONAHN", "Sovexa Cayenne", 2, 6, 177, 165, 7, 6, 20],
 ];
-const real = REAL.map(([account_id, store_name, product_name, units, days_since, orders_since, n14_before, active_before, store_days_since, held_days]) =>
-  row({ account_id, store_id: store_name, store_name, product_external_id: product_name, product_name, units, days_since, orders_since, n14_before, active_before, store_days_since, held_days }));
+const real = REAL.map(([account_id, store_name, product_name, units, days_since, orders_since, n14_before, active_before, store_days_since, held_days, since_known = true]) =>
+  row({ account_id, store_id: store_name, store_name, product_external_id: product_name, product_name, units, days_since, orders_since, n14_before, active_before, store_days_since, held_days, since_known }));
 
 const item = (store: string, product: string) => classifyExclusive(real.find((r) => r.store_name === store && r.product_name === product)!);
 
@@ -81,6 +81,27 @@ test("lo que no estrenó: 3 días de gracia y después durmiendo, contando desde
   assert.equal(idleText(asleep), "no lo vende desde que lo privatizó hace 3 días");
   // nunca tuvo pedidos de ese producto
   assert.equal(classifyExclusive(row({ orders_since: 0, held_days: 10, days_since: null })).state, "sleeping");
+  // ya despachó de ese stock (un pedido hecho antes de apartarlo): lo usa, se mira su último pedido
+  const used = classifyExclusive(row({ orders_since: 0, dispatched_since: 2, held_days: 1, days_since: 6, active_before: 7 }));
+  assert.equal(used.never, false);
+  assert.equal(used.state, "stopped");
+});
+
+test("sin la reserva guardada no se sabe cuándo lo privatizó: ni gracia ni 'sin estrenar', se mira su último pedido", () => {
+  // historial cortado: lo más antiguo que vemos es de hace 1 día, pero lo tenía de antes
+  const cut = classifyExclusive(row({ since_known: false, orders_since: 0, held_days: 1, days_since: 6, active_before: 7 }));
+  assert.equal(cut.never, false);
+  assert.equal(cut.state, "stopped");
+  assert.equal(cut.priority, 1);
+  assert.equal(idleText(cut), "5 días sin pedidos");
+  // y sin ningún pedido de ese producto en 6 meses
+  const none = classifyExclusive(row({ since_known: false, orders_since: 0, held_days: 40, days_since: null }));
+  assert.equal(none.state, "sleeping");
+  assert.equal(none.never, false);
+  assert.equal(idleText(none), "sin pedidos en 6 meses");
+  assert.match(itemAction(none), /moverlo o liberar/);
+  // la de producción: sigue avisando por su último pedido
+  assert.equal(item("Trendyhaus", "DRENAJE LINFÁTICO").state, "stopped");
 });
 
 test("prioridad: contactar hoy solo si lo vendía seguido; durmiendo según lo apartado; menos de 5 u. no avisa", () => {
@@ -223,6 +244,11 @@ test("normaliza enteros que llegan como texto", () => {
   assert.equal(r.units, 12);
   assert.equal(r.days_since, 3);
   assert.equal(r.held_days, null);
+  // sin los campos nuevos (datos viejos): inicio conocido y sin salidas
+  const [old] = normalizeExclusive([{ units: 5 }]);
+  assert.equal(old.since_known, true);
+  assert.equal(old.dispatched_since, 0);
+  assert.equal(normalizeExclusive([{ since_known: false, dispatched_since: "4" as unknown as number }])[0].dispatched_since, 4);
 });
 
 test("el aviso de lo privatizado no le quita el primer lugar a una caída de la tienda", () => {

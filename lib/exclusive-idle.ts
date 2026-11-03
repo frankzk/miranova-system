@@ -25,12 +25,19 @@ export type ExclusiveIdleRow = {
   /** desde cuándo lo tiene apartado (sin que el saldo vuelva a 0) */
   since: string | null;
   held_days: number | null;
+  /**
+   * `since` es la reserva desde 0 que mandó Drop. Si no (falta guardada: el historial de movimientos
+   * tiene huecos), es solo lo más antiguo que vemos de ese apartado y no se sabe cuándo lo privatizó
+   */
+  since_known: boolean;
+  /** salidas de ese stock (pedidos despachados) desde `since` */
+  dispatched_since: number;
   /** su último pedido (no cancelado) de ese producto */
   last_at: string | null;
   last_day: string | null;
   /** días entre ese día y hoy (0 = hoy, 1 = ayer) */
   days_since: number | null;
-  /** pedidos de ese producto desde que lo privatizó */
+  /** pedidos de ese producto hechos desde `since` */
   orders_since: number;
   /** pedidos de ese producto en los últimos 7 días */
   n7: number;
@@ -61,6 +68,8 @@ export const EXCLUSIVE_RULES = {
   graceDays: 3,
   /** días completos sin pedidos para pasar de "Dejó de pautar" a "Durmiendo" */
   sleepingDays: 7,
+  /** días de pedidos que se miran (sin pedidos en ese tiempo: "sin pedidos en 6 meses") */
+  windowDays: 180,
   /** días con pedidos en la semana antes de frenarse para "contactar hoy" (vendía seguido) */
   regularDays: 4,
   /** durmiendo con esto o más: esta semana; con menos: cuando haya tiempo */
@@ -71,7 +80,10 @@ export type ExclusiveItem = ExclusiveIdleRow & {
   state: ExclusiveState;
   /** días completos sin pedidos de ese producto, sin contar hoy (si no lo estrenó, desde que lo privatizó) */
   idle_days: number;
-  /** no lo vendió desde que lo privatizó */
+  /**
+   * no lo vendió desde que lo privatizó: sin pedidos ni salidas de ese stock desde la reserva. Solo
+   * si se sabe cuándo lo privatizó; si no, se mira su último pedido como a las demás
+   */
   never: boolean;
   /** avisa: dejó de pautar o durmiendo, con al menos `minUnits` apartadas */
   alert: boolean;
@@ -89,6 +101,8 @@ export function normalizeExclusive(rows: Partial<ExclusiveIdleRow>[]): Exclusive
     ...(r as ExclusiveIdleRow),
     units: Number(r.units ?? 0),
     held_days: num(r.held_days),
+    since_known: r.since_known !== false,
+    dispatched_since: Number(r.dispatched_since ?? 0),
     days_since: num(r.days_since),
     orders_since: Number(r.orders_since ?? 0),
     n7: Number(r.n7 ?? 0),
@@ -100,13 +114,17 @@ export function normalizeExclusive(rows: Partial<ExclusiveIdleRow>[]): Exclusive
 
 export function classifyExclusive(r: ExclusiveIdleRow): ExclusiveItem {
   const R = EXCLUSIVE_RULES;
-  const never = r.orders_since === 0;
+  const never = r.since_known && r.orders_since === 0 && r.dispatched_since === 0;
   let state: ExclusiveState;
   let idle: number;
   if (never) {
     const held = r.held_days ?? 0;
     idle = Math.max(0, held - 1);
     state = held < R.graceDays ? "fresh" : "sleeping";
+  } else if (r.days_since === null) {
+    // ningún pedido de ese producto en lo que se mira
+    idle = R.windowDays;
+    state = "sleeping";
   } else {
     idle = Math.max(0, (r.days_since ?? 0) - 1);
     state = idle === 0 ? "ok" : idle >= R.sleepingDays ? "sleeping" : "stopped";
@@ -192,6 +210,7 @@ export function idleText(i: ExclusiveItem): string {
   if (i.state === "fresh") return i.held_days === 0 ? "lo privatizó hoy" : `lo privatizó hace ${plural(i.held_days ?? 0, "día", "días")}`;
   if (i.never) return `no lo vende desde que lo privatizó hace ${plural(i.held_days ?? 0, "día", "días")}`;
   if (i.state === "ok") return i.days_since === 0 ? "con pedidos hoy" : "con pedidos ayer";
+  if (i.days_since === null) return "sin pedidos en 6 meses";
   return `${plural(i.idle_days, "día", "días")} sin pedidos`;
 }
 

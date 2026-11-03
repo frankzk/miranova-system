@@ -77,8 +77,12 @@ export function PrivatizedSection({ x, tz }: { x: StoreExclusive; tz: string }) 
               <StatePill i={i} />
             </div>
             <div className="px-facts">
-              <span><b>{fmtInt(i.units)} u.</b> apartadas{i.held_days !== null && <> hace {fmtInt(i.held_days)} {i.held_days === 1 ? "día" : "días"}</>}</span>
-              <span>{idleText(i)} · {lastOrderText(i)}</span>
+              <span>
+                <b>{fmtInt(i.units)} u.</b> apartadas
+                {/* sin la reserva guardada solo se sabe que ya las tenía en el movimiento más antiguo que vemos */}
+                {i.held_days !== null && <> hace {i.since_known ? "" : "al menos "}{fmtInt(i.held_days)} {i.held_days === 1 ? "día" : "días"}</>}
+              </span>
+              <span>{idleText(i)}{(i.last_day || i.never) && <> · {lastOrderText(i)}</>}</span>
               {i.n14_before > 0 && (
                 <span>
                   Llevaba {pace(i.n14_before)}
