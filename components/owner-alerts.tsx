@@ -4,7 +4,8 @@ import { describeAlert, visibleAlerts, type AlertAccess, type OwnerAlerts } from
 import { fmtInt } from "@/lib/format";
 
 /**
- * Bloque "Atención del dueño": máximo 10 hallazgos del día, del más grave al menos grave.
+ * Bloque "Atención del dueño": máximo 10 hallazgos del día de la base (más uno por cuenta con su
+ * privatizado sin pautar), del más grave al menos grave.
  * Se filtra en el servidor según los permisos del usuario (montos de liquidación y enlaces).
  */
 export function OwnerAlertsPanel({ data: all, tz, access }: { data: OwnerAlerts; tz: string; access: AlertAccess }) {

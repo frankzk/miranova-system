@@ -7,7 +7,9 @@ export type AlertKind =
   | "account_stalled" | "account_drop" | "account_growth"
   | "store_inactive" | "store_drop"
   | "product_growth" | "stock_rejections" | "product_delivery"
-  | "stuck_orders" | "carrier_delivery" | "unpaid_late";
+  | "stuck_orders" | "carrier_delivery" | "unpaid_late"
+  // calculada en el panel (lib/exclusive-idle.ts), no en owner_alerts
+  | "exclusive_idle";
 
 export type OwnerAlert = {
   kind: AlertKind;
@@ -33,16 +35,18 @@ export type AlertView = {
 };
 
 /** Qué secciones puede ver quien mira las alertas: decide montos y enlaces. */
-export type AlertAccess = { money: boolean; orders: boolean; products: boolean };
-const ALL: AlertAccess = { money: true, orders: true, products: true };
+export type AlertAccess = { money: boolean; orders: boolean; products: boolean; stores: boolean };
+const ALL: AlertAccess = { money: true, orders: true, products: true, stores: true };
 
 /**
- * Deja solo las alertas que el usuario puede ver: sin Dinero no ve "sin liquidar".
+ * Deja solo las alertas que el usuario puede ver: sin Dinero no ve "sin liquidar" y sin Tiendas no
+ * ve lo privatizado sin pautar.
  * El total se recalcula para que "X de Y hallazgos" no delate las ocultas.
  */
 export function visibleAlerts(data: OwnerAlerts, access: AlertAccess): OwnerAlerts {
-  if (access.money) return data;
-  const alerts = data.alerts.filter((a) => a.kind !== "unpaid_late");
+  if (access.money && access.stores) return data;
+  const hidden = (a: OwnerAlert) => (!access.money && a.kind === "unpaid_late") || (!access.stores && a.kind === "exclusive_idle");
+  const alerts = data.alerts.filter((a) => !hidden(a));
   return { total: Math.max(alerts.length, data.total - (data.alerts.length - alerts.length)), alerts };
 }
 
@@ -148,5 +152,20 @@ export function describeAlert(a: OwnerAlert, tz?: string, access: AlertAccess = 
         detail: `${fmtInt(num(d.orders))} pedidos entregados hace más de 3 días que la plataforma aún no paga.`,
         href: inAccount(a.account_id, "/money"),
       };
+    case "exclusive_idle": {
+      const stores = num(d.stores);
+      const stopped = num(d.stopped);
+      const names = Array.isArray(d.names) ? d.names.map(str).filter(Boolean) : [];
+      const more = stores - names.length;
+      const tiendas = (n: number) => `${fmtInt(n)} ${n === 1 ? "tienda" : "tiendas"}`;
+      return {
+        ...base,
+        title: stopped
+          ? `${a.account}: ${tiendas(stopped)} ${stopped === 1 ? "dejó" : "dejaron"} de pautar su producto privatizado`
+          : `${a.account}: ${tiendas(stores)} con su producto privatizado durmiendo`,
+        detail: `${fmtInt(num(d.units))} u. privatizadas sin pedidos en ${tiendas(stores)}${names.length ? `: ${names.join(", ")}${more > 0 ? ` y ${fmtInt(more)} más` : ""}` : ""}.`,
+        href: access.stores ? inAccount(a.account_id, "/stores?px=1") : "",
+      };
+    }
   }
 }

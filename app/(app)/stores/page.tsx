@@ -3,6 +3,7 @@ import { AccountChips } from "@/components/account-chips";
 import { ColumnFilter, type FilterOption } from "@/components/column-filter";
 import { GetForm } from "@/components/client";
 import { ContactQuick } from "@/components/contact-quick";
+import { PrivatizedCell, PrivatizedSection } from "@/components/privatized";
 import { IconChat, IconDownload } from "@/components/icons";
 import { StoreDrawerLink } from "@/components/store-drawer-link";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
@@ -11,6 +12,10 @@ import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
+import {
+  alertingStores, byUrgency, EXCLUSIVE_RULES, idleStoreRow, insertOp, privatizedByStore, privatizedOp, type ExclusiveOp, type StoreExclusive,
+} from "@/lib/exclusive-idle";
+import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
@@ -25,6 +30,7 @@ import {
 } from "@/lib/stores";
 import { StoresSubnav } from "@/components/stores-subnav";
 import { loadDrawer, parseFicha, StoreDrawerSlot } from "./store-drawer-panel";
+import "./privatized.css";
 
 export const metadata = { title: "Salud de tiendas" };
 
@@ -53,11 +59,16 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   // cifras salen de store_period, y el estado, los avisos y "Contactar hoy" siguen mirando la semana
   const pc = storePeriodChoice(sp, scope.tz);
   const { range, custom, days } = pc;
-  const [healthRows, contacts, followups, period] = await Promise.all([
+  const [healthRows, contacts, followups, period, exclusive] = await Promise.all([
     storeHealth(scope.account),
     contactIndex(),
     followupIndex(),
     custom ? storePeriod({ account: scope.account, from: range.from, to: range.to, prevFrom: pc.prev.from, prevTo: pc.prev.to }) : null,
+    // lo privatizado a cada tienda: si falla, la página se ve igual sin esa columna
+    exclusiveIdle(scope.account).catch((e) => {
+      console.error("exclusive_idle", e);
+      return [];
+    }),
   ]);
   const all = period ? withPeriodStores(healthRows, period) : healthRows;
   // lo que muestra y ordena la tabla (las cifras del período); el estado se mira siempre en la fila de salud
@@ -66,10 +77,20 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const base = (s: StoreRow) => byKey.get(storeKey(s)) ?? s;
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
+  // pestaña "Privatizado sin pautar" (?px=1): tiendas con stock privatizado que dejaron de pedir ese
+  // producto. Sin nada privatizado (o si no se pudo leer) la pestaña no existe y ?px=1 no filtra
+  const pxBy = privatizedByStore(exclusive);
+  const hasPx = pxBy.size > 0;
+  const px = one(sp, "px") === "1" && hasPx;
+  const pxOf = (s: { account_id: string; store_id: string }): StoreExclusive | undefined => pxBy.get(storeKey(s));
   const hParam = one(sp, "h");
-  const h = hParam && hParam in HEALTH ? (hParam as Health) : undefined;
+  const h = !px && hParam && hParam in HEALTH ? (hParam as Health) : undefined;
   const sParam = one(sp, "sort");
-  const sort: StoreSort = sParam && sParam in STORE_SORTS ? (sParam as StoreSort) : "d7_desc";
+  const sorted = !!sParam && sParam in STORE_SORTS;
+  const sort: StoreSort = sorted ? (sParam as StoreSort) : "d7_desc";
+  // en esa pestaña, sin orden elegido va la más urgente primero ("más pedidos" se puede elegir)
+  const urgent = px && !sorted;
+  const sortParam = urgent || (!px && sort === "d7_desc") ? undefined : sort;
   // filtro por grupo de WhatsApp registrado (con / sin)
   const gParam = one(sp, "g");
   const g = gParam === "con" || gParam === "sin" ? gParam : undefined;
@@ -82,10 +103,19 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const withGroup = found.filter((s) => groupOf(s)).length;
 
   const health = new Map(all.map((s) => [storeKey(s), classify(s)]));
-  const healthOf = (s: StoreRow) => health.get(storeKey(s))!;
+  const healthOf = (s: StoreRow) => health.get(storeKey(s)) ?? "inactive";
   const pool = found.filter(byGroup);
   const counts = Object.fromEntries(HEALTH_ORDER.map((k) => [k, pool.filter((s) => healthOf(s) === k).length]));
-  const rows = sortStores(pool.filter((s) => !h || healthOf(s) === h).map(view), sort);
+  // las que avisan; las que no salen en Salud (sin pedidos en 60 días) entran solo en esta pestaña, sin ventas
+  const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
+  const pxAlerting = alertingStores(pxBy);
+  const pxPool = filterStores(
+    pxAlerting.map((x) => byKey.get(x.key) ?? idleStoreRow(x, currencyOf.get(x.account_id) ?? "USD")),
+    { keys: picked, q },
+  ).filter(byGroup);
+  const rows = px
+    ? urgent ? byUrgency(pxPool.map(view), pxAlerting) : sortStores(pxPool.map(view), sort)
+    : sortStores(pool.filter((s) => !h || healthOf(s) === h).map(view), sort);
   const typical = typicalTickets(all);
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
   const contact = toContact(all);
@@ -100,7 +130,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { q, h, g, sort: sort === "d7_desc" ? undefined : sort, ...periodParams(pc), ...patch };
+    const merged = { q, h, g, px: px ? "1" : undefined, sort: sortParam, ...periodParams(pc), ...patch };
     for (const [k, v] of Object.entries(merged)) if (v && k !== "t") p.set(k, v);
     // las tiendas elegidas se conservan salvo que el cambio las quite ({ t: undefined })
     if (!("t" in patch)) for (const k of picked) p.append("t", k);
@@ -119,6 +149,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   // los otros filtros, para que elegir un período no los pierda
   const withoutPeriod = { r: undefined, from: undefined, to: undefined };
   const keep = [...new URLSearchParams(qs(withoutPeriod)).entries()];
+  // sin orden elegido: "más pedidos" (en la pestaña de lo privatizado, la más urgente primero)
   const sortCol = (label: string, keys: StoreSort[], align: "left" | "right" = "right", title?: string) => (
     <ColumnFilter
       path="/stores"
@@ -126,9 +157,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       param="sort"
       align={align}
       query={qs({ sort: undefined })}
-      current={keys.includes(sort) && sort !== "d7_desc" ? sort : undefined}
-      allLabel={sortLabel("d7_desc", periodShort)}
-      options={keys.filter((k) => k !== "d7_desc").map((k): FilterOption => ({ value: k, label: sortLabel(k, periodShort) }))}
+      current={sortParam && keys.includes(sortParam) ? sortParam : undefined}
+      allLabel={px ? "Más urgente primero" : sortLabel("d7_desc", periodShort)}
+      options={keys.filter((k) => px || k !== "d7_desc").map((k): FilterOption => ({ value: k, label: sortLabel(k, periodShort) }))}
       title={title}
     />
   );
@@ -136,6 +167,19 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   // el nombre de la tienda abre su panel lateral (contacto y seguimiento); la ficha completa se abre desde ahí
   const fichaHref = (s: StoreRow) => href({ ficha: storeKey(s) });
   const fichaRow = ficha ? all.find((s) => s.account_id === ficha.accountId && s.store_id === ficha.storeId) ?? null : null;
+  const fichaPx = ficha ? pxOf({ account_id: ficha.accountId, store_id: ficha.storeId }) : undefined;
+  // avisos de la tienda con el de lo privatizado en su lugar según la prioridad (en la pestaña
+  // "Privatizado sin pautar" ese aviso ya va desglosado en su columna)
+  const opsOf = (s: StoreRow) => {
+    const x = px ? undefined : pxOf(s);
+    return insertOp(opportunities(base(s), typical[s.account_id], money(s)), x ? privatizedOp(x) : null);
+  };
+  // "Contactar hoy": además, hasta 3 tiendas que dejaron de pautar su privatizado y lo vendían seguido
+  const contactKeys = new Set(contact.map(storeKey));
+  const contactPx = pxAlerting
+    .filter((x) => x.priority === 1 && !contactKeys.has(x.key) && byKey.has(x.key))
+    .slice(0, 3)
+    .map((x) => ({ s: byKey.get(x.key)!, op: privatizedOp(x)! }));
   const today = todayIn(scope.tz);
   const followupNote = (s: StoreRow) => {
     const f = followups.get(contactKey(s));
@@ -177,8 +221,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       <div className="toolbar">
         <GetForm className="toolbar-search" role="search" action="/stores">
           {h && <input type="hidden" name="h" value={h} />}
+          {px && <input type="hidden" name="px" value="1" />}
           {g && <input type="hidden" name="g" value={g} />}
-          {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
+          {sortParam && <input type="hidden" name="sort" value={sortParam} />}
           {Object.entries(periodParams(pc)).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
           {/* key: al cambiar la búsqueda en la URL (Limpiar, pestañas) el buscador vuelve a empezar desde ella */}
           <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} unit={periodUnit(pc)} />
@@ -205,11 +250,13 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      {contact.length > 0 && !h && !g && !searching && (
+      {contact.length + contactPx.length > 0 && !h && !g && !px && !searching && (
         <section className="panel contact-today">
           <div className="panel-head">
             <h2>Contactar hoy</h2>
-            <span className="aside">Las que más pedidos dejaron de hacer esta semana</span>
+            <span className="aside">
+              {contactPx.length ? "Las que más pedidos dejaron de hacer esta semana y las que dejaron de pautar su privatizado" : "Las que más pedidos dejaron de hacer esta semana"}
+            </span>
           </div>
           <ul className="list-rows panel-flush">
             {contact.map((s) => {
@@ -229,28 +276,77 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 </li>
               );
             })}
+            {contactPx.map(({ s, op }) => (
+              <li key={`px:${s.account_id}:${s.store_id}`} className="row-qc">
+                <StoreDrawerLink href={fichaHref(s)} name={s.name}>
+                  <span className="t">{s.name}</span>
+                  <HealthPill h={healthOf(s)} />
+                  <span className="s">
+                    {fmtInt(s.prev7)} → {fmtInt(s.d7)} pedidos · {lastSale(s)}
+                    {showAccount && <> · {s.account_name}</>}
+                  </span>
+                  <span className="s reason">{op.text} → {op.action}</span>
+                </StoreDrawerLink>
+                <ContactQuick c={contacts.get(contactKey(s))} storeHref={fichaHref(s)} name={s.name} canEdit={canEdit} />
+              </li>
+            ))}
           </ul>
         </section>
       )}
 
       <nav className="tabs" aria-label="Filtrar por estado">
-        <Link href={href({ h: undefined })} aria-current={!h}>
+        <Link href={href({ h: undefined, px: undefined })} aria-current={!h && !px}>
           Todas <span className="c">{fmtInt(pool.length)}</span>
         </Link>
         {HEALTH_ORDER.map((k) => (
-          <Link key={k} href={href({ h: k })} aria-current={h === k} title={HEALTH[k].hint}>
+          <Link key={k} href={href({ h: k, px: undefined })} aria-current={h === k} title={HEALTH[k].hint}>
             <span className="dot" data-tone={HEALTH[k].tone} aria-hidden />
             {HEALTH[k].label} <span className="c">{fmtInt(counts[k] ?? 0)}</span>
           </Link>
         ))}
+        {hasPx && (
+          <Link
+            href={href({ h: undefined, px: "1" })}
+            aria-current={px}
+            className="px-tab"
+            title="Tiendas con stock privatizado que llevan al menos un día completo sin pedidos de ese producto, o que no lo venden desde que lo privatizaron"
+          >
+            <span className="dot" data-tone={pxAlerting.some((x) => x.worst?.state === "stopped") ? "danger" : pxAlerting.length ? "warning" : "success"} aria-hidden />
+            Privatizado sin pautar <span className="c">{fmtInt(pxPool.length)}</span>
+          </Link>
+        )}
       </nav>
+
+      {px && pxPool.length > 0 && (
+        <p className="px-summary">
+          {(() => {
+            const shown = pxPool.map((s) => pxOf(s)!).filter(Boolean);
+            const stopped = shown.filter((x) => x.alerts.some((i) => i.state === "stopped")).length;
+            const units = shown.reduce((t, x) => t + x.idle_units, 0);
+            return (
+              <>
+                <b>{fmtInt(units)} u. privatizadas sin pedidos</b> en {fmtInt(shown.length)} {shown.length === 1 ? "tienda" : "tiendas"}
+                {stopped > 0 && <> · {fmtInt(stopped)} {stopped === 1 ? "dejó" : "dejaron"} de pautar</>}
+                {shown.length - stopped > 0 && <> · {fmtInt(shown.length - stopped)} con su privatizado durmiendo</>}
+                . Contáctalas para ayudarlas a moverlo o liberar ese stock.
+              </>
+            );
+          })()}
+        </p>
+      )}
 
       <div className="table-wrap">
         {rows.length === 0 ? (
           <div className="empty">
-            <h3>{all.length === 0 ? "Aún no hay tiendas" : searching && pool.length === 0 ? (q ? `Ninguna tienda coincide con “${q}”` : "Ninguna de las tiendas elegidas en esta vista") : "Ninguna tienda en este estado"}</h3>
+            <h3>
+              {px
+                ? searching || g ? "Ninguna de estas tiendas tiene su privatizado sin pautar" : "Ninguna tienda tiene su privatizado sin pautar"
+                : all.length === 0 ? "Aún no hay tiendas" : searching && pool.length === 0 ? (q ? `Ninguna tienda coincide con “${q}”` : "Ninguna de las tiendas elegidas en esta vista") : "Ninguna tienda en este estado"}
+            </h3>
             <p>
-              {all.length === 0
+              {px
+                ? `Aquí salen las tiendas con ${EXCLUSIVE_RULES.minUnits} u. o más privatizadas que llevan al menos un día completo sin pedidos de ese producto, o que no lo venden desde que lo privatizaron.`
+                : all.length === 0
                 ? "Cuando lleguen órdenes con dropshipper en los últimos 60 días, aparecerán aquí."
                 : searching && pool.length === 0
                   ? q
@@ -276,6 +372,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <div><dt>Hoy</dt><dd>{fmtInt(s.today)}</dd></div>
                     <div><dt>{periodShort}</dt><dd>{fmtInt(s.d7)}</dd></div>
                     <div><dt>Ritmo/día</dt><dd>{(s.d7 / days).toFixed(1)}</dd></div>
+                    {pxOf(s) && <div className="px-dl"><dt>Privatizado</dt><dd><PrivatizedCell x={pxOf(s)} expanded={px} /></dd></div>}
                     <div><dt>Variación</dt><dd><Delta s={s} /></dd></div>
                     <div><dt>Días activos</dt><dd>{s.active7}/{days}</dd></div>
                     <div><dt>Ticket</dt><dd>{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</dd></div>
@@ -283,7 +380,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <div><dt>Productos</dt><dd>{fmtInt(s.skus30)}</dd></div>
                     <div><dt>Te toca</dt><dd>{s.vendor_per_order === null ? "—" : fmtMoney(s.vendor_per_order, s.currency)}</dd></div>
                   </dl>
-                  <Ops ops={opportunities(base(s), typical[s.account_id], money(s))} />
+                  <Ops ops={opsOf(s)} />
                 </li>
               ))}
             </ul>
@@ -296,6 +393,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                     <th className="r">{sortCol("Hoy", ["today_desc"])}</th>
                     <th className="r">{sortCol(periodShort, ["d7_desc", "d7_asc"], "right", `Pedidos ${periodLong}`)}</th>
                     <th className="r" title={`Pedidos por día, promedio ${periodLong}`}>Ritmo/día</th>
+                    {hasPx && <th className="px-col" title="Stock apartado solo para esa tienda y si sigue pidiendo ese producto. Mira el día de hoy, no cambia con el período.">Privatizado</th>}
                     <th className="r">{sortCol("Variación", ["drop", "rise"], "right", `Pedidos ${periodLong} ${vsPrev}`)}</th>
                     <th className="r">{sortCol("Días activos", ["active_desc", "active_asc"], "right", `Días con al menos un pedido, de ${days === 1 ? "1 día" : `${days} días`}`)}</th>
                     <th className="r">{sortCol("Ticket", ["ticket_desc", "ticket_asc"], "right", `Venta promedio por pedido, ${avgLong}`)}</th>
@@ -308,7 +406,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 </thead>
                 <tbody>
                   {rows.map((s) => {
-                    const ops = opportunities(base(s), typical[s.account_id], money(s));
+                    const ops = opsOf(s);
                     const dr = deliveryRate(s);
                     return (
                       <tr key={`${s.account_id}:${s.store_id}`}>
@@ -326,6 +424,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                         <td className="num">{fmtInt(s.today)}</td>
                         <td className="num strong">{fmtInt(s.d7)}</td>
                         <td className="num">{(s.d7 / days).toFixed(1)}</td>
+                        {hasPx && <td className="px-col" data-expanded={px || undefined}><PrivatizedCell x={pxOf(s)} expanded={px} /></td>}
                         <td className="num"><Delta s={s} /></td>
                         <td className="num"><Constancy n={s.active7} of={days} /></td>
                         <td className="num">{s.ticket === null ? "—" : fmtMoney(s.ticket, s.currency)}</td>
@@ -349,15 +448,24 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <StoreDrawerSlot
           ficha={ficha}
           data={drawerData}
+          name={fichaRow?.name ?? fichaPx?.store_name}
           row={fichaRow}
           typical={fichaRow ? typical[fichaRow.account_id] : null}
           closeHref={href({})}
           me={user.name}
           canOrders={can(user, "orders")}
           canEdit={canEdit}
+          extra={fichaPx ? <PrivatizedSection x={fichaPx} tz={scope.tz} /> : undefined}
         />
       )}
 
+      {hasPx && (
+        <p className="footnote">
+          Privatizado: unidades apartadas solo para esa tienda (movimientos de inventario de Drop). <b>Dejó de pautar</b>: lo venía pidiendo y ayer
+          pasó un día completo sin pedidos de ese producto. <b>Durmiendo</b>: 7 días o más sin pedidos, o no lo pide desde que lo privatizó (después de 3
+          días de gracia). Con menos de 5 u. apartadas no avisa. No cambia con el período elegido.
+        </p>
+      )}
       <p className="footnote">
         {custom ? (
           <>
@@ -434,12 +542,12 @@ function Spark({ days }: { days: number[] }) {
   );
 }
 
-function Ops({ ops }: { ops: Opportunity[] }) {
+function Ops({ ops }: { ops: (Opportunity | ExclusiveOp)[] }) {
   if (!ops.length) return null;
   return (
     <ul className="ops">
       {ops.map((o) => (
-        <li key={o.kind} data-kind={o.kind} title={o.action}>
+        <li key={o.kind} data-kind={o.kind} data-priority={o.priority} title={o.action}>
           {o.text} <span>→ {o.action}</span>
         </li>
       ))}

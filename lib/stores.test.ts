@@ -53,6 +53,10 @@ test("ordenar por mayor caída pesa los pedidos perdidos, y contactar hoy toma l
   const c = row({ name: "C", d7: 50, prev7: 40, active_prev7: 7, active7: 7 }); // crece
   assert.deepEqual(sortStores([b, c, a], "drop").map((s) => s.name), ["A", "B", "C"]);
   assert.deepEqual(toContact([c, b, a]).map((s) => s.name), ["A", "B"]);
+  // más días sin vender: una tienda sin ninguna venta va primero
+  const never = row({ name: "Nunca", days_since: null, d7: 0 });
+  const old = row({ name: "Hace 90", days_since: 90, d7: 0 });
+  assert.deepEqual(sortStores([old, a, never], "silent").map((s) => s.name), ["Nunca", "Hace 90", "A"]);
 });
 
 test("crecimiento fuerte, producto ganador y tienda de un solo producto", () => {
@@ -100,6 +104,12 @@ test("filtros de la URL de Salud de tiendas: los mismos para la página y el Exc
   const f = parseStoreFilters({ h: "alert", g: "con", q: " velora ", t: ["hn:1", "hn:1", " gt:2 "], sort: "ticket_desc" });
   assert.deepEqual(f, { h: "alert", g: "con", q: "velora", t: ["hn:1", "gt:2"], sort: "ticket_desc" });
   assert.deepEqual(parseStoreFilters({ h: "otra", g: "x", sort: "nada" }), { h: undefined, g: undefined, q: undefined, t: [], sort: "d7_desc" });
+  // pestaña "Privatizado sin pautar": no se combina con un estado
+  assert.deepEqual(parseStoreFilters({ px: "1", h: "alert", g: "sin" }), { h: undefined, g: "sin", q: undefined, t: [], sort: "d7_desc", px: true, urgent: true });
+  // en esa pestaña, "más pedidos" elegido a mano no es lo mismo que sin orden (la más urgente primero)
+  assert.equal(parseStoreFilters({ px: "1", sort: "d7_desc" }).urgent, false);
+  assert.equal(parseStoreFilters({ sort: "nada" }).urgent, undefined);
+  assert.equal(parseStoreFilters({ px: "0" }).px, undefined);
 
   const a = row({ account_id: "hn", store_id: "1", name: "Velora", d7: 3 });
   const b = row({ account_id: "hn", store_id: "2", name: "Nutralix", d7: 9 });

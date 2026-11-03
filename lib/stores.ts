@@ -188,7 +188,8 @@ export function sortStores(rows: StoreRow[], sort: StoreSort): StoreRow[] {
     vendor_desc: (s) => -nz(s.vendor_per_order, -Infinity),
     skus_desc: (s) => -s.skus30,
     skus_asc: (s) => s.skus30,
-    silent: (s) => -nz(s.days_since, -Infinity),
+    // sin ninguna venta (p. ej. una tienda con privatizado que nunca vendió): la que más lleva
+    silent: (s) => -nz(s.days_since, Infinity),
   };
   const k = key[sort];
   return [...rows].sort((a, b) => k(a) - k(b) || b.d7 - a.d7 || a.name.localeCompare(b.name, "es"));
@@ -231,7 +232,13 @@ export function toContact(rows: StoreRow[], limit = 5): StoreRow[] {
 }
 
 /** Filtros de la URL de Salud de tiendas (los mismos para la página y la exportación). */
-export type StoreFilters = { h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort };
+export type StoreFilters = {
+  h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort;
+  /** pestaña "Privatizado sin pautar" (?px=1): excluye el filtro por estado */
+  px?: boolean;
+  /** en esa pestaña, sin orden elegido: la más urgente primero (no "más pedidos") */
+  urgent?: boolean;
+};
 
 type Params = Record<string, string | string[] | undefined>;
 const first = (p: Params, k: string) => {
@@ -244,12 +251,15 @@ export function parseStoreFilters(p: Params): StoreFilters {
   const s = first(p, "sort");
   const g = first(p, "g");
   const t = p.t;
+  const px = first(p, "px") === "1";
+  const sorted = !!s && s in STORE_SORTS;
   return {
-    h: h && h in HEALTH ? (h as Health) : undefined,
+    h: !px && h && h in HEALTH ? (h as Health) : undefined,
     g: g === "con" || g === "sin" ? g : undefined,
     q: first(p, "q")?.slice(0, 80),
     t: [...new Set((Array.isArray(t) ? t : t ? [t] : []).map((x) => x.trim()).filter(Boolean))].slice(0, 50),
-    sort: s && s in STORE_SORTS ? (s as StoreSort) : "d7_desc",
+    sort: sorted ? (s as StoreSort) : "d7_desc",
+    ...(px ? { px, urgent: !sorted } : {}),
   };
 }
 

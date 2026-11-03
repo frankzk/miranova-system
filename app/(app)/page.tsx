@@ -10,6 +10,8 @@ import { listAccounts } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
 import { fmtInt, fmtLongDay, fmtMoney, fmtShort, todayIn } from "@/lib/format";
 import { attentionOrders, dashboardSummary, ownerAlerts, type RankRow } from "@/lib/queries";
+import { exclusiveAlerts, privatizedByStore } from "@/lib/exclusive-idle";
+import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { activeStores, orderGrowth } from "@/lib/overview";
 import { getScope } from "@/lib/scope";
 import { can } from "@/lib/permissions";
@@ -23,6 +25,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const [user, accounts] = await Promise.all([requireUser(), listAccounts()]);
   const canOrders = can(user, "orders");
   const canMoney = can(user, "money");
+  const canStores = can(user, "stores");
   const scope = await getScope(accounts);
 
   if (accounts.length === 0) return <Welcome canConnect={can(user, "accounts")} />;
@@ -31,7 +34,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const range = resolveRange(sp.r ?? sp.days, scope.tz, { from: sp.from, to: sp.to });
   const rq = rangeQuery(range);
   const here = rq ? `/?${rq}` : "/";
-  const [s, attention, alerts, overview, growth] = await Promise.all([
+  const [s, attention, dbAlerts, overview, growth, exclusive] = await Promise.all([
     dashboardSummary({ account: scope.account, from: range.from, to: range.to, tz: scope.tz, bucket: range.bucket }),
     // órdenes con problemas: datos del cliente, solo con permiso de Órdenes
     canOrders ? attentionOrders(scope.account) : null,
@@ -42,7 +45,19 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       console.error("order_growth", e);
       return null;
     }),
+    // tiendas que dejaron de pautar su producto privatizado (solo con permiso de Tiendas); si falla, Inicio sigue igual
+    canStores
+      ? exclusiveIdle(scope.account).catch((e) => {
+          console.error("exclusive_idle", e);
+          return [];
+        })
+      : [],
   ]);
+  // un aviso por cuenta con lo privatizado sin pautar, junto a los de la base, del más grave al menos grave
+  const exAlerts = exclusiveAlerts(privatizedByStore(exclusive), accounts);
+  const alerts = exAlerts.length
+    ? { total: dbAlerts.total + exAlerts.length, alerts: [...dbAlerts.alerts, ...exAlerts].sort((a, b) => a.severity - b.severity) }
+    : dbAlerts;
 
   const snap = s.snapshot;
   const periodOrders = s.daily.reduce((t, d) => t + d.orders, 0);
@@ -69,7 +84,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
       <AccountChips accounts={accounts} current={scope.account} next={here} />
 
-      <OwnerAlertsPanel data={alerts} tz={scope.tz} access={{ money: canMoney, orders: canOrders, products: can(user, "products") }} />
+      <OwnerAlertsPanel data={alerts} tz={scope.tz} access={{ money: canMoney, orders: canOrders, products: can(user, "products"), stores: canStores }} />
 
       <section className="metrics" aria-label="Resumen">
         <Metric href={canOrders ? "/orders?group=dispatch" : undefined}>
