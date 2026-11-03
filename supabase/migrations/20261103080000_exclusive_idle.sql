@@ -39,15 +39,15 @@ returns jsonb language sql stable as $$
     window w as (partition by account_id, product_external_id, seller_id, variant order by occurred_at, number nulls first, external_id)
   ),
   -- por variante: saldo actual (último movimiento) y desde cuándo lo tiene apartado. Empieza al pasar
-  -- de 0 a algo, salvo que haya estado en 0 menos de un día; si no hay ese paso guardado, desde el
-  -- primer movimiento que tenemos
+  -- de 0 a algo (según Drop, o porque lo último guardado era 0 y falta el movimiento que lo apartó),
+  -- salvo que haya estado en 0 menos de un día; si no, desde el primer movimiento guardado con saldo
   xvar as (
     select account_id, product_external_id, seller_id, variant,
       max(balance) filter (where rn = 1) as units,
       coalesce(
-        max(occurred_at) filter (where balance > 0 and coalesce(prev_qty, prev_balance, 0) = 0
+        max(occurred_at) filter (where balance > 0 and (coalesce(prev_qty, 0) = 0 or coalesce(prev_balance, 0) = 0)
           and (prev_at is null or occurred_at - prev_at >= interval '1 day')),
-        min(occurred_at)) as since
+        min(occurred_at) filter (where balance > 0)) as since
     from xseq group by 1, 2, 3, 4
   ),
   held as (
