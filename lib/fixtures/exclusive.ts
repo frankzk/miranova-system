@@ -16,6 +16,7 @@ const PLANS: Plan[][] = [
     { units: 2, days: 6, since: 50, held: 20, n14: 40, active: 7 },
   ],
   [{ units: 60, days: null, since: 0, held: 1, n14: 0, active: 0 }], // recién privatizado
+  [{ units: 3, days: 5, since: 20, held: 30, n14: 10, active: 3 }], // dejó de pautar, pero quedan 3 u.: no avisa
 ];
 
 function exclusiveIdle(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf, localDay }: FixtureCtx) {
@@ -38,13 +39,13 @@ function exclusiveIdle(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf, loc
     const products = CATALOG.filter((p) => p.account_id === acc.id);
     const top = [...stores].sort((a, b) => b[1].n - a[1].n).slice(0, PLANS.length);
     const list: [string, { n: number; last: string } | null, Plan[]][] = top.map(([name, s], i) => [name, s, PLANS[i]]);
-    // una tienda que ya no sale en Salud (sin pedidos en 60 días) y no estrenó lo que privatizó
-    if (acc === ACCOUNTS[0]) list.push(["Tienda Dormida", null, [{ units: 100, days: 111, since: 0, held: 34, n14: 136, active: 7 }]]);
+    // una tienda que privatizó stock y todavía no tiene ningún pedido (no sale en Salud ni tiene ficha)
+    if (acc === ACCOUNTS[0]) list.push(["Tienda Dormida", null, [{ units: 100, days: null, since: 0, held: 34, n14: 0, active: 0 }]]);
     list.forEach(([name, s, plans], si) => {
       // coherente con Salud: lo privatizado no puede tener pedidos más recientes que la tienda
-      const storeDays = s ? ago(s.last) : 97;
+      const storeDays = s ? ago(s.last) : null;
       plans.forEach((plan, pi) => {
-        const p = { ...plan, days: plan.days === null ? null : Math.max(plan.days, storeDays) };
+        const p = { ...plan, days: plan.days === null ? null : Math.max(plan.days, storeDays ?? 0) };
         const prod = products[(si * 3 + pi) % Math.max(1, products.length)];
         out.push({
           account_id: acc.id, account_name: acc.name, today,
@@ -54,7 +55,7 @@ function exclusiveIdle(args: Row, { ORDERS, ACCOUNTS, CATALOG, DAY, groupOf, loc
           since: iso(p.held), held_days: p.held,
           last_at: p.days === null ? null : iso(p.days), last_day: p.days === null ? null : dayOf(p.days), days_since: p.days,
           orders_since: p.since, n7: p.n7 ?? 0, n14_before: p.n14, active_before: p.active,
-          store_last_at: iso(storeDays), store_days_since: storeDays,
+          store_last_at: storeDays === null ? null : iso(storeDays), store_days_since: storeDays,
           movements_sync_at: iso(0.01),
         });
       });

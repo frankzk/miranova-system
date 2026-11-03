@@ -195,6 +195,12 @@ export function idleText(i: ExclusiveItem): string {
   return `${plural(i.idle_days, "día", "días")} sin pedidos`;
 }
 
+/** "le alcanzaba para ~17 días" al ritmo que llevaba (null si no tenía ritmo). */
+export function coverText(i: ExclusiveItem): string | null {
+  if (i.cover === null) return null;
+  return i.cover < 1 ? "le alcanzaba para menos de un día" : `le alcanzaba para ~${plural(i.cover, "día", "días")}`;
+}
+
 /** Último pedido de ese producto: "último pedido 1 nov" (o "sin pedidos en 6 meses"). */
 export function lastOrderText(i: ExclusiveItem): string {
   return i.last_day ? `último pedido ${fmtDay(i.last_day, i.today)}` : "sin pedidos en 6 meses";
@@ -252,6 +258,28 @@ export function idleStoreRow(x: StoreExclusive, currency: string): StoreRow {
     n30: 0, ticket: null, vendor_per_order: null, units_per_order: null, delivered30: 0, failed30: 0, sales30: null,
     skus30: 0, top_product: null, top_share: null, daily: Array<number>(14).fill(0),
   };
+}
+
+/**
+ * El producto que da el estado de la tienda: el más urgente si alguno avisa; si no, el que tiene más
+ * unidades (así 3 u. que dejó de pautar no se ven "Al día", y 2 u. sueltas no tapan 36 u. al día).
+ */
+export function leadItem(s: StoreExclusive): ExclusiveItem {
+  return s.worst ?? s.items.reduce((a, b) => (b.units > a.units ? b : a));
+}
+
+/** Estado de la tienda en texto (exportación): "Dejó de pautar", "Al día", "Dejó de pautar (no avisa: menos de 5 u.)"… */
+export function stateText(s: StoreExclusive): string {
+  const i = leadItem(s);
+  const label = EXCLUSIVE_STATES[i.state].label;
+  return !i.alert && (i.state === "stopped" || i.state === "sleeping") ? `${label} (no avisa: menos de ${EXCLUSIVE_RULES.minUnits} u.)` : label;
+}
+
+/** Pestaña "Privatizado sin pautar" sin otro orden elegido: la tienda más urgente primero. */
+export function byUrgency<T extends { account_id: string; store_id: string }>(rows: T[], alerting: StoreExclusive[]): T[] {
+  const rank = new Map(alerting.map((x, i) => [x.key, i]));
+  const at = (s: T) => rank.get(`${s.account_id}:${s.store_id}`) ?? rank.size;
+  return [...rows].sort((a, b) => at(a) - at(b));
 }
 
 /** Celda compacta: "25 u. · 1 día sin pedidos", "5 prod. · 1,082 u. sin pedidos" o, si nada avisa, "36 u.". */

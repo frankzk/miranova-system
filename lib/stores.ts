@@ -235,6 +235,8 @@ export type StoreFilters = {
   h?: Health; g?: "con" | "sin"; q?: string; t: string[]; sort: StoreSort;
   /** pestaña "Privatizado sin pautar" (?px=1): excluye el filtro por estado */
   px?: boolean;
+  /** en esa pestaña, sin orden elegido: la más urgente primero (no "más pedidos") */
+  urgent?: boolean;
 };
 
 type Params = Record<string, string | string[] | undefined>;
@@ -249,13 +251,14 @@ export function parseStoreFilters(p: Params): StoreFilters {
   const g = first(p, "g");
   const t = p.t;
   const px = first(p, "px") === "1";
+  const sorted = !!s && s in STORE_SORTS;
   return {
     h: !px && h && h in HEALTH ? (h as Health) : undefined,
     g: g === "con" || g === "sin" ? g : undefined,
     q: first(p, "q")?.slice(0, 80),
     t: [...new Set((Array.isArray(t) ? t : t ? [t] : []).map((x) => x.trim()).filter(Boolean))].slice(0, 50),
-    sort: s && s in STORE_SORTS ? (s as StoreSort) : "d7_desc",
-    ...(px ? { px } : {}),
+    sort: sorted ? (s as StoreSort) : "d7_desc",
+    ...(px ? { px, urgent: !sorted } : {}),
   };
 }
 

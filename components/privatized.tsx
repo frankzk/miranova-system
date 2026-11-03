@@ -1,14 +1,20 @@
 // Lo privatizado a cada tienda en Salud de tiendas: la celda junto al ritmo de venta y la sección
 // del panel lateral. Los estados y textos vienen de lib/exclusive-idle.ts.
 import {
-  cellText, EXCLUSIVE_STATES, idleText, itemAction, itemLine, lastOrderText, storeContext, type ExclusiveItem, type StoreExclusive,
+  cellText, coverText, EXCLUSIVE_RULES, EXCLUSIVE_STATES, idleText, itemAction, itemLine, lastOrderText, leadItem, storeContext,
+  type ExclusiveItem, type StoreExclusive,
 } from "@/lib/exclusive-idle";
 import { fmtInt, fmtShort } from "@/lib/format";
 
 function StatePill({ i }: { i: ExclusiveItem }) {
   const st = EXCLUSIVE_STATES[i.state];
   // menos de 5 u. apartadas: el estado se ve, pero en gris (no avisa)
-  return <span className="pill" data-tone={i.alert || i.state === "ok" || i.state === "fresh" ? st.tone : undefined} title={st.hint}>{st.label}</span>;
+  const quiet = !i.alert && (i.state === "stopped" || i.state === "sleeping");
+  return (
+    <span className="pill" data-tone={quiet ? undefined : st.tone} title={quiet ? `${st.hint}. Con menos de ${EXCLUSIVE_RULES.minUnits} u. apartadas no avisa.` : st.hint}>
+      {st.label}
+    </span>
+  );
 }
 
 /**
@@ -36,11 +42,10 @@ export function PrivatizedCell({ x, expanded = false }: { x: StoreExclusive | un
       </div>
     );
   }
-  // nada avisa: "Recién privatizado" si lo apartó hace poco y aún no lo vende; si no, "Al día"
-  const quiet = x.items.find((i) => i.state === "fresh") ?? ({ state: "ok" } as const);
+  // el más urgente; si nada avisa, el estado del producto con más unidades (en gris si no avisa)
   return (
     <span className="px-compact" title={title}>
-      {x.worst ? <StatePill i={x.worst} /> : <span className="pill" data-tone={EXCLUSIVE_STATES[quiet.state].tone} title={EXCLUSIVE_STATES[quiet.state].hint}>{EXCLUSIVE_STATES[quiet.state].label}</span>}
+      <StatePill i={leadItem(x)} />
       <span className="px-meta">{cellText(x)}</span>
     </span>
   );
@@ -77,7 +82,7 @@ export function PrivatizedSection({ x, tz }: { x: StoreExclusive; tz: string }) 
               {i.n14_before > 0 && (
                 <span>
                   Llevaba {pace(i.n14_before)}
-                  {i.cover !== null && <> · le alcanzaba para ~{fmtInt(i.cover)} {i.cover === 1 ? "día" : "días"}</>}
+                  {coverText(i) && <> · {coverText(i)}</>}
                 </span>
               )}
             </div>

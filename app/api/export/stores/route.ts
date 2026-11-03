@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRoute } from "@/lib/auth";
 import { listAccounts } from "@/lib/accounts";
 import { contactKey, contactsByStore, storeDirectory, storeProfiles } from "@/lib/contacts";
-import { alertingStores, EXCLUSIVE_STATES, idleStoreRow, insertOp, itemLine, privatizedByStore, privatizedOp } from "@/lib/exclusive-idle";
+import { alertingStores, byUrgency, idleStoreRow, insertOp, itemLine, privatizedByStore, privatizedOp, stateText } from "@/lib/exclusive-idle";
 import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { followupIndex } from "@/lib/followups";
 import { storeHealth, storePeriod } from "@/lib/queries";
@@ -104,20 +104,21 @@ export async function GET(req: NextRequest) {
     ];
   };
 
-  // lo privatizado a cada tienda; con ?px=1, solo las que dejaron de pautarlo (como la pestaña)
+  // lo privatizado a cada tienda; con ?px=1, solo las que dejaron de pautarlo (como la pestaña, que
+  // no existe si no hay nada privatizado)
   const pxBy = privatizedByStore(exclusive);
+  const px = !!f.px && pxBy.size > 0;
   const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
   const pxRows = () => {
     const alerting = alertingStores(pxBy);
     const pool = filterStores(alerting.map((x) => byKey.get(x.key) ?? idleStoreRow(x, currencyOf.get(x.account_id) ?? "USD")), { keys: f.t, q: f.q })
       .filter((s) => !f.g || (f.g === "con") === hasGroup(s))
       .map(view);
-    const rank = new Map(alerting.map((x, i) => [x.key, i]));
-    return f.sort === "d7_desc" ? pool.sort((a, b) => (rank.get(storeKey(a)) ?? 0) - (rank.get(storeKey(b)) ?? 0)) : sortStores(pool, f.sort);
+    return f.urgent ? byUrgency(pool, alerting) : sortStores(pool, f.sort);
   };
 
   // hoja 1: el listado, tal como se ve
-  const rows = f.px ? pxRows() : applyStoreFilters(all, f, hasGroup, view);
+  const rows = px ? pxRows() : applyStoreFilters(all, f, hasGroup, view);
   const typical = typicalTickets(all);
   const listed = rows.map((s): Cell[] => {
     // estado y avisos con la fila de salud (la semana actual); las cifras, del período
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
       round(s.d7 / pc.days, 1),
       x?.units ?? null,
       x ? x.idle_units : null,
-      x ? (x.worst ? EXCLUSIVE_STATES[x.worst.state].label : "Al día") : null,
+      x ? stateText(x) : null,
       x ? x.items.map(itemLine).join("\n") : null,
       s.active7,
       s.n30,
@@ -159,7 +160,7 @@ export async function GET(req: NextRequest) {
 
   // hoja 2: tiendas que ya trabajaron con Miranova sin ventas en 60 días (sin pedidos, o solo cancelados); misma búsqueda y grupo
   const inList = new Set(all.map((s) => contactKey(s)));
-  const dormant = f.px || (f.h && f.h !== "inactive")
+  const dormant = px || (f.h && f.h !== "inactive")
     ? []
     : filterStores(
         directory.filter((d) => (!scope.account || d.account_id === scope.account) && !inList.has(contactKey(d)) && (!f.g || (f.g === "con") === hasGroup(d))),

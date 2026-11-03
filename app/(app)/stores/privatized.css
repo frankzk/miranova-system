@@ -29,6 +29,8 @@ td.px-col[data-expanded] { white-space: normal; min-width: 240px; max-width: 340
 /* en la pestaña, una línea por producto: debajo de la etiqueta y a lo ancho */
 .store-cards dl .px-dl:has(.px-cell) { flex-direction: column; gap: 4px; }
 .store-cards dl .px-dl:has(.px-cell) dd { text-align: left; width: 100%; }
+/* las líneas por producto no son tarjetas: sin el relleno ni la raya de `.store-cards li` */
+.store-cards .px-items li { padding: 0; border-top: 0; }
 
 /* panel lateral */
 .px-section .px-ctx { margin: 0 0 8px; }

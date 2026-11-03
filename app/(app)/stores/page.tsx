@@ -12,7 +12,7 @@ import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
-import { alertingStores, idleStoreRow, insertOp, privatizedByStore, privatizedOp, type ExclusiveOp, type StoreExclusive } from "@/lib/exclusive-idle";
+import { alertingStores, byUrgency, idleStoreRow, insertOp, privatizedByStore, privatizedOp, type ExclusiveOp, type StoreExclusive } from "@/lib/exclusive-idle";
 import { exclusiveIdle } from "@/lib/exclusive-idle-data";
 import { followupIndex } from "@/lib/followups";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
@@ -75,15 +75,20 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   const base = (s: StoreRow) => byKey.get(storeKey(s)) ?? s;
   const groupOf = (s: StoreRow) => contacts.get(contactKey(s))?.group ?? null;
 
-  // pestaña "Privatizado sin pautar" (?px=1): tiendas con stock privatizado que dejaron de pedir ese producto
-  const px = one(sp, "px") === "1";
+  // pestaña "Privatizado sin pautar" (?px=1): tiendas con stock privatizado que dejaron de pedir ese
+  // producto. Sin nada privatizado (o si no se pudo leer) la pestaña no existe y ?px=1 no filtra
   const pxBy = privatizedByStore(exclusive);
   const hasPx = pxBy.size > 0;
+  const px = one(sp, "px") === "1" && hasPx;
   const pxOf = (s: { account_id: string; store_id: string }): StoreExclusive | undefined => pxBy.get(storeKey(s));
   const hParam = one(sp, "h");
   const h = !px && hParam && hParam in HEALTH ? (hParam as Health) : undefined;
   const sParam = one(sp, "sort");
-  const sort: StoreSort = sParam && sParam in STORE_SORTS ? (sParam as StoreSort) : "d7_desc";
+  const sorted = !!sParam && sParam in STORE_SORTS;
+  const sort: StoreSort = sorted ? (sParam as StoreSort) : "d7_desc";
+  // en esa pestaña, sin orden elegido va la más urgente primero ("más pedidos" se puede elegir)
+  const urgent = px && !sorted;
+  const sortParam = urgent || (!px && sort === "d7_desc") ? undefined : sort;
   // filtro por grupo de WhatsApp registrado (con / sin)
   const gParam = one(sp, "g");
   const g = gParam === "con" || gParam === "sin" ? gParam : undefined;
@@ -106,11 +111,8 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
     pxAlerting.map((x) => byKey.get(x.key) ?? idleStoreRow(x, currencyOf.get(x.account_id) ?? "USD")),
     { keys: picked, q },
   ).filter(byGroup);
-  const pxRank = new Map(pxAlerting.map((x, i) => [x.key, i]));
   const rows = px
-    ? sort === "d7_desc"
-      ? pxPool.map(view).sort((a, b) => (pxRank.get(storeKey(a)) ?? 0) - (pxRank.get(storeKey(b)) ?? 0))
-      : sortStores(pxPool.map(view), sort)
+    ? urgent ? byUrgency(pxPool.map(view), pxAlerting) : sortStores(pxPool.map(view), sort)
     : sortStores(pool.filter((s) => !h || healthOf(s) === h).map(view), sort);
   const typical = typicalTickets(all);
   const money = (s: StoreRow) => (n: number) => fmtMoney(n, s.currency, { compact: true });
@@ -126,7 +128,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { q, h, g, px: px ? "1" : undefined, sort: sort === "d7_desc" ? undefined : sort, ...periodParams(pc), ...patch };
+    const merged = { q, h, g, px: px ? "1" : undefined, sort: sortParam, ...periodParams(pc), ...patch };
     for (const [k, v] of Object.entries(merged)) if (v && k !== "t") p.set(k, v);
     // las tiendas elegidas se conservan salvo que el cambio las quite ({ t: undefined })
     if (!("t" in patch)) for (const k of picked) p.append("t", k);
@@ -145,6 +147,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
   // los otros filtros, para que elegir un período no los pierda
   const withoutPeriod = { r: undefined, from: undefined, to: undefined };
   const keep = [...new URLSearchParams(qs(withoutPeriod)).entries()];
+  // sin orden elegido: "más pedidos" (en la pestaña de lo privatizado, la más urgente primero)
   const sortCol = (label: string, keys: StoreSort[], align: "left" | "right" = "right", title?: string) => (
     <ColumnFilter
       path="/stores"
@@ -152,9 +155,9 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
       param="sort"
       align={align}
       query={qs({ sort: undefined })}
-      current={keys.includes(sort) && sort !== "d7_desc" ? sort : undefined}
-      allLabel={sortLabel("d7_desc", periodShort)}
-      options={keys.filter((k) => k !== "d7_desc").map((k): FilterOption => ({ value: k, label: sortLabel(k, periodShort) }))}
+      current={sortParam && keys.includes(sortParam) ? sortParam : undefined}
+      allLabel={px ? "Más urgente primero" : sortLabel("d7_desc", periodShort)}
+      options={keys.filter((k) => px || k !== "d7_desc").map((k): FilterOption => ({ value: k, label: sortLabel(k, periodShort) }))}
       title={title}
     />
   );
@@ -218,7 +221,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
           {h && <input type="hidden" name="h" value={h} />}
           {px && <input type="hidden" name="px" value="1" />}
           {g && <input type="hidden" name="g" value={g} />}
-          {sort !== "d7_desc" && <input type="hidden" name="sort" value={sort} />}
+          {sortParam && <input type="hidden" name="sort" value={sortParam} />}
           {Object.entries(periodParams(pc)).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
           {/* key: al cambiar la búsqueda en la URL (Limpiar, pestañas) el buscador vuelve a empezar desde ella */}
           <StoreSearch key={`${picked.join("|")}§${q ?? ""}`} options={options} selected={picked} q={q} unit={periodUnit(pc)} />
@@ -306,7 +309,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
             className="px-tab"
             title="Tiendas con stock privatizado que llevan al menos un día completo sin pedidos de ese producto, o que no lo venden desde que lo privatizaron"
           >
-            <span className="dot" data-tone={pxAlerting.some((x) => x.worst?.state === "stopped") ? "danger" : "warning"} aria-hidden />
+            <span className="dot" data-tone={pxAlerting.some((x) => x.worst?.state === "stopped") ? "danger" : pxAlerting.length ? "warning" : "success"} aria-hidden />
             Privatizado sin pautar <span className="c">{fmtInt(pxPool.length)}</span>
           </Link>
         )}
@@ -443,6 +446,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <StoreDrawerSlot
           ficha={ficha}
           data={drawerData}
+          name={fichaRow?.name ?? fichaPx?.store_name}
           row={fichaRow}
           typical={fichaRow ? typical[fichaRow.account_id] : null}
           closeHref={href({})}

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { describeAlert } from "./alerts.ts";
 import {
-  alertingStores, cellText, classifyExclusive, exclusiveAlerts, idleStoreRow, idleText, insertOp, normalizeExclusive, privatizedByStore, privatizedOp,
-  storeContext,
+  alertingStores, byUrgency, cellText, classifyExclusive, coverText, exclusiveAlerts, idleStoreRow, idleText, insertOp, leadItem, normalizeExclusive,
+  privatizedByStore, privatizedOp, stateText, storeContext,
   type ExclusiveIdleRow,
 } from "./exclusive-idle.ts";
 
@@ -23,23 +23,25 @@ const row = (p: Partial<ExclusiveIdleRow>): ExclusiveIdleRow => ({
 });
 
 // Producción, 3 nov 2026 (exclusive_idle): tienda, producto, unidades, días desde su último pedido,
-// pedidos desde que lo privatizó, pedidos en las 2 semanas antes de frenarse, días activos antes, días desde el último pedido de la tienda
+// pedidos desde que lo privatizó, pedidos en las 2 semanas antes de frenarse, días activos antes, días
+// desde el último pedido de la tienda y días que lo lleva apartado (un 0 de menos de un día, como el
+// que deja Drop al ajustar una solicitud, no corta el apartado: GREEN PHARMA y Vitalo sí lo vendieron)
 const REAL: [string, string, string, number, number | null, number, number, number, number | null, number][] = [
-  [SV, "Easy_SV", "BRASIER SIN AROS", 254, 28, 3, 9, 3, 2, 32],
-  [SV, "GREEN PHARMA SV", "Drenaje Linfático", 66, 38, 0, 37, 7, 19, 36],
+  [SV, "Easy_SV", "BRASIER SIN AROS", 254, 28, 9, 9, 3, 2, 33],
+  [SV, "GREEN PHARMA SV", "Drenaje Linfático", 66, 38, 19, 37, 7, 19, 41],
   [SV, "Nexuss LLC SV", "Drenaje Linfático", 3, 1, 46, 14, 5, 1, 36],
   [SV, "Trendyhaus SV", "Bividi Camiseta", 10, 1, 7, 36, 7, 1, 4],
   [SV, "Trendyhaus SV", "Cortador Pastillas", 9, 1, 82, 54, 7, 1, 20],
   [SV, "Velora Store Salvador", "Varicose", 6, 44, 30, 30, 4, 15, 53],
-  [SV, "Vitalo Tienda Sv", "Auto Wash Water Gun", 60, 40, 0, 19, 2, 26, 39],
+  [SV, "Vitalo Tienda Sv", "Auto Wash Water Gun", 60, 40, 10, 19, 2, 26, 47],
   [SV, "vive store4all", "BRASIER SIN AROS", 199, 8, 54, 11, 2, 8, 32],
   [GT, "Noelia Home GT", "Cinturón sin Hebilla", 36, 1, 26, 61, 7, 1, 5],
   [GT, "Vital Market", "Set de Pelador", 100, 111, 0, 136, 7, 97, 34],
   [HN, "Innova Life", "Auto Wash Water Gun", 49, 0, 234, 93, 7, 0, 34],
   [HN, "Innova Life", "Cinturón sin Hebilla", 31, 0, 90, 41, 7, 0, 26],
   [HN, "Innova Life", "Set de Pelador", 12, 0, 138, 158, 7, 0, 12],
-  [HN, "Nutralix", "DRENAJE LINFÁTICO", 288, 4, 161, 59, 2, 4, 33],
-  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 15, 21, 6, 2, 13],
+  [HN, "Nutralix", "DRENAJE LINFÁTICO", 288, 4, 4, 59, 2, 4, 12],
+  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 66, 21, 6, 2, 41],
   [HN, "Velora Honduras", "DRENAJE LINFÁTICO", 275, 5, 393, 82, 4, 4, 33],
   [HN, "Velora Honduras", "AutoGrip 360", 157, 42, 30, 2, 1, 4, 67],
   [HN, "ZONAHN", "THYROID SUPPORT", 289, 13, 8, 8, 4, 6, 20],
@@ -94,8 +96,48 @@ test("prioridad: contactar hoy solo si lo vendía seguido; durmiendo según lo a
 
 test("cuánto le alcanzaba al ritmo que llevaba antes de frenarse", () => {
   assert.equal(item("Trendyhaus", "DRENAJE LINFÁTICO").cover, 17);
+  assert.equal(coverText(item("Trendyhaus", "DRENAJE LINFÁTICO")), "le alcanzaba para ~17 días");
   assert.equal(item("Nutralix", "DRENAJE LINFÁTICO").cover, 68);
   assert.equal(classifyExclusive(row({ n14_before: 0 })).cover, null);
+  assert.equal(coverText(classifyExclusive(row({ n14_before: 0 }))), null);
+  // 2 u. a casi 12 pedidos/día: no "~0 días"
+  assert.equal(coverText(item("ZONAHN", "Sovexa Cayenne")), "le alcanzaba para menos de un día");
+  assert.equal(coverText(classifyExclusive(row({ units: 1, n14_before: 14 }))), "le alcanzaba para ~1 día");
+});
+
+test("lo que sí vendió y Drop re-apartó en segundos no sale como 'sin estrenar'", () => {
+  const by = privatizedByStore(real);
+  const green = [...by.values()].find((s) => s.store_name === "GREEN PHARMA SV")!;
+  assert.equal(green.worst!.never, false);
+  assert.equal(cellText(green), "66 u. · 37 días sin pedidos");
+  assert.match(privatizedOp(green)!.action, /moverlo o liberar/);
+  const vitalo = [...by.values()].find((s) => s.store_name === "Vitalo Tienda Sv")!;
+  assert.equal(cellText(vitalo), "60 u. · 39 días sin pedidos");
+});
+
+test("estado de la tienda cuando nada avisa: el del producto con más unidades, sin decir 'Al día' de lo que no se vende", () => {
+  const store = (rows: Partial<ExclusiveIdleRow>[]) =>
+    [...privatizedByStore(rows.map((r, i) => row({ store_id: "x", product_external_id: `p${i}`, product_name: `P${i}`, ...r }))).values()][0];
+  // 3 u. sin pedidos hace 4 días: no avisa, pero tampoco está al día
+  const few = store([{ units: 3, days_since: 5 }]);
+  assert.equal(few.worst, null);
+  assert.equal(leadItem(few).state, "stopped");
+  assert.equal(stateText(few), "Dejó de pautar (no avisa: menos de 5 u.)");
+  assert.equal(stateText(store([{ units: 60, orders_since: 0, held_days: 1 }])), "Recién privatizado");
+  // 2 u. sueltas no tapan 36 u. que se venden
+  assert.equal(stateText(store([{ units: 36, days_since: 0 }, { units: 2, days_since: 6 }])), "Al día");
+  const innova = [...privatizedByStore(real).values()].find((s) => s.store_name === "Innova Life")!;
+  assert.equal(stateText(innova), "Al día");
+  const zona = [...privatizedByStore(real).values()].find((s) => s.store_name === "ZONAHN")!;
+  assert.equal(leadItem(zona), zona.worst);
+  assert.equal(stateText(zona), "Durmiendo");
+});
+
+test("pestaña de lo privatizado: la más urgente primero; las que no avisan, al final", () => {
+  const list = alertingStores(privatizedByStore(real));
+  const rows = [...list].reverse().map((x) => ({ account_id: x.account_id, store_id: x.store_id, name: x.store_name }));
+  const other = { account_id: HN, store_id: "otra", name: "Otra" };
+  assert.deepEqual(byUrgency([other, ...rows], list).map((r) => r.name), [...list.map((x) => x.store_name), "Otra"]);
 });
 
 test("datos reales: 10 tiendas y 2,512 u. privatizadas sin pedidos; las que dejaron de pautar primero", () => {
@@ -154,7 +196,7 @@ test("una sola tienda y producto: texto, celda y contexto de la tienda", () => {
   assert.match(privatizedOp(vital)!.action, /liberar el stock/);
 });
 
-test("Inicio: un aviso por cuenta, rojo si alguna dejó de pautar", () => {
+test("Inicio: un aviso por cuenta, rojo si alguna que lo vendía seguido dejó de pautar", () => {
   const accounts = [HN, SV, GT].map((id) => ({ id, name: NAMES[id], country: "", currency: "USD" }));
   const alerts = exclusiveAlerts(privatizedByStore(real), accounts);
   assert.deepEqual(alerts.map((a) => [a.account, a.severity]), [["Drop Honduras", 1], ["Drop El Salvador", 2], ["Drop Guatemala", 2]]);

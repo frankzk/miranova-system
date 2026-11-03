@@ -1,7 +1,7 @@
 // Panel lateral de una tienda (?ficha=<cuenta>:<tienda>), compartido por Salud de tiendas,
 // Tiendas nuevas y Tienda × producto: contacto y seguimiento sin salir del listado.
 import { Suspense } from "react";
-import { Drawer } from "@/components/client";
+import { Drawer, DrawerClose } from "@/components/client";
 import { StoreDrawer } from "@/components/store-drawer";
 import { DrawerSkeleton } from "@/components/store-drawer-link";
 import { storeContactView, type StoreContactView } from "@/lib/contacts";
@@ -50,19 +50,35 @@ type Props = {
   extra?: React.ReactNode;
 };
 
-export function StoreDrawerSlot({ ficha, name, ...rest }: Props) {
+export function StoreDrawerSlot({ ficha, ...rest }: Props) {
   return (
     // key: al pasar de una tienda a otra se vuelve a mostrar la carga
-    <Suspense key={`${ficha.accountId}:${ficha.storeId}`} fallback={<DrawerSkeleton name={name ?? rest.row?.name} />}>
+    <Suspense key={`${ficha.accountId}:${ficha.storeId}`} fallback={<DrawerSkeleton name={rest.name ?? rest.row?.name} />}>
       <StoreDrawerPanel {...rest} />
     </Suspense>
   );
 }
 
 /** Carga la ficha y el contacto de la tienda (lo único que el panel necesita). */
-async function StoreDrawerPanel({ data, row, typical, closeHref, me, canOrders, canEdit, extra }: Omit<Props, "ficha" | "name">) {
+async function StoreDrawerPanel({ data, name, row, typical, closeHref, me, canOrders, canEdit, extra }: Omit<Props, "ficha">) {
   const [d, contact] = await data;
-  if (!d) return null;
+  if (!d) {
+    // una tienda sin ningún pedido (p. ej. privatizó stock antes de empezar a vender): sin ficha,
+    // pero la sección propia de la pantalla se puede ver igual
+    if (!extra) return null;
+    return (
+      <Drawer closeHref={closeHref} label={`Tienda ${name ?? ""}`.trim()}>
+        <div className="drawer-head sheet-head">
+          <div className="grow">
+            <h2 className="sheet-title">{name ?? "Tienda"}</h2>
+            <p className="sheet-sub">Todavía no tiene pedidos</p>
+          </div>
+          <DrawerClose href={closeHref} />
+        </div>
+        <div className="drawer-body sheet-body sd-drawer">{extra}</div>
+      </Drawer>
+    );
+  }
   return (
     <Drawer closeHref={closeHref} label={`Tienda ${d.store.name}`}>
       <StoreDrawer
