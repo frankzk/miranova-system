@@ -27,7 +27,7 @@ const row = (p: Partial<ExclusiveIdleRow>): ExclusiveIdleRow => ({
 // desde el último pedido de la tienda y días que lo lleva apartado (un 0 de menos de un día, como el
 // que deja Drop al ajustar una solicitud, no corta el apartado: GREEN PHARMA y Vitalo sí lo vendieron;
 // a Trendyhaus le falta guardado el movimiento que lo apartó: apartado desde el primero con saldo,
-// 15 oct, y sus pedidos desde el último 0 guardado, 23 sep, para no dejar fuera el de esa salida)
+// 15 oct, una salida de ese stock; sus pedidos, desde el pedido que despachó, para no dejarlo fuera)
 const REAL: [string, string, string, number, number | null, number, number, number, number | null, number][] = [
   [SV, "Easy_SV", "BRASIER SIN AROS", 254, 28, 9, 9, 3, 2, 33],
   [SV, "GREEN PHARMA SV", "Drenaje Linfático", 66, 38, 19, 37, 7, 19, 41],
@@ -43,7 +43,7 @@ const REAL: [string, string, string, number, number | null, number, number, numb
   [HN, "Innova Life", "Cinturón sin Hebilla", 31, 0, 90, 41, 7, 0, 26],
   [HN, "Innova Life", "Set de Pelador", 12, 0, 138, 158, 7, 0, 12],
   [HN, "Nutralix", "DRENAJE LINFÁTICO", 288, 4, 4, 59, 2, 4, 12],
-  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 66, 21, 6, 2, 19],
+  [HN, "Trendyhaus", "DRENAJE LINFÁTICO", 25, 2, 25, 21, 6, 2, 19],
   [HN, "Velora Honduras", "DRENAJE LINFÁTICO", 275, 5, 393, 82, 4, 4, 33],
   [HN, "Velora Honduras", "AutoGrip 360", 157, 42, 30, 2, 1, 4, 67],
   [HN, "ZONAHN", "THYROID SUPPORT", 289, 13, 8, 8, 4, 6, 20],
