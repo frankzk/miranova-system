@@ -409,6 +409,34 @@ export function matchNewProduct<P extends { name: string; sku: string | null; co
   return hits.length === 1 ? hits[0] : null;
 }
 
+/**
+ * Productos del catálogo de otros países que todavía no están en el del país destino (ni por SKU
+ * o código ni por nombre), uno por SKU (o nombre), con los países donde está. Para agregarlos a la
+ * importación como producto nuevo con su nombre, SKU y foto: al aparecer en Drop del país destino
+ * con ese SKU se enlazan solos.
+ */
+export function foreignOnly<
+  D extends { name: string; sku: string | null; code?: string | null; own_sku?: boolean },
+  F extends { name: string; sku: string | null; account_name: string; own_sku?: boolean },
+>(dest: D[], others: F[]): (F & { also: string[] })[] {
+  // un SKU que viene de la primera variante ("talla-1") se repite entre productos distintos: no cuenta
+  const skuOf = (p: { sku: string | null; own_sku?: boolean }) => (p.own_sku === false ? undefined : p.sku?.trim().toLowerCase() || undefined);
+  const skus = new Set(dest.flatMap((p) => [skuOf(p), p.code?.trim().toLowerCase()]).filter((v): v is string => !!v));
+  const names = new Set(dest.map((p) => norm(p.name)).filter((n) => n.length >= 6));
+  const out = new Map<string, F & { also: string[] }>();
+  for (const p of others) {
+    const sku = skuOf(p);
+    const name = norm(p.name);
+    if ((sku && skus.has(sku)) || names.has(name)) continue;
+    const key = sku ? `sku:${sku}` : `name:${name}`;
+    const seen = out.get(key);
+    if (seen) {
+      if (!seen.also.includes(p.account_name) && seen.account_name !== p.account_name) seen.also.push(p.account_name);
+    } else out.set(key, { ...p, also: [] });
+  }
+  return [...out.values()];
+}
+
 // ─── Resumen diario ───
 
 export type DigestImport = {

@@ -45,6 +45,9 @@
 .im-choices b, .im-picked b { display: block; font-weight: 550; font-size: var(--t-sm); }
 .im-choices span span, .im-picked span { display: block; font-size: var(--t-xs); color: var(--ink-3); }
 .im-empty { padding: 10px 8px; font-size: var(--t-sm); color: var(--ink-3); }
+/* separador: lo que solo está en Drop de otro país */
+.im-group { margin-top: 4px; padding: 8px 8px 4px; border-top: 1px solid var(--line); font-size: var(--t-xs); font-weight: 550; color: var(--ink-3); }
+.im-group:first-child { margin-top: 0; border-top: 0; }
 .im-picked { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-bg); }
 .im-choices img, .im-picked img, .im-prod img, .im-photo img, .im-noimg { width: 40px; height: 40px; flex: none; border-radius: var(--r-sm); object-fit: cover; background: var(--bg-app); border: 1px solid var(--line); }
 .im-noimg { display: inline-block; }

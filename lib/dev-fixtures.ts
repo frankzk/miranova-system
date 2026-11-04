@@ -116,7 +116,8 @@ const CATALOG: Row[] = [
   id: `99999999-0000-4000-8000-${String(i).padStart(12, "0")}`, account_id: ACCOUNTS[0].id, external_id: `p${i}`,
   code: `ID-${["Z1GIC", "96CMB", "76BX6", "JYKG0", "DG241", "43149", "EINVS", "N261K"][i]}`, name, sku, status, price,
   suggested_price: null, stock, image_url: null, variants_count: 0, currency: "HNL",
-  created_at_platform: new Date(Date.now() - (i * 5 + 2) * DAY).toISOString(), updated_at: new Date().toISOString(), raw: {},
+  // raw_sku: lo que lee `raw->>sku` en la base (el SKU que Drop manda en el producto)
+  created_at_platform: new Date(Date.now() - (i * 5 + 2) * DAY).toISOString(), updated_at: new Date().toISOString(), raw: { sku }, raw_sku: sku,
 }));
 
 const GROUP: Record<string, string> = {

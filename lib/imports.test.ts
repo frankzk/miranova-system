@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  allInDrop, dropState, goodUnits, importChecklist, importFileProblem, importOrders, importsDigest, isImportFilePath, landedCosts, marginOf, matchNewProduct,
+  allInDrop, dropState, foreignOnly, goodUnits, importChecklist, importFileProblem, importOrders, importsDigest, isImportFilePath, landedCosts, marginOf, matchNewProduct,
   needsReport, nextCode, receptionSummary, recoveryShare, trackingUrl, whatsappMessage, type DropState,
 } from "./imports.ts";
 import { trackOrders } from "./inventory.ts";
@@ -221,4 +221,43 @@ test("checklist: factura comercial subida y tracking (número o guía subida)", 
   assert.deepEqual(done(["proforma", "payment"], "  "), [["invoice", false], ["tracking", false]]);
   assert.deepEqual(done(["invoice"], "DHL 9579399841"), [["invoice", true], ["tracking", true]]);
   assert.deepEqual(done(["tracking"], null), [["invoice", false], ["tracking", true]]);
+});
+
+test("productos de Drop de otro país que todavía no están en el del destino", () => {
+  // catálogo de Drop Guatemala (destino)
+  const gt = [
+    { name: "Set de Pelador de Verduras Abridor Premium 2 piezas", sku: "PELADOR.MIRANOVA", code: "ID-GT001" },
+    { name: "Cinturón sin Hebilla Pack de 5", sku: null, code: "ID-GT002" },
+  ];
+  const others = [
+    // el del pedido: está en Honduras y en El Salvador con el mismo SKU (un solo resultado)
+    { name: "Cortador y Organizador de Pastillas 4 en 1", sku: "CORTADOR.PASTILLA", code: "ID-ZXQ2F", account_name: "Drop Honduras" },
+    { name: "Cortador y Organizador de Pastillas 4 en 1", sku: "cortador.pastilla ", code: "ID-QCZLK", account_name: "Drop El Salvador" },
+    // ya está en Guatemala: por SKU y por nombre (aunque allá no tenga SKU)
+    { name: "Set de Pelador de Verduras", sku: "PELADOR.MIRANOVA", code: "ID-HN9", account_name: "Drop Honduras" },
+    { name: "Cinturón sin hebilla, pack de 5", sku: "CINTURON.X", code: "ID-HN8", account_name: "Drop Honduras" },
+    // sin SKU: uno por nombre
+    { name: "Bividi Camiseta de Alta Compresión", sku: null, code: "ID-SV1", account_name: "Drop El Salvador" },
+    { name: "Bividi camiseta de alta compresion", sku: "", code: "ID-HN2", account_name: "Drop Honduras" },
+  ];
+  const out = foreignOnly(gt, others);
+  assert.deepEqual(out.map((p) => [p.name, p.account_name, p.also]), [
+    ["Cortador y Organizador de Pastillas 4 en 1", "Drop Honduras", ["Drop El Salvador"]],
+    ["Bividi Camiseta de Alta Compresión", "Drop El Salvador", ["Drop Honduras"]],
+  ]);
+  // el código de Drop del destino también cuenta como "ya está"
+  assert.equal(foreignOnly([{ name: "Otro", sku: null, code: "CORTADOR.PASTILLA" }], others.slice(0, 1)).length, 0);
+  // un SKU de la primera variante ("talla-1") no junta ni esconde productos distintos
+  const sized = [
+    { name: "FatBurn Shorts", sku: "talla-1", own_sku: false, account_name: "Drop Honduras" },
+    { name: "Faja Moldeadora Colombiana", sku: "talla-1", own_sku: false, account_name: "Drop El Salvador" },
+  ];
+  assert.deepEqual(foreignOnly([{ name: "Brasier Push Up", sku: "talla-1", own_sku: false }], sized).map((p) => p.name), ["FatBurn Shorts", "Faja Moldeadora Colombiana"]);
+  // el mismo producto con su SKU propio y el nombre escrito distinto en cada país sí es uno
+  assert.equal(foreignOnly([], [
+    { name: "Mini Fan 3 velocidades", sku: "MINI.FAN", own_sku: true, account_name: "Drop Costa Rica" },
+    { name: "MINI FAN", sku: "MINI.FAN", own_sku: true, account_name: "Drop Honduras" },
+  ]).length, 1);
+  // y al aparecer en Drop Guatemala con ese SKU, la línea nueva se enlaza sola
+  assert.equal(matchNewProduct({ name: out[0].name, sku: out[0].sku }, [{ name: "Cortador de pastillas", sku: "CORTADOR.PASTILLA", code: "ID-GT9" }])?.code, "ID-GT9");
 });

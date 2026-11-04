@@ -17,7 +17,7 @@ import {
   isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, TRACKED_STATUSES, trackingUrl, transportLabel, whatsappMessage, type DropState,
   type ImportStatus,
 } from "@/lib/imports";
-import { dropStates, getImport, listSuppliers, productChoices, salePrices } from "@/lib/imports-data";
+import { catalogChoices, dropStates, getImport, listSuppliers, salePrices } from "@/lib/imports-data";
 import { available, carrierOf, PROVIDER_LABEL, trackingKeys, trackingProvider } from "@/lib/carrier-tracking";
 import { integrationKey } from "@/lib/integrations";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
@@ -43,8 +43,8 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const { imp, items, costs, docs, payments, events, people } = detail;
   const money = can(user, "money");
   const today = todayIn();
-  const [prices, choices, drop, suppliers, trackKey, aiKey] = await Promise.all([
-    salePrices(items), productChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
+  const [prices, { choices, foreign }, drop, suppliers, trackKey, aiKey] = await Promise.all([
+    salePrices(items), catalogChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
     trackingKeys().then((k) => trackingProvider(imp.carrier, available(k))),
     integrationKey("anthropic").then(Boolean),
   ]);
@@ -215,7 +215,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
         <div className="panel-head">
           <h2 id="im-items">Productos</h2>
           <SideSheet trigger={<><IconPlus /> Agregar producto</>} triggerClass="btn btn-sm" title="Agregar producto" sub={`Del catálogo de ${country} o un producto nuevo`}>
-            <AddItemForm action={addImportItem} importId={imp.id} choices={choices} money={money} />
+            <AddItemForm action={addImportItem} importId={imp.id} choices={choices} foreign={foreign} country={country} money={money} />
           </SideSheet>
         </div>
         {items.length === 0 ? (
