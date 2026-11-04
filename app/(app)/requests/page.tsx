@@ -7,7 +7,11 @@ import { requirePermission } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
 import { fmtAgo, fmtInt, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { REQUEST_STATUSES, norm, requestItems, demandByProduct, filterRequests, inScope, inView, isOverdue, parseRequestFilters, REQUEST_VIEWS } from "@/lib/store-requests";
+import { formatPhone, whatsappChat } from "@/lib/store-contacts";
+import {
+  CLIENT_KINDS, REQUEST_STATUSES, norm, requestItems, demandByProduct, filterRequests, inScope, inView, isOverdue, isProspect, parseRequestFilters, REQUEST_VIEWS,
+  requestType,
+} from "@/lib/store-requests";
 import { listRequests, requestCountries, requestFormOptions } from "@/lib/store-requests-data";
 import { deleteRequest, saveRequest, setRequestStatus } from "./actions";
 import "../imports/imports.css";
@@ -41,7 +45,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
 
   const query = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { v: f.view.id === "abiertas" ? undefined : f.view.id, c: f.country, q: f.q, ...patch };
+    const merged = { v: f.view.id === "abiertas" ? undefined : f.view.id, c: f.country, k: f.kind, q: f.q, ...patch };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return p.toString();
   };
@@ -51,7 +55,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   };
   const exportHref = `/api/export/requests?${query({ v: f.view.id })}`;
   const form = (v?: Parameters<typeof RequestForm>[0]["v"]) => (
-    <RequestForm action={saveRequest} v={v} countries={countries} stores={options.stores} products={options.products} today={today} />
+    <RequestForm action={saveRequest} v={v} countries={countries} stores={options.stores} prospects={options.prospects} products={options.products} today={today} />
   );
 
   return (
@@ -62,7 +66,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
           {fmtInt(open.length)} {open.length === 1 ? "abierta" : "abiertas"}
           {open.length > 0 && <> · {fmtInt(open.reduce((t, r) => t + r.quantity, 0))} unidades pedidas</>}
           {overdue > 0 && <> · <span className="im-alert-text">{overdue} con la fecha de llegada vencida</span></>}
-          {" "}· lo que piden las tiendas, para decidir qué traer
+          {" "}· lo que piden las tiendas y los clientes potenciales, para decidir qué traer
         </>}
         actions={
           <>
@@ -71,7 +75,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                 <IconDownload /> Descargar Excel
               </a>
             )}
-            <SideSheet trigger={<><IconPlus /> Nueva solicitud</>} triggerClass="btn btn-primary" title="Nueva solicitud" sub="Qué pide la tienda, cuánto y para qué países">
+            <SideSheet trigger={<><IconPlus /> Nueva solicitud</>} triggerClass="btn btn-primary" title="Nueva solicitud" sub="Qué pide la tienda o el cliente potencial, cuánto y para qué países">
               {form()}
             </SideSheet>
           </>
@@ -87,18 +91,29 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       </nav>
 
       <div className="rq-filters">
-        {codes.length > 1 && (
-          <nav className="chips" aria-label="País">
-            <Link href={href({ c: undefined })} aria-current={!f.country}>Todos los países</Link>
-            {countries.map((c) => <Link key={c.code} href={href({ c: c.code })} aria-current={f.country === c.code}>{c.name}</Link>)}
+        <div className="rq-chip-rows">
+          <nav className="chips" aria-label="Quién lo pide">
+            <Link href={href({ k: undefined })} aria-current={!f.kind}>Tiendas y clientes</Link>
+            {CLIENT_KINDS.map((k) => (
+              <Link key={k.id} href={href({ k: k.id })} aria-current={f.kind === k.id}>
+                {k.plural} <span className="c">{fmtInt(all.filter((r) => inView(r, f.view) && inScope(r, { ...f, kind: k.id })).length)}</span>
+              </Link>
+            ))}
           </nav>
-        )}
+          {codes.length > 1 && (
+            <nav className="chips" aria-label="País">
+              <Link href={href({ c: undefined })} aria-current={!f.country}>Todos los países</Link>
+              {countries.map((c) => <Link key={c.code} href={href({ c: c.code })} aria-current={f.country === c.code}>{c.name}</Link>)}
+            </nav>
+          )}
+        </div>
         <form className="rq-search" action="/requests" role="search">
           {f.view.id !== "abiertas" && <input type="hidden" name="v" value={f.view.id} />}
           {f.country && <input type="hidden" name="c" value={f.country} />}
+          {f.kind && <input type="hidden" name="k" value={f.kind} />}
           <label className="input-icon">
             <IconSearch />
-            <input className="input" type="search" name="q" defaultValue={f.q} placeholder="Tienda, dueño o producto" aria-label="Buscar solicitudes" />
+            <input className="input" type="search" name="q" defaultValue={f.q} placeholder="Tienda, cliente, contacto o producto" aria-label="Buscar solicitudes" />
           </label>
         </form>
       </div>
@@ -118,7 +133,12 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
               <tbody>{demand.map((d) => {
                 const sources = rows.filter((r) => requestItems(r).some((it) => norm(it.product) === norm(d.product)));
                 return <tr key={norm(d.product)}>
-                  <th scope="row"><span className="rq-product-name">{d.product}</span><span className="sub">{d.stores} {d.stores === 1 ? "tienda" : "tiendas"}</span></th>
+                  <th scope="row">
+                    <span className="rq-product-name">{d.product}</span>
+                    <span className="sub">
+                      {[d.stores > 0 && `${d.stores} ${d.stores === 1 ? "tienda" : "tiendas"}`, d.prospects > 0 && `${d.prospects} ${d.prospects === 1 ? "cliente potencial" : "clientes potenciales"}`].filter(Boolean).join(" · ")}
+                    </span>
+                  </th>
                   <td className="num strong">{fmtInt(d.units)}</td>
                   {countries.map((c) => <td key={c.code} className="num">{d.country_quantities[c.code] !== undefined ? fmtInt(d.country_quantities[c.code]) : d.unallocated > 0 && d.countries.includes(c.code) ? "—" : "0"}</td>)}
                   <td className="num strong">{fmtInt(d.allocated)}{d.unallocated > 0 && <span className="sub rq-pending-allocation">{fmtInt(d.unallocated)} por repartir</span>}</td>
@@ -147,7 +167,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             <p>
               {all.length
                 ? "Cambia de pestaña, de país o la búsqueda."
-                : "Cuando una tienda pida algo (p. ej. 500 drenajes en gotas para Honduras), anótalo con “Nueva solicitud”: tienda, dueño, países, productos con su cantidad y fechas."}
+                : "Cuando una tienda pida algo (p. ej. 500 drenajes en gotas para Honduras) o un cliente potencial pida maquila o desarrollar un producto, anótalo con “Nueva solicitud”: quién lo pide, productos con su cantidad, países y fechas."}
             </p>
           </div>
         ) : (
@@ -155,7 +175,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             <table className="table stack im-table rq-table">
               <thead>
                 <tr>
-                  <th>Tienda</th>
+                  <th>Tienda o cliente</th>
                   <th>Producto</th>
                   <th className="r">Cantidad</th>
                   <th>Países</th>
@@ -170,7 +190,19 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                   <tr key={r.id}>
                     <td data-slot="id">
                       <div className="strong">{r.store_name}</div>
-                      <div className="sub">{r.owner_name ?? "Dueño sin indicar"}</div>
+                      {(isProspect(r) || r.request_type !== "product") && (
+                        <div className="rq-tags">
+                          {isProspect(r) && <span className="pill" data-tone="accent">Cliente potencial</span>}
+                          {r.request_type !== "product" && <span className="pill" data-tone="info">{requestType(r.request_type ?? "product").label}</span>}
+                        </div>
+                      )}
+                      <div className="sub">{r.owner_name ?? (isProspect(r) ? "Contacto sin indicar" : "Dueño sin indicar")}</div>
+                      {isProspect(r) && (r.contact_phone || r.contact_email) && (
+                        <div className="sub rq-contact">
+                          {r.contact_phone && <a href={whatsappChat(r.contact_phone)} target="_blank" rel="noopener noreferrer" title="Abrir chat de WhatsApp">{formatPhone(r.contact_phone)}</a>}
+                          {r.contact_email && <a href={`mailto:${r.contact_email}`}>{r.contact_email}</a>}
+                        </div>
+                      )}
                     </td>
                     <td>
                       {r.items.length > 1 ? (

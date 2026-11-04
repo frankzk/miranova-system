@@ -2,7 +2,10 @@
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import { IconClose, IconPlus } from "./icons";
-import { MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, type RequestItem, type RequestStatus, type StoreSuggestion } from "@/lib/store-requests";
+import {
+  CLIENT_KINDS, MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, REQUEST_TYPES, type ClientKind, type ProspectSuggestion, type RequestItem,
+  type RequestStatus, type RequestType, type StoreSuggestion,
+} from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
 import { SubmitButton } from "./submit-button";
@@ -11,9 +14,14 @@ type State = { ok: boolean; msg: string } | null;
 type Action = (prev: State, form: FormData) => Promise<State>;
 
 export type RequestValues = {
-  id?: string; store_name?: string; owner_name?: string | null; countries?: string[]; product?: string; quantity?: number; items?: RequestItem[];
+  id?: string; client_kind?: ClientKind; request_type?: RequestType; store_name?: string; owner_name?: string | null;
+  contact_phone?: string | null; contact_email?: string | null;
+  countries?: string[]; product?: string; quantity?: number; items?: RequestItem[];
   notes?: string | null; status?: RequestStatus; requested_at?: string; arrival_at?: string | null; origin_country?: string | null;
 };
+
+/** Lo que se pide por defecto: una tienda pide un producto para vender; un cliente potencial, maquila. */
+const defaultType = (kind: ClientKind): RequestType => (kind === "prospect" ? "maquila" : "product");
 
 function Msg({ state }: { state: State }) {
   if (!state) return null;
@@ -21,17 +29,20 @@ function Msg({ state }: { state: State }) {
 }
 
 /**
- * Nueva solicitud o edición: tienda, dueño, países, productos (uno o varios, con "+ Agregar
- * producto"), fechas y origen. Al elegir una tienda que ya vende en las cuentas, completa el dueño
- * y sus países (si todavía están vacíos).
+ * Nueva solicitud o edición: tienda o cliente potencial (todavía no es tienda: nombre y contacto),
+ * tipo de solicitud, países, productos (uno o varios, con "+ Agregar producto"), fechas y origen.
+ * Al elegir una tienda que ya vende en las cuentas, completa el dueño y sus países; al elegir un
+ * cliente potencial ya cargado, su contacto (si todavía están vacíos).
  */
 export function RequestForm({
-  action, v = {}, countries, stores, products, today,
+  action, v = {}, countries, stores, prospects = [], products, today,
 }: {
   action: Action;
   v?: RequestValues;
   countries: { code: string; name: string }[];
   stores: StoreSuggestion[];
+  /** Clientes potenciales ya cargados, para completar su contacto. */
+  prospects?: ProspectSuggestion[];
   products: string[];
   /** Hoy (YYYY-MM-DD): fecha de solicitud por defecto y la más tardía posible. */
   today: string;
@@ -40,9 +51,24 @@ export function RequestForm({
   const sheet = useSheet();
   const uid = useId();
   const ownerRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState<ClientKind>(v.client_kind ?? "store");
+  const [type, setType] = useState<RequestType>(v.request_type ?? defaultType(v.client_kind ?? "store"));
+  // el tipo cambia solo con el tipo de cliente mientras nadie lo eligió a mano
+  const typeTouched = useRef(!!v.request_type);
+  const prospect = kind === "prospect";
   const [picked, setPicked] = useState<string[]>(v.countries ?? (countries.length === 1 ? [countries[0].code] : []));
   const [hint, setHint] = useState<string | null>(null);
   const byName = useMemo(() => new Map(stores.map((s) => [norm(s.name), s])), [stores]);
+  const prospectByName = useMemo(() => new Map(prospects.map((s) => [norm(s.name), s])), [prospects]);
+  const pickKind = (k: ClientKind) => {
+    setKind(k);
+    if (!typeTouched.current) setType(defaultType(k));
+    setHint(null);
+    requestAnimationFrame(() => nameRef.current?.focus());
+  };
   const codes = countries.map((c) => c.code);
   const all = codes.length > 1 && codes.every((c) => picked.includes(c));
   // filas de producto: no controladas (cada una con su clave); el total se recalcula al escribir
@@ -67,6 +93,21 @@ export function RequestForm({
   }, [state, sheet]);
 
   const onStore = (name: string) => {
+    if (prospect) {
+      const p = prospectByName.get(norm(name));
+      if (!p) return setHint(null);
+      const fill: string[] = [];
+      const put = (ref: React.RefObject<HTMLInputElement | null>, value: string | null, what: string) => {
+        if (value && ref.current && !ref.current.value.trim()) {
+          ref.current.value = value;
+          fill.push(what);
+        }
+      };
+      put(ownerRef, p.contact, "el contacto");
+      put(phoneRef, p.phone ? `+${p.phone}` : null, "el teléfono");
+      put(emailRef, p.email, "el correo");
+      return setHint(fill.length ? `Cliente ya cargado: completé ${fill.join(", ")}.` : null);
+    }
     const s = byName.get(norm(name));
     if (!s) return setHint(null);
     const fill: string[] = [];
@@ -86,22 +127,46 @@ export function RequestForm({
   return (
     <StickyForm state={state} action={run} className="im-form rq-form">
       {v.id && <input type="hidden" name="id" value={v.id} />}
+      <input type="hidden" name="client_kind" value={kind} />
+      <div className="segmented rq-kind" role="radiogroup" aria-label="Quién lo pide">
+        {CLIENT_KINDS.map((k) => (
+          <button key={k.id} type="button" role="radio" aria-checked={kind === k.id} data-on={kind === k.id || undefined} onClick={() => pickKind(k.id)}>
+            {k.label}
+          </button>
+        ))}
+      </div>
+      {prospect && <p className="rq-kind-note">Todavía no es tienda: guarda su nombre y contacto para darle seguimiento a la oportunidad.</p>}
       <div className="im-grid">
         <label className="field">
-          <span>Tienda</span>
+          <span>{prospect ? "Cliente" : "Tienda"}</span>
           <input
-            className="input" name="store_name" defaultValue={v.store_name ?? ""} maxLength={120} required list={`${uid}-stores`} autoComplete="off"
-            placeholder="Nombre de la tienda" onChange={(e) => onStore(e.currentTarget.value)}
+            ref={nameRef} className="input" name="store_name" defaultValue={v.store_name ?? ""} maxLength={120} required list={prospect ? `${uid}-prospects` : `${uid}-stores`}
+            autoComplete="off" placeholder={prospect ? "Nombre del cliente o su empresa" : "Nombre de la tienda"} onChange={(e) => onStore(e.currentTarget.value)}
           />
         </label>
         <label className="field">
-          <span>Dueño <span className="hint">opcional</span></span>
-          <input ref={ownerRef} className="input" name="owner_name" defaultValue={v.owner_name ?? ""} maxLength={120} autoComplete="off" placeholder="Nombre del dueño" />
+          <span>{prospect ? "Contacto" : "Dueño"} <span className="hint">opcional</span></span>
+          <input ref={ownerRef} className="input" name="owner_name" defaultValue={v.owner_name ?? ""} maxLength={120} autoComplete="off" placeholder={prospect ? "Persona con quien se habla" : "Nombre del dueño"} />
+        </label>
+        {/* contacto del cliente potencial (oculto para una tienda, pero se conserva si luego pasa a tienda) */}
+        <label className="field" hidden={!prospect}>
+          <span>WhatsApp o teléfono <span className="hint">opcional</span></span>
+          <input ref={phoneRef} className="input" name="contact_phone" defaultValue={v.contact_phone ? `+${v.contact_phone}` : ""} maxLength={40} inputMode="tel" autoComplete="off" placeholder="+504 9999 8888" />
+        </label>
+        <label className="field" hidden={!prospect}>
+          <span>Correo <span className="hint">opcional</span></span>
+          <input ref={emailRef} className="input" name="contact_email" inputMode="email" defaultValue={v.contact_email ?? ""} maxLength={120} autoComplete="off" placeholder="cliente@correo.com" />
         </label>
         {hint && <p className="rq-hint wide" role="status">{hint}</p>}
+        <label className="field wide">
+          <span>Tipo de solicitud</span>
+          <select className="select" name="request_type" value={type} onChange={(e) => { typeTouched.current = true; setType(e.currentTarget.value as RequestType); }}>
+            {REQUEST_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </label>
         <fieldset className="field wide rq-countries">
           <legend>
-            Países <span className="hint">uno o varios</span>
+            Países <span className="hint">{prospect ? "opcional, si ya sabe dónde lo venderá" : "uno o varios"}</span>
             {codes.length > 1 && (
               <button type="button" className="rq-all" onClick={() => setPicked(all ? [] : codes)}>{all ? "Quitar todos" : `Los ${codes.length}`}</button>
             )}
@@ -187,6 +252,9 @@ export function RequestForm({
       </div>
       <datalist id={`${uid}-stores`}>
         {stores.map((s) => <option key={s.name} value={s.name}>{s.owner ?? undefined}</option>)}
+      </datalist>
+      <datalist id={`${uid}-prospects`}>
+        {prospects.map((p) => <option key={p.name} value={p.name}>{p.contact ?? undefined}</option>)}
       </datalist>
       <datalist id={`${uid}-products`}>
         {products.map((p) => <option key={p} value={p} />)}

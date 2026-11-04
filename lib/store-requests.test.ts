@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  cleanRequest, demandByProduct, filterRequests, isDay, isOverdue, matchesRequest, parseRequestFilters, requestItems, storeSuggestions, type StoreRequest,
+  cleanRequest, demandByProduct, filterRequests, inScope, isDay, isOverdue, matchesRequest, parseRequestFilters, prospectSuggestions, requestItems, storeSuggestions,
+  type StoreRequest,
 } from "./store-requests.ts";
 
 const ALLOWED = ["HN", "GT", "SV", "CR"];
@@ -15,6 +16,7 @@ test("solicitud válida: limpia espacios, ordena los países y acepta 1,500", ()
   assert.deepEqual(r, {
     ok: true,
     row: {
+      client_kind: "store", request_type: "product", contact_phone: null, contact_email: null,
       store_name: "Tienda X", owner_name: "Ana López", countries: ["HN", "CR"], product: "Drenaje en gotas", quantity: 1500,
       items: [{ product: "Drenaje en gotas", quantity: 1500 }], notes: null,
       requested_at: "2026-10-23", arrival_at: null, origin_country: null,
@@ -192,4 +194,63 @@ test("lo más pedido cuenta cada producto del pedido; la búsqueda encuentra cua
   ]);
   assert.ok(matchesRequest(rows[0], "drenaje"));
   assert.deepEqual(requestItems(rows[2]), [{ product: "Colágeno", quantity: 50 }]);
+});
+
+test("cliente potencial: sin tienda ni país, con su contacto y el tipo de solicitud", () => {
+  const base = { client_kind: "prospect", request_type: "maquila", store_name: " Laboratorios  Nida ", owner_name: "Karla", items: [{ product: "Crema NIDA", quantity: "500" }] };
+  const r = cleanRequest({ ...base, contact_phone: "9999-8888", contact_email: " Karla@Nida.com " }, ALLOWED, "2026-11-04");
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.row.client_kind, "prospect");
+  assert.equal(r.row.request_type, "maquila");
+  assert.equal(r.row.store_name, "Laboratorios Nida");
+  // sin país marcado vale; el número local toma el código de Honduras
+  assert.deepEqual(r.row.countries, []);
+  assert.equal(r.row.contact_phone, "50499998888");
+  assert.equal(r.row.contact_email, "karla@nida.com");
+  // con país, el código de ese país; con +, el que escribió
+  const gt = cleanRequest({ ...base, countries: ["GT"], contact_phone: "5555 4444" }, ALLOWED);
+  assert.equal(gt.ok && gt.row.contact_phone, "50255554444");
+  const us = cleanRequest({ ...base, contact_phone: "+1 305 555 0101" }, ALLOWED);
+  assert.equal(us.ok && us.row.contact_phone, "13055550101");
+  // mensajes claros
+  assert.deepEqual(cleanRequest({ ...base, store_name: "" }, ALLOWED), { ok: false, msg: "Escribe el nombre del cliente." });
+  assert.equal(cleanRequest({ ...base, contact_phone: "123" }, ALLOWED).ok, false);
+  assert.deepEqual(cleanRequest({ ...base, contact_email: "karla@" }, ALLOWED), { ok: false, msg: "El correo no parece válido." });
+  assert.deepEqual(cleanRequest({ ...base, request_type: "otra" }, ALLOWED), { ok: false, msg: "Tipo de solicitud no válido." });
+  assert.deepEqual(cleanRequest({ ...base, client_kind: "socio" }, ALLOWED), { ok: false, msg: "Tipo de cliente no válido." });
+  // una tienda sigue necesitando al menos un país; sin tipo, pide un producto
+  const store = cleanRequest({ store_name: "T", items: [{ product: "P", quantity: "1" }] }, ALLOWED);
+  assert.deepEqual(store, { ok: false, msg: "Marca al menos un país." });
+  const plain = cleanRequest({ store_name: "T", countries: ["HN"], items: [{ product: "P", quantity: "1" }] }, ALLOWED);
+  assert.equal(plain.ok && plain.row.client_kind, "store");
+  assert.equal(plain.ok && plain.row.request_type, "product");
+});
+
+test("lista: filtro por tienda o cliente potencial, búsqueda por contacto o tipo y lo más pedido aparte", () => {
+  const lab = req({ id: "p1", client_kind: "prospect", request_type: "maquila", store_name: "Laboratorios Nida", owner_name: "Karla", contact_phone: "50288887777", contact_email: "karla@nida.com", countries: [], product: "Crema", quantity: 500 });
+  const shop = req({ id: "s1", store_name: "ZONAHN", product: "Crema", quantity: 200 });
+  assert.equal(parseRequestFilters({ k: "prospect" }).kind, "prospect");
+  assert.equal(parseRequestFilters({ k: "otro" }).kind, undefined);
+  assert.ok(inScope(lab, { kind: "prospect" }));
+  assert.ok(!inScope(shop, { kind: "prospect" }));
+  // las de antes de la migración (sin client_kind) son tiendas
+  assert.ok(inScope(req({}), { kind: "store" }));
+  assert.ok(matchesRequest(lab, "8888 7777"));
+  assert.ok(matchesRequest(lab, "nida.com"));
+  assert.ok(matchesRequest(lab, "maquila"));
+  assert.ok(!matchesRequest(shop, "maquila"));
+  const [crema] = demandByProduct([lab, shop]);
+  assert.equal(crema.units, 700);
+  assert.equal(crema.stores, 1);
+  assert.equal(crema.prospects, 1);
+});
+
+test("clientes potenciales ya cargados: uno por nombre con su contacto más reciente", () => {
+  const rows = [
+    req({ id: "a", client_kind: "prospect", store_name: "Lab Nida", owner_name: "Karla", contact_phone: null, created_at: "2026-11-01T10:00:00Z" }),
+    req({ id: "b", client_kind: "prospect", store_name: "lab nida ", owner_name: null, contact_phone: "50288887777", created_at: "2026-11-03T10:00:00Z" }),
+    req({ id: "c", store_name: "ZONAHN" }),
+  ];
+  assert.deepEqual(prospectSuggestions(rows), [{ name: "lab nida", contact: "Karla", phone: "50288887777", email: null }]);
 });
