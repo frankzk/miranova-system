@@ -10,7 +10,7 @@ import {
   allocationLabel, docKindLabel, isActive, MAX_IMPORT_FILE_BYTES, MONEY_DOCS, nextCode, PAYMENT_METHODS, receptionSummary, statusInfo, TRANSPORTS,
   type EventKind,
 } from "@/lib/imports";
-import { IMPORT_BUCKET, productChoices, removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
+import { IMPORT_BUCKET, isOwnSku, productChoices, removeFiles, signedUpload, storedFile } from "@/lib/imports-data";
 import { refreshTracking } from "@/lib/imports-tracking";
 import { integrationKey } from "@/lib/integrations";
 import { chargeAllocation, withMatches, wholeQty, type Proposal } from "@/lib/invoice";
@@ -212,11 +212,11 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
     const externalId = field(form, "product_id");
     if (!UUID.test(accountId) || !externalId) return fail("Elige un producto del catálogo.");
     const [{ data }, { data: acc }] = await Promise.all([
-      db().from("products").select("name, sku, image_url").eq("account_id", accountId).eq("external_id", externalId).maybeSingle(),
+      db().from("products").select("name, sku, image_url, raw_sku:raw->>sku").eq("account_id", accountId).eq("external_id", externalId).maybeSingle(),
       db().from("accounts").select("name, country").eq("id", accountId).maybeSingle(),
     ]);
     if (!data || !acc) return fail("Ese producto ya no está en el catálogo.");
-    const p = data as { name: string; sku: string | null; image_url: string | null };
+    const p = data as { name: string; sku: string | null; image_url: string | null; raw_sku?: string | null };
     const a = acc as { name: string; country: string };
     if (source === "catalog") {
       // enlazado: solo con el producto del país al que llega (es el que Inventario cuenta "en camino")
@@ -226,7 +226,8 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
       // está en Drop de otro país: producto nuevo con su nombre, SKU y foto; se enlaza solo cuando
       // aparezca en Drop del país destino con ese SKU (o nombre)
       if (a.country === imp.dest_country) return fail("Ese producto ya está en el catálogo de este país: elígelo de ahí.");
-      product = { name: p.name, sku: p.sku, image_url: p.image_url, photo_path: null };
+      // el SKU de la primera variante ("talla-1") no: lo enlazaría con otro producto que lo comparta
+      product = { name: p.name, sku: isOwnSku(p.sku, p.raw_sku) ? p.sku : null, image_url: p.image_url, photo_path: null };
       from = ` (del catálogo de ${a.name})`;
     }
   } else {

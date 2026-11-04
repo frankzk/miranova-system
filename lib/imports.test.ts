@@ -247,6 +247,17 @@ test("productos de Drop de otro país que todavía no están en el del destino",
   ]);
   // el código de Drop del destino también cuenta como "ya está"
   assert.equal(foreignOnly([{ name: "Otro", sku: null, code: "CORTADOR.PASTILLA" }], others.slice(0, 1)).length, 0);
+  // un SKU de la primera variante ("talla-1") no junta ni esconde productos distintos
+  const sized = [
+    { name: "FatBurn Shorts", sku: "talla-1", own_sku: false, account_name: "Drop Honduras" },
+    { name: "Faja Moldeadora Colombiana", sku: "talla-1", own_sku: false, account_name: "Drop El Salvador" },
+  ];
+  assert.deepEqual(foreignOnly([{ name: "Brasier Push Up", sku: "talla-1", own_sku: false }], sized).map((p) => p.name), ["FatBurn Shorts", "Faja Moldeadora Colombiana"]);
+  // el mismo producto con su SKU propio y el nombre escrito distinto en cada país sí es uno
+  assert.equal(foreignOnly([], [
+    { name: "Mini Fan 3 velocidades", sku: "MINI.FAN", own_sku: true, account_name: "Drop Costa Rica" },
+    { name: "MINI FAN", sku: "MINI.FAN", own_sku: true, account_name: "Drop Honduras" },
+  ]).length, 1);
   // y al aparecer en Drop Guatemala con ese SKU, la línea nueva se enlaza sola
   assert.equal(matchNewProduct({ name: out[0].name, sku: out[0].sku }, [{ name: "Cortador de pastillas", sku: "CORTADOR.PASTILLA", code: "ID-GT9" }])?.code, "ID-GT9");
 });

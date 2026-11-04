@@ -225,9 +225,12 @@ export type ProductChoice = {
   sku: string | null;
   /** código público de Drop (cambia por país) */
   code?: string | null;
+  /**
+   * el SKU es del producto (Drop lo manda en el producto). Si no, es el de su primera variante
+   * ("talla-1"), que se repite entre productos distintos: no sirve para reconocerlo ni enlazarlo
+   */
+  own_sku?: boolean;
   image_url: string | null;
-  /** precio de proveedor en Drop, convertido a USD (null si no hay tipo de cambio) */
-  price_usd: number | null;
 };
 
 /** Un producto que está en Drop de otro país (no en el del destino): se agrega como producto nuevo. */
@@ -237,30 +240,35 @@ export type ForeignChoice = ProductChoice & {
   also: string[];
 };
 
-type CatalogAccount = { id: string; name: string; country: string; currency: string; enabled: boolean; catalog_only: boolean | null };
+type CatalogAccount = { id: string; name: string; country: string; enabled: boolean; catalog_only: boolean | null };
+
+/** El SKU guardado es el del producto según Drop (no el de su primera variante). */
+export const isOwnSku = (sku: string | null, rawSku: string | null | undefined) =>
+  !!sku?.trim() && !!rawSku?.trim() && sku.trim().toLowerCase() === rawSku.trim().toLowerCase();
 
 /** Catálogo de las cuentas activas (no solo de catálogo); `country` limita a las de ese país. */
 async function catalogRows(country?: string): Promise<{ accounts: Map<string, CatalogAccount>; rows: ProductChoice[] }> {
-  const { data: accs, error } = await db().from("accounts").select("id, name, country, currency, enabled, catalog_only");
+  const { data: accs, error } = await db().from("accounts").select("id, name, country, enabled, catalog_only");
   if (error) throw error;
   const eligible = ((accs ?? []) as CatalogAccount[]).filter((a) => a.enabled && !a.catalog_only && (!country || a.country === country));
   const accounts = new Map(eligible.map((a) => [a.id, a]));
   if (!eligible.length) return { accounts, rows: [] };
-  const rates = await usdRates();
   const rows: ProductChoice[] = [];
   for (let from = 0; from < 20000; from += 1000) {
+    // nombres iguales en varios países: el orden necesita un desempate único para paginar sin saltos
     const { data, error: e } = await db()
       .from("products")
-      .select("account_id, external_id, name, sku, code, image_url, price")
+      .select("account_id, external_id, name, sku, code, image_url, raw_sku:raw->>sku")
       .in("account_id", [...accounts.keys()])
       .order("name")
+      .order("account_id")
+      .order("external_id")
       .range(from, from + 999);
     if (e) throw e;
-    for (const p of (data ?? []) as { account_id: string; external_id: string; name: string; sku: string | null; code: string | null; image_url: string | null; price: number | null }[]) {
-      const price = p.price === null ? null : Number(p.price);
+    for (const p of (data ?? []) as { account_id: string; external_id: string; name: string; sku: string | null; code: string | null; image_url: string | null; raw_sku?: string | null }[]) {
       rows.push({
         account_id: p.account_id, external_id: p.external_id, name: p.name, sku: p.sku, code: p.code, image_url: p.image_url,
-        price_usd: price === null ? null : toUsd(price, accounts.get(p.account_id)?.currency ?? "USD", rates.get(p.account_id) ?? null),
+        own_sku: isOwnSku(p.sku, p.raw_sku),
       });
     }
     if ((data ?? []).length < 1000) break;

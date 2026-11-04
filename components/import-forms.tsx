@@ -316,7 +316,9 @@ export function ReportBox({ action, importId, reported, who, message }: { action
 // ─── Productos ───
 
 export type Choice = {
-  account_id: string; external_id: string; name: string; sku: string | null; code?: string | null; image_url: string | null; price_usd: number | null;
+  account_id: string; external_id: string; name: string; sku: string | null; code?: string | null; image_url: string | null;
+  /** el SKU es del producto (no de su primera variante): solo así sirve para enlazarlo */
+  own_sku?: boolean;
   /** solo en Drop de otro país: la cuenta donde está ("Drop Honduras") y las otras que también lo tienen */
   account_name?: string; also?: string[];
 };
@@ -367,8 +369,8 @@ function CatalogPicker({ choices, foreign = [], country, pick, setPick, initial 
           </div>
           {pick.account_name && (
             <p className="muted im-small">
-              Todavía no está en Drop{country ? ` ${country}` : ""}: se agrega como producto nuevo con este nombre, SKU y foto, y se enlaza solo cuando
-              aparezca allá{pick.sku ? ` con el SKU ${pick.sku}` : " con el mismo nombre"}.
+              Todavía no está en Drop{country ? ` ${country}` : ""}: se agrega como producto nuevo con este nombre{pick.sku && pick.own_sku !== false ? ", SKU" : ""} y foto, y se
+              enlaza solo cuando aparezca allá{pick.sku && pick.own_sku !== false ? ` con el SKU ${pick.sku}` : " con el mismo nombre"}.
             </p>
           )}
         </>

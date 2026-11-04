@@ -416,14 +416,16 @@ export function matchNewProduct<P extends { name: string; sku: string | null; co
  * con ese SKU se enlazan solos.
  */
 export function foreignOnly<
-  D extends { name: string; sku: string | null; code?: string | null },
-  F extends { name: string; sku: string | null; account_name: string },
+  D extends { name: string; sku: string | null; code?: string | null; own_sku?: boolean },
+  F extends { name: string; sku: string | null; account_name: string; own_sku?: boolean },
 >(dest: D[], others: F[]): (F & { also: string[] })[] {
-  const skus = new Set(dest.flatMap((p) => [p.sku, p.code]).filter((v): v is string => !!v?.trim()).map((v) => v.trim().toLowerCase()));
+  // un SKU que viene de la primera variante ("talla-1") se repite entre productos distintos: no cuenta
+  const skuOf = (p: { sku: string | null; own_sku?: boolean }) => (p.own_sku === false ? undefined : p.sku?.trim().toLowerCase() || undefined);
+  const skus = new Set(dest.flatMap((p) => [skuOf(p), p.code?.trim().toLowerCase()]).filter((v): v is string => !!v));
   const names = new Set(dest.map((p) => norm(p.name)).filter((n) => n.length >= 6));
   const out = new Map<string, F & { also: string[] }>();
   for (const p of others) {
-    const sku = p.sku?.trim().toLowerCase();
+    const sku = skuOf(p);
     const name = norm(p.name);
     if ((sku && skus.has(sku)) || names.has(name)) continue;
     const key = sku ? `sku:${sku}` : `name:${name}`;
