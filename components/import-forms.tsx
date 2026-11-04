@@ -315,42 +315,77 @@ export function ReportBox({ action, importId, reported, who, message }: { action
 
 // ─── Productos ───
 
-export type Choice = { account_id: string; external_id: string; name: string; sku: string | null; image_url: string | null; price_usd: number | null };
+export type Choice = {
+  account_id: string; external_id: string; name: string; sku: string | null; code?: string | null; image_url: string | null; price_usd: number | null;
+  /** solo en Drop de otro país: la cuenta donde está ("Drop Honduras") y las otras que también lo tienen */
+  account_name?: string; also?: string[];
+};
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-/** Buscar y elegir un producto del catálogo de Drop (manda account_id y product_id). */
-function CatalogPicker({ choices, pick, setPick, initial = "", empty }: { choices: Choice[]; pick: Choice | null; setPick: (c: Choice | null) => void; initial?: string; empty: string }) {
+const where = (c: Choice) => [c.account_name, ...(c.also ?? [])].filter(Boolean).join(", ");
+
+/**
+ * Buscar y elegir un producto del catálogo de Drop (manda account_id y product_id). Con `foreign`,
+ * al buscar también muestra lo que solo está en Drop de otro país (se agrega como producto nuevo).
+ */
+function CatalogPicker({ choices, foreign = [], country, pick, setPick, initial = "", empty }: {
+  choices: Choice[]; foreign?: Choice[]; country?: string; pick: Choice | null; setPick: (c: Choice | null) => void; initial?: string; empty: string;
+}) {
   const [q, setQ] = useState(initial);
-  const shown = useMemo(() => {
-    const t = fold(q.trim());
-    const words = t.split(/\s+/).filter(Boolean);
-    const list = words.length ? choices.filter((c) => { const h = fold(`${c.name} ${c.sku ?? ""}`); return words.every((w) => h.includes(w)); }) : choices;
-    return list.slice(0, 40);
-  }, [choices, q]);
+  const { shown, away, searching } = useMemo(() => {
+    const words = fold(q.trim()).split(/\s+/).filter(Boolean);
+    const hit = (c: Choice) => { const h = fold(`${c.name} ${c.sku ?? ""} ${c.code ?? ""}`); return words.every((w) => h.includes(w)); };
+    return {
+      shown: (words.length ? choices.filter(hit) : choices).slice(0, 40),
+      // lo de otros países, solo al buscar (para no llenar la lista)
+      away: words.length ? foreign.filter(hit).slice(0, 20) : [],
+      searching: words.length > 0,
+    };
+  }, [choices, foreign, q]);
+  const option = (c: Choice) => (
+    <li key={`${c.account_id}:${c.external_id}`}>
+      <button type="button" role="option" aria-selected={false} onClick={() => setPick(c)}>
+        {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
+        <span className="grow">
+          <b>{c.name}</b>
+          {(c.sku || c.account_name) && <span>{[c.sku && `SKU ${c.sku}`, c.account_name && `en ${where(c)}`].filter(Boolean).join(" · ")}</span>}
+        </span>
+      </button>
+    </li>
+  );
   return (
     <div className="im-pick">
       <input type="hidden" name="account_id" value={pick?.account_id ?? ""} />
       <input type="hidden" name="product_id" value={pick?.external_id ?? ""} />
       {pick ? (
-        <div className="im-picked">
-          {pick.image_url ? <img src={pick.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
-          <div className="grow"><b>{pick.name}</b>{pick.sku && <span>SKU {pick.sku}</span>}</div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPick(null)}>Cambiar</button>
-        </div>
+        <>
+          <div className="im-picked">
+            {pick.image_url ? <img src={pick.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
+            <div className="grow"><b>{pick.name}</b>{(pick.sku || pick.account_name) && <span>{[pick.sku && `SKU ${pick.sku}`, pick.account_name && `en ${where(pick)}`].filter(Boolean).join(" · ")}</span>}</div>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPick(null)}>Cambiar</button>
+          </div>
+          {pick.account_name && (
+            <p className="muted im-small">
+              Todavía no está en Drop{country ? ` ${country}` : ""}: se agrega como producto nuevo con este nombre, SKU y foto, y se enlaza solo cuando
+              aparezca allá{pick.sku ? ` con el SKU ${pick.sku}` : " con el mismo nombre"}.
+            </p>
+          )}
+        </>
       ) : (
         <>
           <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU" aria-label="Buscar producto del catálogo" autoComplete="off" />
           <ul className="im-choices" role="listbox" aria-label="Productos del catálogo">
-            {shown.map((c) => (
-              <li key={`${c.account_id}:${c.external_id}`}>
-                <button type="button" role="option" aria-selected={false} onClick={() => setPick(c)}>
-                  {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
-                  <span className="grow"><b>{c.name}</b>{c.sku && <span>SKU {c.sku}</span>}</span>
-                </button>
+            {shown.map(option)}
+            {away.length > 0 && (
+              <li className="im-group" role="presentation">
+                {shown.length === 0 ? `No está en Drop${country ? ` ${country}` : ""}. ` : ""}En Drop de otro país: se agrega como producto nuevo
               </li>
-            ))}
-            {shown.length === 0 && <li className="im-empty">{empty}</li>}
+            )}
+            {away.map(option)}
+            {shown.length === 0 && away.length === 0 && (
+              <li className="im-empty">{searching || !foreign.length ? empty : "Busca por nombre o SKU: también busca en Drop de otros países."}</li>
+            )}
           </ul>
         </>
       )}
@@ -385,9 +420,11 @@ function ItemNumbers({ money, v }: { money: boolean; v?: { qty?: number; unit_co
   );
 }
 
-export function AddItemForm({ action, importId, choices, money }: { action: Action; importId: string; choices: Choice[]; money: boolean }) {
+export function AddItemForm({ action, importId, choices, foreign = [], country, money }: {
+  action: Action; importId: string; choices: Choice[]; foreign?: Choice[]; country?: string; money: boolean;
+}) {
   const [state, run] = useActionState(action, null);
-  const [source, setSource] = useState<"catalog" | "new">(choices.length ? "catalog" : "new");
+  const [source, setSource] = useState<"catalog" | "new">(choices.length || foreign.length ? "catalog" : "new");
   const [pick, setPick] = useState<Choice | null>(null);
   const [photo, setPhoto] = useState<{ path: string; preview: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -423,14 +460,15 @@ export function AddItemForm({ action, importId, choices, money }: { action: Acti
   return (
     <StickyForm state={state} ref={form} action={run} className="im-form">
       <input type="hidden" name="id" value={importId} />
-      <input type="hidden" name="source" value={source} />
+      {/* lo elegido de Drop de otro país se agrega como producto nuevo (sin enlazar) */}
+      <input type="hidden" name="source" value={source === "catalog" && pick?.account_name ? "foreign" : source} />
       <div className="segmented im-source" role="tablist" aria-label="Qué producto">
-        <button type="button" role="tab" aria-selected={source === "catalog"} data-on={source === "catalog" || undefined} onClick={() => setSource("catalog")} disabled={!choices.length}>Del catálogo</button>
+        <button type="button" role="tab" aria-selected={source === "catalog"} data-on={source === "catalog" || undefined} onClick={() => setSource("catalog")} disabled={!choices.length && !foreign.length}>Del catálogo</button>
         <button type="button" role="tab" aria-selected={source === "new"} data-on={source === "new" || undefined} onClick={() => setSource("new")}>Producto nuevo</button>
       </div>
 
       {source === "catalog" ? (
-        <CatalogPicker key={round} choices={choices} pick={pick} setPick={setPick} empty="Nada con esa búsqueda. ¿Es un producto nuevo?" />
+        <CatalogPicker key={round} choices={choices} foreign={foreign} country={country} pick={pick} setPick={setPick} empty="Nada con esa búsqueda. ¿Es un producto nuevo?" />
       ) : (
         <div className="im-grid">
           <label className="field wide">

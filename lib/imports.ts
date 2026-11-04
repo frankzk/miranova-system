@@ -409,6 +409,32 @@ export function matchNewProduct<P extends { name: string; sku: string | null; co
   return hits.length === 1 ? hits[0] : null;
 }
 
+/**
+ * Productos del catálogo de otros países que todavía no están en el del país destino (ni por SKU
+ * o código ni por nombre), uno por SKU (o nombre), con los países donde está. Para agregarlos a la
+ * importación como producto nuevo con su nombre, SKU y foto: al aparecer en Drop del país destino
+ * con ese SKU se enlazan solos.
+ */
+export function foreignOnly<
+  D extends { name: string; sku: string | null; code?: string | null },
+  F extends { name: string; sku: string | null; account_name: string },
+>(dest: D[], others: F[]): (F & { also: string[] })[] {
+  const skus = new Set(dest.flatMap((p) => [p.sku, p.code]).filter((v): v is string => !!v?.trim()).map((v) => v.trim().toLowerCase()));
+  const names = new Set(dest.map((p) => norm(p.name)).filter((n) => n.length >= 6));
+  const out = new Map<string, F & { also: string[] }>();
+  for (const p of others) {
+    const sku = p.sku?.trim().toLowerCase();
+    const name = norm(p.name);
+    if ((sku && skus.has(sku)) || names.has(name)) continue;
+    const key = sku ? `sku:${sku}` : `name:${name}`;
+    const seen = out.get(key);
+    if (seen) {
+      if (!seen.also.includes(p.account_name) && seen.account_name !== p.account_name) seen.also.push(p.account_name);
+    } else out.set(key, { ...p, also: [] });
+  }
+  return [...out.values()];
+}
+
 // ─── Resumen diario ───
 
 export type DigestImport = {

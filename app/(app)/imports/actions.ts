@@ -48,10 +48,10 @@ function day(f: FormData, k: string): string | null | false {
   return DAY.test(v) && !Number.isNaN(Date.parse(v)) ? v : false;
 }
 
-async function importOf(id: string): Promise<{ id: string; status: string; arrived_at: string | null } | null> {
+async function importOf(id: string): Promise<{ id: string; status: string; arrived_at: string | null; dest_country: string } | null> {
   if (!UUID.test(id)) return null;
-  const { data } = await db().from("imports").select("id, status, arrived_at").eq("id", id).maybeSingle();
-  return (data as { id: string; status: string; arrived_at: string | null } | null) ?? null;
+  const { data } = await db().from("imports").select("id, status, arrived_at, dest_country").eq("id", id).maybeSingle();
+  return (data as { id: string; status: string; arrived_at: string | null; dest_country: string } | null) ?? null;
 }
 
 /** Historial: `kind` activity/money registra lo que se agrega o quita (no cuenta como novedad del envío; money solo lo ve Dinero). */
@@ -205,14 +205,30 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
   if (!nums.ok) return fail(nums.msg);
 
   let product: Record<string, unknown>;
-  if (field(form, "source") === "catalog") {
+  let from = "";
+  const source = field(form, "source");
+  if (source === "catalog" || source === "foreign") {
     const accountId = field(form, "account_id");
     const externalId = field(form, "product_id");
     if (!UUID.test(accountId) || !externalId) return fail("Elige un producto del catálogo.");
-    const { data } = await db().from("products").select("name, sku, image_url").eq("account_id", accountId).eq("external_id", externalId).maybeSingle();
-    if (!data) return fail("Ese producto ya no está en el catálogo.");
+    const [{ data }, { data: acc }] = await Promise.all([
+      db().from("products").select("name, sku, image_url").eq("account_id", accountId).eq("external_id", externalId).maybeSingle(),
+      db().from("accounts").select("name, country").eq("id", accountId).maybeSingle(),
+    ]);
+    if (!data || !acc) return fail("Ese producto ya no está en el catálogo.");
     const p = data as { name: string; sku: string | null; image_url: string | null };
-    product = { account_id: accountId, product_external_id: externalId, name: p.name, sku: p.sku, image_url: p.image_url };
+    const a = acc as { name: string; country: string };
+    if (source === "catalog") {
+      // enlazado: solo con el producto del país al que llega (es el que Inventario cuenta "en camino")
+      if (a.country !== imp.dest_country) return fail("El producto debe ser del país al que llega la importación.");
+      product = { account_id: accountId, product_external_id: externalId, name: p.name, sku: p.sku, image_url: p.image_url };
+    } else {
+      // está en Drop de otro país: producto nuevo con su nombre, SKU y foto; se enlaza solo cuando
+      // aparezca en Drop del país destino con ese SKU (o nombre)
+      if (a.country === imp.dest_country) return fail("Ese producto ya está en el catálogo de este país: elígelo de ahí.");
+      product = { name: p.name, sku: p.sku, image_url: p.image_url, photo_path: null };
+      from = ` (del catálogo de ${a.name})`;
+    }
   } else {
     const name = field(form, "name").slice(0, 200);
     if (!name) return fail("Escribe el nombre del producto nuevo.");
@@ -232,7 +248,7 @@ export async function addImportItem(_prev: ImportFormState, form: FormData): Pro
   const position = (((last ?? []) as { position: number }[])[0]?.position ?? -1) + 1;
   const { error } = await db().from("import_items").insert({ import_id: imp.id, ...product, ...nums.row, position, created_at: new Date().toISOString() });
   if (error) return fail(`No se pudo agregar: ${error.message}`);
-  await logEvent(imp.id, auth.user.id, null, `Producto agregado: ${String(product.name)} (${Number(nums.row.qty).toLocaleString("en-US")} u.)`, "activity");
+  await logEvent(imp.id, auth.user.id, null, `Producto agregado: ${String(product.name)}${from} (${Number(nums.row.qty).toLocaleString("en-US")} u.)`, "activity");
   return done(imp.id, `Agregado: ${String(product.name)}. Puedes agregar otro o cerrar.`);
 }
 

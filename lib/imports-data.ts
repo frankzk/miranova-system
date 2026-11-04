@@ -1,6 +1,6 @@
 import "server-only";
 import {
-  allInDrop, dropState, IMPORT_FILE_TYPES, INBOUND, isNews, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
+  allInDrop, dropState, foreignOnly, IMPORT_FILE_TYPES, INBOUND, isNews, landedCosts, matchNewProduct, type Allocation, type CostKind, type DigestImport, type DocKind,
   type DropState,
 } from "./imports";
 import type { RCost, RImport, RItem, RPayment } from "./import-reports";
@@ -223,40 +223,68 @@ export type ProductChoice = {
   external_id: string;
   name: string;
   sku: string | null;
+  /** código público de Drop (cambia por país) */
+  code?: string | null;
   image_url: string | null;
   /** precio de proveedor en Drop, convertido a USD (null si no hay tipo de cambio) */
   price_usd: number | null;
 };
 
-/** Productos del catálogo de las cuentas del país (para elegir qué viene en la importación). */
-export async function productChoices(country: string): Promise<ProductChoice[]> {
-  const { data: accs, error } = await db().from("accounts").select("id, country, currency, enabled, catalog_only");
+/** Un producto que está en Drop de otro país (no en el del destino): se agrega como producto nuevo. */
+export type ForeignChoice = ProductChoice & {
+  /** cuenta donde está ("Drop Honduras") y las otras cuentas que también lo tienen */
+  account_name: string;
+  also: string[];
+};
+
+type CatalogAccount = { id: string; name: string; country: string; currency: string; enabled: boolean; catalog_only: boolean | null };
+
+/** Catálogo de las cuentas activas (no solo de catálogo); `country` limita a las de ese país. */
+async function catalogRows(country?: string): Promise<{ accounts: Map<string, CatalogAccount>; rows: ProductChoice[] }> {
+  const { data: accs, error } = await db().from("accounts").select("id, name, country, currency, enabled, catalog_only");
   if (error) throw error;
-  const ids = ((accs ?? []) as { id: string; country: string; enabled: boolean; catalog_only: boolean | null }[])
-    .filter((a) => a.country === country && a.enabled && !a.catalog_only)
-    .map((a) => a.id);
-  if (!ids.length) return [];
-  const currency = new Map(((accs ?? []) as { id: string; currency: string }[]).map((a) => [a.id, a.currency]));
+  const eligible = ((accs ?? []) as CatalogAccount[]).filter((a) => a.enabled && !a.catalog_only && (!country || a.country === country));
+  const accounts = new Map(eligible.map((a) => [a.id, a]));
+  if (!eligible.length) return { accounts, rows: [] };
   const rates = await usdRates();
-  const out: ProductChoice[] = [];
+  const rows: ProductChoice[] = [];
   for (let from = 0; from < 20000; from += 1000) {
     const { data, error: e } = await db()
       .from("products")
-      .select("account_id, external_id, name, sku, image_url, price")
-      .in("account_id", ids)
+      .select("account_id, external_id, name, sku, code, image_url, price")
+      .in("account_id", [...accounts.keys()])
       .order("name")
       .range(from, from + 999);
     if (e) throw e;
-    for (const p of (data ?? []) as { account_id: string; external_id: string; name: string; sku: string | null; image_url: string | null; price: number | null }[]) {
+    for (const p of (data ?? []) as { account_id: string; external_id: string; name: string; sku: string | null; code: string | null; image_url: string | null; price: number | null }[]) {
       const price = p.price === null ? null : Number(p.price);
-      out.push({
-        account_id: p.account_id, external_id: p.external_id, name: p.name, sku: p.sku, image_url: p.image_url,
-        price_usd: price === null ? null : toUsd(price, currency.get(p.account_id) ?? "USD", rates.get(p.account_id) ?? null),
+      rows.push({
+        account_id: p.account_id, external_id: p.external_id, name: p.name, sku: p.sku, code: p.code, image_url: p.image_url,
+        price_usd: price === null ? null : toUsd(price, accounts.get(p.account_id)?.currency ?? "USD", rates.get(p.account_id) ?? null),
       });
     }
     if ((data ?? []).length < 1000) break;
   }
-  return out;
+  return { accounts, rows };
+}
+
+/** Productos del catálogo de las cuentas del país (para elegir qué viene en la importación). */
+export async function productChoices(country: string): Promise<ProductChoice[]> {
+  return (await catalogRows(country)).rows;
+}
+
+/**
+ * Para agregar productos a una importación: los del catálogo del país destino y, aparte, los que
+ * solo están en Drop de otro país (p. ej. llevar a Guatemala algo que ya se vende en Honduras).
+ */
+export async function catalogChoices(country: string): Promise<{ choices: ProductChoice[]; foreign: ForeignChoice[] }> {
+  const { accounts, rows } = await catalogRows();
+  const countryOf = (p: ProductChoice) => accounts.get(p.account_id)?.country;
+  const choices = rows.filter((p) => countryOf(p) === country);
+  const others = rows
+    .filter((p) => countryOf(p) !== country)
+    .map((p) => ({ ...p, account_name: accounts.get(p.account_id)?.name ?? "" }));
+  return { choices, foreign: foreignOnly(choices, others) };
 }
 
 async function usdRates(): Promise<Map<string, number | null>> {
