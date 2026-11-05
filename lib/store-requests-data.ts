@@ -4,7 +4,10 @@ import { storeDirectory } from "./contacts";
 import { COUNTRIES } from "./countries";
 import { listProducts } from "./queries";
 import { db } from "./supabase";
-import { isRequestStatus, norm, requestItems, storeSuggestions, type RequestItem, type StoreRequest, type StoreSuggestion } from "./store-requests";
+import {
+  isProspect, isRequestStatus, isRequestType, norm, prospectSuggestions, requestItems, storeSuggestions, type ProspectSuggestion, type RequestItem, type StoreRequest,
+  type StoreSuggestion,
+} from "./store-requests";
 
 // tabla que todavía no existe (migración 0044 sin aplicar): la sección se ve vacía en vez de fallar
 const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === "PGRST205";
@@ -37,6 +40,11 @@ export async function listRequests(): Promise<RequestRow[]> {
       quantity: Number(r.quantity),
       items: requestItems({ product: r.product, quantity: Number(r.quantity), items: byRequest.get(r.id) }),
       status: isRequestStatus(r.status) ? r.status : "pending",
+      // sin la migración de clientes potenciales, todas son pedidos de producto de tiendas
+      client_kind: r.client_kind === "prospect" ? ("prospect" as const) : ("store" as const),
+      request_type: isRequestType(r.request_type) ? r.request_type : ("product" as const),
+      contact_phone: r.contact_phone ?? null,
+      contact_email: r.contact_email ?? null,
       // sin la migración 0045, la fecha de solicitud es el día en que se cargó
       requested_at: r.requested_at ?? localDay(r.created_at),
       arrival_at: r.arrival_at ?? null,
@@ -56,12 +64,12 @@ export async function requestCountries(): Promise<{ code: string; name: string }
   return COUNTRIES.filter((c) => codes.has(c.code)).map((c) => ({ code: c.code, name: c.name }));
 }
 
-export type RequestFormOptions = { stores: StoreSuggestion[]; products: string[] };
+export type RequestFormOptions = { stores: StoreSuggestion[]; prospects: ProspectSuggestion[]; products: string[] };
 
 /**
  * Sugerencias para el formulario: las tiendas de las cuentas (con su dueño y países) más las que ya
- * se cargaron a mano, y los productos del catálogo más los ya pedidos. Si algo falla, el formulario
- * igual funciona sin sugerencias.
+ * se cargaron a mano, los clientes potenciales ya cargados (con su contacto), y los productos del
+ * catálogo más los ya pedidos. Si algo falla, el formulario igual funciona sin sugerencias.
  */
 export async function requestFormOptions(requests: readonly StoreRequest[]): Promise<RequestFormOptions> {
   const [directory, catalog] = await Promise.all([
@@ -71,7 +79,8 @@ export async function requestFormOptions(requests: readonly StoreRequest[]): Pro
   const stores = storeSuggestions(directory);
   const known = new Set(stores.map((s) => norm(s.name)));
   for (const r of requests) {
-    if (known.has(norm(r.store_name))) continue;
+    // los clientes potenciales van aparte (no son tiendas)
+    if (isProspect(r) || known.has(norm(r.store_name))) continue;
     known.add(norm(r.store_name));
     stores.push({ name: r.store_name, owner: r.owner_name, countries: r.countries });
   }
@@ -83,5 +92,5 @@ export async function requestFormOptions(requests: readonly StoreRequest[]): Pro
     seen.add(k);
     products.push(name.trim());
   }
-  return { stores, products };
+  return { stores, prospects: prospectSuggestions(requests), products };
 }

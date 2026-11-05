@@ -7,7 +7,7 @@ import { requestCountries } from "@/lib/store-requests-data";
 import { cleanRequest, isRequestStatus, requestStatus } from "@/lib/store-requests";
 import { db } from "@/lib/supabase";
 
-// Solicitudes de tiendas: crear, editar, cambiar de estado y borrar.
+// Solicitudes de tiendas y clientes potenciales: crear, editar, cambiar de estado y borrar.
 
 export type RequestFormState = { ok: boolean; msg: string } | null;
 
@@ -34,7 +34,10 @@ function itemsFrom(form: FormData) {
   });
 }
 
-/** Nueva o editada: tienda, dueño, países, producto, cantidad, fechas, origen y notas (al editar, también el estado). */
+/**
+ * Nueva o editada: tienda o cliente potencial (con su contacto), tipo de solicitud, países, productos
+ * con su cantidad, fechas, origen y notas (al editar, también el estado).
+ */
 export async function saveRequest(_prev: RequestFormState, form: FormData): Promise<RequestFormState> {
   const auth = await authorizeAction("requests");
   if (!auth.ok) return auth;
@@ -43,8 +46,12 @@ export async function saveRequest(_prev: RequestFormState, form: FormData): Prom
   const allowed = (await requestCountries()).map((c) => c.code);
   const c = cleanRequest(
     {
+      client_kind: field(form, "client_kind"),
+      request_type: field(form, "request_type"),
       store_name: field(form, "store_name"),
       owner_name: field(form, "owner_name"),
+      contact_phone: field(form, "contact_phone"),
+      contact_email: field(form, "contact_email"),
       countries: form.getAll("countries").map(String),
       items: itemsFrom(form),
       notes: field(form, "notes"),

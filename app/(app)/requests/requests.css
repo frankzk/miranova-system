@@ -77,3 +77,18 @@
   .rq-line-head, .rq-line { grid-template-columns: minmax(0, 1fr) 92px 32px; }
   .rq-line-head .hint { display: none; }
 }
+
+/* tienda o cliente potencial */
+.rq-kind { display: inline-flex; align-self: flex-start; }
+.rq-kind button { padding: 4px 12px; border: 0; border-radius: var(--r-sm); background: none; color: var(--ink-2); font: inherit; font-size: var(--t-sm); font-weight: 500; cursor: pointer; }
+.rq-kind button[data-on] { background: var(--bg-surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.rq-kind-note { margin: -4px 0 0; font-size: var(--t-xs); color: var(--ink-3); }
+.rq-chip-rows { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.rq-chip-rows .chips { margin: 0; }
+.rq-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 2px; }
+.rq-tags .pill { font-size: 11px; }
+.rq-contact { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.rq-contact a { color: var(--accent-ink); text-decoration: none; overflow-wrap: anywhere; }
+.rq-contact a:hover { text-decoration: underline; }
+/* `.field` fija su display: el atributo hidden necesita ganarle */
+.rq-form .field[hidden] { display: none; }

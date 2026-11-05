@@ -16,6 +16,12 @@ const store_requests: Row[] = [
   row(2, { days: 3, store_name: "Vital Market", owner_name: "José Pérez", countries: ["HN", "GT", "SV", "CR"], product: "Colágeno Hidrolizado", quantity: 1200, status: "in_progress", origin_country: "Estados Unidos", arrival_at: day(1) }),
   row(3, { days: 5, store_name: "Tienda Bella", countries: ["GT"], product: "drenaje linfatico en gotas", quantity: 300 }),
   row(4, { days: 20, store_name: "ZONAHN", owner_name: "Andrea Paz", countries: ["HN"], product: "Mini ventilador portátil", quantity: 200, status: "done" }),
+  // cliente potencial (todavía no es tienda): maquila de una crema con su marca
+  row(5, {
+    days: 2, client_kind: "prospect", request_type: "maquila", store_name: "Laboratorios Nida", owner_name: "Karla Mejía",
+    contact_phone: "50288887777", contact_email: "karla@nida.com", countries: ["GT", "SV"], product: "Crema hidratante facial NIDA 100 ml", quantity: 500,
+    notes: "Quiere su marca en el envase; pide muestras antes de cotizar",
+  }),
 ];
 
 // líneas de producto: ZONAHN pidió dos productos en la misma solicitud; las demás, uno
