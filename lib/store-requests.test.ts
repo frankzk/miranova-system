@@ -217,6 +217,15 @@ test("cliente potencial: sin tienda ni país, con su contacto y el tipo de solic
   assert.deepEqual(cleanRequest({ ...base, store_name: "" }, ALLOWED), { ok: false, msg: "Escribe el nombre del cliente." });
   assert.equal(cleanRequest({ ...base, contact_phone: "123" }, ALLOWED).ok, false);
   assert.deepEqual(cleanRequest({ ...base, contact_email: "karla@" }, ALLOWED), { ok: false, msg: "El correo no parece válido." });
+  assert.equal(cleanRequest({ ...base, contact_email: "a@b.com?bcc=x@y.com" }, ALLOWED).ok, false);
+  // en una tienda el contacto no se ve: lo que no es válido se descarta sin frenar el guardado
+  const hiddenBad = cleanRequest({ ...base, client_kind: "store", countries: ["HN"], contact_phone: "9999", contact_email: "karla@" }, ALLOWED);
+  assert.ok(hiddenBad.ok);
+  assert.equal(hiddenBad.ok && hiddenBad.row.contact_phone, null);
+  assert.equal(hiddenBad.ok && hiddenBad.row.contact_email, null);
+  // y lo válido se conserva (si después vuelve a cliente potencial o era uno)
+  const hiddenOk = cleanRequest({ ...base, client_kind: "store", countries: ["HN"], contact_phone: "+50499998888" }, ALLOWED);
+  assert.equal(hiddenOk.ok && hiddenOk.row.contact_phone, "50499998888");
   assert.deepEqual(cleanRequest({ ...base, request_type: "otra" }, ALLOWED), { ok: false, msg: "Tipo de solicitud no válido." });
   assert.deepEqual(cleanRequest({ ...base, client_kind: "socio" }, ALLOWED), { ok: false, msg: "Tipo de cliente no válido." });
   // una tienda sigue necesitando al menos un país; sin tipo, pide un producto
@@ -237,6 +246,9 @@ test("lista: filtro por tienda o cliente potencial, búsqueda por contacto o tip
   // las de antes de la migración (sin client_kind) son tiendas
   assert.ok(inScope(req({}), { kind: "store" }));
   assert.ok(matchesRequest(lab, "8888 7777"));
+  assert.ok(matchesRequest(lab, "+502 8888-7777"));
+  // un producto con números no encuentra teléfonos que los contengan
+  assert.ok(!matchesRequest(lab, "Vitamina C 8888"));
   assert.ok(matchesRequest(lab, "nida.com"));
   assert.ok(matchesRequest(lab, "maquila"));
   assert.ok(!matchesRequest(shop, "maquila"));

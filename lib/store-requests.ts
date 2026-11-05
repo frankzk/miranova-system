@@ -109,6 +109,9 @@ export const norm = (s: string) =>
 
 const MAX_QTY = 10_000_000;
 
+/** Correo simple: sin espacios ni caracteres que cambien un enlace mailto: (?, #, %, &, /). */
+const EMAIL = /^[^\s@?#%&/]+@[^\s@?#%&/]+\.[^\s@?#%&/]+$/;
+
 /**
  * Valida lo escrito en el formulario. `items`: los productos del pedido con su cantidad (las filas
  * vacías se ignoran y el mismo producto escrito dos veces se suma). `countries` admitidos: los de
@@ -175,11 +178,16 @@ export function cleanRequest(
   if (unknown.length) return { ok: false, msg: `País no válido: ${unknown.join(", ")}.` };
   const countries = allowed.filter((c) => picked.has(c));
   if (!countries.length && !prospect) return { ok: false, msg: "Marca al menos un país." };
+  // contacto: se valida para un cliente potencial; en una tienda esos campos no se ven, así que lo
+  // que no sea válido se descarta en vez de frenar el guardado
   const phoneIn = (input.contact_phone ?? "").trim();
   const contact_phone = phoneIn ? normalizePhone(phoneIn, countries[0] ?? "HN") : null;
-  if (phoneIn && !contact_phone) return { ok: false, msg: "El teléfono no parece válido: escríbelo con su código de país, p. ej. +504 9999 8888." };
-  const contact_email = (input.contact_email ?? "").trim().toLowerCase().slice(0, 120) || null;
-  if (contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact_email)) return { ok: false, msg: "El correo no parece válido." };
+  if (phoneIn && !contact_phone && prospect) return { ok: false, msg: "El teléfono no parece válido: escríbelo con su código de país, p. ej. +504 9999 8888." };
+  let contact_email = (input.contact_email ?? "").trim().toLowerCase().slice(0, 120) || null;
+  if (contact_email && !EMAIL.test(contact_email)) {
+    if (prospect) return { ok: false, msg: "El correo no parece válido." };
+    contact_email = null;
+  }
   const requested_at = (input.requested_at ?? "").trim() || today;
   if (!isDay(requested_at)) return { ok: false, msg: "La fecha de solicitud no es válida." };
   if (requested_at > today) return { ok: false, msg: "La fecha de solicitud no puede ser futura." };
@@ -207,9 +215,10 @@ export function matchesRequest(
   const products = r.items?.length ? r.items.map((i) => i.product) : [r.product];
   // el tipo, salvo el pedido de producto de siempre ("maquila" encuentra las de maquila)
   const type = r.request_type && r.request_type !== "product" ? requestType(r.request_type).label : null;
-  // el teléfono, también sin espacios ni código de país
+  // el teléfono, también sin espacios ni código de país, solo si lo buscado parece un teléfono
+  // ("Vitamina C 1000" no debe encontrar un teléfono que tenga 1000)
   const digits = needle.replace(/[^\d]/g, "");
-  if (r.contact_phone && digits.length >= 4 && r.contact_phone.includes(digits)) return true;
+  if (r.contact_phone && digits.length >= 4 && /^[+\d\s().-]+$/.test(needle) && r.contact_phone.includes(digits)) return true;
   return [r.store_name, r.owner_name, ...products, r.origin_country, r.notes, r.contact_email, type].some((v) => v && norm(v).includes(needle));
 }
 
