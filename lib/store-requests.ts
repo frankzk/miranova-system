@@ -38,8 +38,55 @@ export type RequestType = (typeof REQUEST_TYPES)[number]["id"];
 export const isRequestType = (v: unknown): v is RequestType => REQUEST_TYPES.some((t) => t.id === v);
 export const requestType = (id: string) => REQUEST_TYPES.find((t) => t.id === id) ?? REQUEST_TYPES[0];
 
-/** Una línea del pedido: producto y cantidad. */
+/** Una línea del pedido: producto y cantidad (y, si se sabe, el reparto por país). */
 export type RequestItem = { product: string; quantity: number; country_quantities?: Record<string, number> };
+
+/**
+ * Producto nuevo: lo que pide un cliente y todavía no existe en Drop. Se crea desde "Nueva
+ * solicitud" (nombre y, si hay, foto) y más adelante se vincula con el producto de Drop. Cada línea
+ * de una solicitud con el mismo nombre (sin importar mayúsculas ni tildes) es ese producto.
+ */
+export type RequestProduct = {
+  id: string;
+  name: string;
+  /** enlace a su foto (/api/requests/products/<id>/photo) o null */
+  photo: string | null;
+  /** el producto de Drop con el que se vinculó (null = todavía sin vincular) */
+  linked: DropProductRef | null;
+};
+
+/** Un producto del catálogo de Drop, para vincular o mostrar. */
+export type DropProductRef = { account_id: string; external_id: string; name: string; sku: string | null; image_url: string | null; account_name: string };
+
+/** Los productos nuevos por nombre normalizado, para reconocer las líneas de las solicitudes. */
+export const requestProductIndex = (list: readonly RequestProduct[]) => new Map(list.map((p) => [norm(p.name), p]));
+
+/** Foto de un producto nuevo: JPG, PNG o WEBP de hasta 10 MB. */
+export const REQUEST_PHOTO_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+export const MAX_REQUEST_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** Tipo de la foto (o null si no se admite): si el navegador no lo da, se toma de la extensión. */
+export function requestPhotoType(type: string, filename: string): string | null {
+  const t = type.trim().toLowerCase();
+  if (REQUEST_PHOTO_TYPES[t]) return t;
+  if (t && t !== "application/octet-stream") return null;
+  const byExt: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+  return byExt[filename.toLowerCase().split(".").pop() ?? ""] ?? null;
+}
+
+/** Problema con la foto elegida (o null). */
+export function requestPhotoProblem(type: string, filename: string, size: number): string | null {
+  if (!requestPhotoType(type, filename)) return "La foto debe ser JPG, PNG o WEBP.";
+  if (!(size > 0)) return "La foto está vacía.";
+  if (size > MAX_REQUEST_PHOTO_BYTES) return "La foto pesa más de 10 MB.";
+  return null;
+}
+
+/** Ruta que el servidor le da a la foto de un producto nuevo ("products/<uuid>.<ext>"). */
+export const isRequestPhotoPath = (path: string) => /^products\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/.test(path);
+
+/** Nombre de un producto nuevo: sin espacios de más y hasta 160 letras (vacío = no válido). */
+export const cleanProductName = (name: string) => name.trim().replace(/\s+/g, " ").slice(0, 160);
 
 /** Single-country legacy requests have an unambiguous destination. Never duplicate a shared quantity. */
 export function requestAllocation(item: RequestItem, countries: readonly string[]): Record<string, number> {
