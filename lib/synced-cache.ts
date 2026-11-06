@@ -18,13 +18,16 @@ export function synced<A extends unknown[], R>(name: string, fn: (...args: A) =>
 }
 
 /**
- * Descarta lo guardado: la siguiente visita vuelve a consultar la base. Se llama al terminar una
- * sincronización o una ingesta de la extensión, y al cambiar una cuenta. Fuera de una acción o ruta
- * de Next no se puede (y no pasa nada: igual vence a los 10 min).
+ * Marca lo guardado como viejo. Se llama al terminar una sincronización o una ingesta de la
+ * extensión: la siguiente visita recibe al instante lo de antes (como mucho de la sincronización
+ * anterior) y la consulta se rehace por detrás, así nadie espera a que se recalcule todo cada 10 min.
+ * `now`: descartarlo ya (la siguiente visita espera los datos nuevos), para cuando se cambia una
+ * cuenta en Ajustes y se espera verlo enseguida. Fuera de una acción o ruta de Next no se puede (y no
+ * pasa nada: igual vence a los 10 min).
  */
-export function refreshSynced(): void {
+export function refreshSynced(now = false): void {
   try {
-    revalidateTag(SYNCED_TAG, { expire: 0 });
+    revalidateTag(SYNCED_TAG, now ? { expire: 0 } : "max");
   } catch {
     /* fuera de una acción o ruta de Next */
   }

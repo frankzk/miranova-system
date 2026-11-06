@@ -135,7 +135,7 @@ export async function toggleAccount(form: FormData) {
   const acc = await getAccount(id);
   if (!acc) back("Cuenta no encontrada.", false);
   await updateAccount(id, { enabled: !acc.enabled });
-  refreshSynced(); // las alertas del dueño solo miran cuentas activas
+  refreshSynced(true); // las alertas del dueño solo miran cuentas activas
   back(`${acc.name} ${acc.enabled ? "pausada" : "activada"}.`, true);
 }
 
@@ -153,7 +153,7 @@ export async function deleteAccount(form: FormData) {
   if (field(form, "confirm") !== "ELIMINAR") back("Escribe ELIMINAR para confirmar.", false);
   const { error } = await db().from("accounts").delete().eq("id", id);
   if (error) back(error.message, false);
-  refreshSynced();
+  refreshSynced(true);
   back("Cuenta y sus órdenes eliminadas.", true);
 }
 
@@ -168,6 +168,6 @@ export async function loadHistory(form: FormData) {
 export async function reprocess() {
   await guard();
   const n = await reprocessAll();
-  refreshSynced();
+  refreshSynced(true);
   back(`Se volvieron a leer ${n.toLocaleString("en-US")} órdenes con el formato actual.`, true);
 }
