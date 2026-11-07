@@ -31,4 +31,17 @@ const store_request_items: Row[] = [
 ];
 store_requests[0].quantity = 900;
 
-export const fixtures: FixtureModule = { tables: { store_requests, store_request_items } };
+// productos nuevos (lo que piden y todavía no está en Drop): la crema del cliente potencial, sin
+// vincular, y el mini ventilador, ya vinculado con el MINI FAN de Drop Honduras
+const request_products: Row[] = [
+  {
+    id: "e2000000-0000-4000-8000-000000000001", name: "Crema hidratante facial NIDA 100 ml", name_key: "crema hidratante facial nida 100 ml", photo_path: null,
+    account_id: null, product_external_id: null, linked_at: null, created_by: OWNER, created_at: at(2), updated_at: at(2),
+  },
+  {
+    id: "e2000000-0000-4000-8000-000000000002", name: "Mini ventilador portátil", name_key: "mini ventilador portatil", photo_path: null,
+    account_id: "11111111-1111-4111-8111-111111111111", product_external_id: "p4", linked_at: at(10), created_by: OWNER, created_at: at(20), updated_at: at(10),
+  },
+];
+
+export const fixtures: FixtureModule = { tables: { store_requests, store_request_items, request_products } };

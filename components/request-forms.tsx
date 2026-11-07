@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
-import { IconClose, IconPlus } from "./icons";
+import { createPortal } from "react-dom";
+import { createRequestProduct, linkRequestProduct, searchDropProducts, startRequestPhotoUpload } from "@/app/(app)/requests/actions";
+import { IconClose, IconPlus, IconUpload } from "./icons";
 import {
-  CLIENT_KINDS, MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, REQUEST_TYPES, type ClientKind, type ProspectSuggestion, type RequestItem,
-  type RequestStatus, type RequestType, type StoreSuggestion,
+  CLIENT_KINDS, cleanProductName, MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, REQUEST_TYPES, requestPhotoProblem, type ClientKind,
+  type DropProductRef, type ProspectSuggestion, type RequestItem, type RequestProduct, type RequestStatus, type RequestType, type StoreSuggestion,
 } from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
 import { StickyForm } from "./sticky-form";
@@ -26,6 +28,139 @@ const defaultType = (kind: ClientKind): RequestType => (kind === "prospect" ? "m
 function Msg({ state }: { state: State }) {
   if (!state) return null;
   return <p className="im-msg" data-ok={state.ok} role={state.ok ? "status" : "alert"}>{state.msg}</p>;
+}
+
+/** Sube la foto al enlace firmado de Storage (mismo formato que las fotos de las importaciones). */
+async function put(url: string, file: File, type: string): Promise<void> {
+  const body = new FormData();
+  body.append("cacheControl", "3600");
+  body.append("", file.type === type ? file : new File([file], file.name, { type }));
+  const res = await fetch(url, { method: "PUT", body, headers: { "x-upsert": "false" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+/**
+ * Ventana sobre la página o el panel. Va fuera del formulario (portal) para no anidar formularios;
+ * Esc la cierra sin cerrar el panel de atrás y Tab no sale de ella.
+ */
+function Popup({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null;
+    box.current?.querySelector<HTMLElement>("input:not([type=file]), button")?.focus();
+    return () => back?.focus();
+  }, []);
+  return createPortal(
+    <div className="im-pop-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div
+        ref={box}
+        className={wide ? "im-pop rq-pop rq-pop-wide" : "im-pop rq-pop"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onKeyDown={(e) => {
+          // que el panel de atrás no reciba Esc ni Tab
+          if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose(); }
+          if (e.key === "Tab" && box.current) {
+            e.stopPropagation();
+            const items = box.current.querySelectorAll<HTMLElement>("input, button:not([disabled])");
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+          }
+        }}
+      >
+        <h3 id={titleId}>{title}</h3>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Crear un producto que todavía no existe en Drop: nombre (obligatorio) y foto (opcional). Si ya hay
+ * uno con ese nombre, se usa ese (y la foto elegida queda como su foto).
+ */
+function NewProductPopup({ initial, onClose, onCreated }: { initial: string; onClose: () => void; onCreated: (name: string, msg: string) => void }) {
+  const [name, setName] = useState(initial);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const pick = (f: File | null) => {
+    setErr(null);
+    const problem = f ? requestPhotoProblem(f.type, f.name, f.size) : null;
+    if (!f || problem) {
+      if (fileRef.current) fileRef.current.value = "";
+      setFile(null);
+      setPreview(null);
+      if (problem) setErr(problem);
+      return;
+    }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  };
+  async function save() {
+    if (busy) return;
+    const clean = cleanProductName(name);
+    if (!clean) return setErr("Escribe el nombre del producto.");
+    setErr(null);
+    try {
+      let photo_path: string | null = null;
+      if (file) {
+        setBusy("Subiendo la foto…");
+        const up = await startRequestPhotoUpload(file.name, file.type, file.size);
+        if (!up.ok) return setErr(up.msg);
+        await put(up.url, file, up.type);
+        photo_path = up.path;
+      }
+      setBusy("Guardando…");
+      const r = await createRequestProduct({ name: clean, photo_path });
+      if (!r.ok) return setErr(r.msg);
+      onCreated(
+        r.product.name,
+        r.existed
+          ? `Ya existía el producto “${r.product.name}”: quedó en la solicitud${photo_path ? " con la foto nueva" : ""}.`
+          : `Producto nuevo “${r.product.name}” creado y agregado a la solicitud.`,
+      );
+    } catch {
+      setErr("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <Popup title="Producto nuevo" onClose={onClose}>
+      <p className="im-pop-hint">Para lo que pide el cliente y todavía no está en Drop. Más adelante lo vinculas con el producto de Drop desde «Lo más pedido».</p>
+      <label className="field">
+        <span>Nombre</span>
+        <input
+          className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={160} autoComplete="off" placeholder="Ej.: Crema hidratante NIDA 100 ml"
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+        />
+      </label>
+      <div className="field">
+        <span>Foto <span className="hint">opcional · JPG, PNG o WEBP de hasta 10 MB</span></span>
+        <div className="rq-photo-pick">
+          {preview ? <img className="rq-photo-preview" src={preview} alt="Foto elegida" /> : <span className="rq-photo-empty" aria-hidden><IconUpload /></span>}
+          <label className="btn btn-sm">
+            {file ? "Cambiar foto" : "Elegir foto"}
+            <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => pick(e.currentTarget.files?.[0] ?? null)} />
+          </label>
+          {file && <button type="button" className="btn btn-ghost btn-sm" onClick={() => pick(null)}>Quitar</button>}
+        </div>
+      </div>
+      {err && <p className="im-msg" data-ok="false" role="alert">{err}</p>}
+      <div className="im-pop-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={!!busy}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={save} disabled={!!busy || !name.trim()}>{busy ?? "Crear producto"}</button>
+      </div>
+    </Popup>
+  );
 }
 
 /**
@@ -77,6 +212,39 @@ export function RequestForm({
   const [lines, setLines] = useState(() => first.map((it) => ({ key: seq.current++, product: it.product, quantity: it.quantity ? String(it.quantity) : "", allocation: Object.fromEntries(Object.entries(requestAllocation(it, v.countries ?? picked)).map(([c, n]) => [c, String(n)])) })));
   const linesRef = useRef<HTMLDivElement>(null);
   const [total, setTotal] = useState(() => first.reduce((t, it) => t + (it.quantity || 0), 0));
+  // productos nuevos creados desde este formulario (para la lista de sugerencias) y la ventana
+  const [extra, setExtra] = useState<string[]>([]);
+  const [creating, setCreating] = useState<string | null>(null);
+  const [created, setCreated] = useState<string | null>(null);
+  const suggestions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...extra, ...products].filter((p) => !seen.has(norm(p)) && !!seen.add(norm(p)));
+  }, [extra, products]);
+  const productInputs = () => [...(linesRef.current?.querySelectorAll<HTMLInputElement>('input[name="product"]') ?? [])];
+  const openNew = () => {
+    // si ya escribió un producto que no está en la lista, se propone ese nombre
+    const known = new Set(suggestions.map(norm));
+    const typed = productInputs().map((i) => i.value.trim()).filter((v) => v && !known.has(norm(v)));
+    setCreated(null);
+    setCreating(typed.at(-1) ?? "");
+  };
+  const onCreated = (name: string, msg: string) => {
+    setCreating(null);
+    setExtra((x) => (x.some((n) => norm(n) === norm(name)) ? x : [name, ...x]));
+    // va en la fila donde se escribió, o en la primera vacía, o en una fila nueva
+    const inputs = productInputs();
+    const target = inputs.find((i) => norm(i.value) === norm(name)) ?? inputs.find((i) => !i.value.trim());
+    if (target) {
+      target.value = name;
+      requestAnimationFrame(() => target.closest(".rq-line")?.querySelector<HTMLInputElement>('input[name="quantity"]')?.focus());
+    } else if (lines.length < MAX_ITEMS) {
+      setLines((l) => [...l, { key: seq.current++, product: name, quantity: "", allocation: {} }]);
+      requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line-block:last-child input[name="quantity"]')?.focus());
+    } else {
+      msg = `Producto “${name}” guardado, pero la solicitud ya tiene ${MAX_ITEMS} productos: quita uno para agregarlo.`;
+    }
+    setCreated(msg);
+  };
   const recount = () => {
     const inputs = linesRef.current?.querySelectorAll<HTMLInputElement>('input[name="quantity"]') ?? [];
     setTotal([...inputs].reduce((t, i) => t + (Number(i.value.replace(/[,\s]/g, "")) || 0), 0));
@@ -85,7 +253,7 @@ export function RequestForm({
   const addLine = () => {
     setLines((l) => (l.length >= MAX_ITEMS ? l : [...l, { key: seq.current++, product: "", quantity: "", allocation: {} }]));
     // el foco va al producto de la fila nueva
-    requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line:last-child input[name="product"]')?.focus());
+    requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line-block:last-child input[name="product"]')?.focus());
   };
 
   useEffect(() => {
@@ -194,7 +362,7 @@ export function RequestForm({
               <div key={l.key} className="rq-line-block"><div className="rq-line">
                 <input
                   className="input" name="product" defaultValue={l.product} maxLength={160} required={i === 0} list={`${uid}-products`} autoComplete="off"
-                  placeholder={i === 0 ? "Ej.: Drenaje linfático en gotas" : "Otro producto"} aria-label={`Producto ${i + 1}`}
+                  placeholder={i === 0 ? "Escribe el producto o elígelo de la lista" : "Otro producto"} aria-label={`Producto ${i + 1}`}
                 />
                 <input
                   className="input" name="quantity" defaultValue={l.quantity} inputMode="numeric" pattern="[0-9][0-9,]*" required={i === 0}
@@ -219,11 +387,18 @@ export function RequestForm({
               </div>
             ))}
           </div>
-          {lines.length < MAX_ITEMS && (
-            <button type="button" className="btn btn-ghost btn-sm rq-add" onClick={addLine}>
-              <IconPlus /> Agregar producto
+          <div className="rq-line-actions">
+            {lines.length < MAX_ITEMS && (
+              <button type="button" className="btn btn-ghost btn-sm rq-add" onClick={addLine}>
+                <IconPlus /> Agregar producto
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm rq-add" onClick={openNew} aria-haspopup="dialog" title="Para un producto que todavía no está en Drop">
+              <IconPlus /> Crear producto nuevo
             </button>
-          )}
+          </div>
+          {created && <p className="rq-hint" role="status">{created}</p>}
+          {creating !== null && <NewProductPopup initial={creating} onClose={() => setCreating(null)} onCreated={onCreated} />}
         </fieldset>
         <label className="field">
           <span>País de origen <span className="hint">opcional</span></span>
@@ -257,7 +432,7 @@ export function RequestForm({
         {prospects.map((p) => <option key={p.name} value={p.name}>{p.contact ?? undefined}</option>)}
       </datalist>
       <datalist id={`${uid}-products`}>
-        {products.map((p) => <option key={p} value={p} />)}
+        {suggestions.map((p) => <option key={p} value={p} />)}
       </datalist>
       <datalist id={`${uid}-origins`}>
         {ORIGIN_SUGGESTIONS.map((o) => <option key={o} value={o} />)}
@@ -297,5 +472,110 @@ export function DeleteRequestForm({ action, id, label }: { action: Action; id: s
       <SubmitButton className="btn btn-ghost btn-sm btn-danger" pending="Borrando…">Borrar solicitud</SubmitButton>
       <Msg state={state} />
     </StickyForm>
+  );
+}
+
+/**
+ * Vincular un producto nuevo con el producto de Drop (cuando ya existe): se busca por nombre o SKU
+ * en el catálogo de todas las cuentas. Si ya está vinculado, se puede cambiar o desvincular.
+ */
+export function LinkDropProduct({ product }: { product: RequestProduct }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="btn btn-ghost btn-sm rq-link-btn" onClick={() => setOpen(true)} aria-haspopup="dialog">
+        {product.linked ? "Cambiar" : "Vincular con Drop"}
+      </button>
+      {open && <LinkPopup product={product} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function LinkPopup({ product, onClose }: { product: RequestProduct; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<DropProductRef[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const turn = useRef(0);
+  const term = q.trim();
+  useEffect(() => {
+    const n = ++turn.current;
+    if (term.length < 2) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await searchDropProducts(term);
+        if (n !== turn.current) return;
+        if (r.ok) {
+          setResults(r.results);
+          setErr(null);
+        } else setErr(r.msg);
+      } catch {
+        if (n === turn.current) setErr("No se pudo buscar. Revisa la conexión e inténtalo de nuevo.");
+      } finally {
+        if (n === turn.current) setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [term]);
+  async function link(target: { account_id: string; external_id: string } | null) {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await linkRequestProduct(product.id, target);
+      if (r.ok) onClose();
+      else setErr(r.msg);
+    } catch {
+      setErr("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const same = (p: DropProductRef) => product.linked?.account_id === p.account_id && product.linked?.external_id === p.external_id;
+  return (
+    <Popup title={`Vincular “${product.name}” con Drop`} onClose={onClose} wide>
+      {product.linked && (
+        <div className="rq-linked-now">
+          <span className="grow">Ahora: <strong>{product.linked.name}</strong>{product.linked.account_name ? ` · ${product.linked.account_name}` : ""}</span>
+          <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => link(null)} disabled={busy}>Desvincular</button>
+        </div>
+      )}
+      <label className="field">
+        <span>Busca el producto en Drop</span>
+        <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={80} autoComplete="off" placeholder="Nombre o SKU" />
+      </label>
+      <div className="rq-drop-results" aria-live="polite" aria-busy={searching}>
+        {term.length < 2 ? (
+          <p className="im-pop-hint">Escribe al menos 2 letras del nombre o del SKU. Busca en el catálogo de todas las cuentas.</p>
+        ) : results === null ? (
+          <p className="im-pop-hint">Buscando…</p>
+        ) : results.length === 0 ? (
+          <p className="im-pop-hint">{searching ? "Buscando…" : `Nada en el catálogo de Drop con “${term}”.`}</p>
+        ) : (
+          results.map((p) => (
+            <button
+              type="button" key={`${p.account_id}:${p.external_id}`} className="rq-drop-result" data-on={same(p) || undefined} disabled={busy || same(p)}
+              onClick={() => link({ account_id: p.account_id, external_id: p.external_id })}
+            >
+              {p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <span className="rq-thumb-empty" aria-hidden />}
+              <span className="grow">
+                <span className="strong">{p.name}</span>
+                <span className="sub">{[p.account_name, p.sku].filter(Boolean).join(" · ")}{same(p) ? " · vinculado" : ""}</span>
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+      {err && <p className="im-msg" data-ok="false" role="alert">{err}</p>}
+      <div className="im-pop-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
+      </div>
+    </Popup>
   );
 }
