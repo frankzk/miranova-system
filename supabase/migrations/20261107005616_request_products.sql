@@ -11,7 +11,7 @@ set lock_timeout = '5s';
 create table if not exists public.request_products (
   id                  uuid primary key default gen_random_uuid(),
   name                text not null check (length(btrim(name)) between 1 and 160),
-  name_key            text not null check (length(name_key) between 1 and 160),
+  name_key            text not null check (length(name_key) between 1 and 320),
   photo_path          text,
   account_id          uuid references public.accounts(id) on delete set null,
   product_external_id text,
