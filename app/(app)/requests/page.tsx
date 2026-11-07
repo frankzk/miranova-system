@@ -25,7 +25,6 @@ type SP = Record<string, string | string[] | undefined>;
 function Thumb({ p, size }: { p: RequestProduct | undefined; size?: "sm" }) {
   const src = p?.photo ?? p?.linked?.image_url ?? null;
   if (!src) return null;
-  // eslint-disable-next-line @next/next/no-img-element
   return <img className={size ? "rq-thumb rq-thumb-sm" : "rq-thumb"} src={src} alt="" loading="lazy" />;
 }
 

@@ -7,7 +7,7 @@ import {
   removePhotos, requestCountries, searchDropCatalog, signedPhotoUpload, storedPhoto,
 } from "@/lib/store-requests-data";
 import {
-  cleanProductName, cleanRequest, isRequestPhotoPath, isRequestStatus, MAX_REQUEST_PHOTO_BYTES, norm, REQUEST_PHOTO_TYPES, requestPhotoProblem, requestPhotoType, requestStatus,
+  cleanProductName, cleanRequest, isRequestPhotoPath, isRequestStatus, MAX_REQUEST_PHOTO_BYTES, norm, REQUEST_PHOTO_TYPES, requestPhotoProblem, requestPhotoType, requestPhotoUrl, requestStatus,
   type DropProductRef, type RequestProduct,
 } from "@/lib/store-requests";
 import { db } from "@/lib/supabase";
@@ -140,8 +140,6 @@ export async function deleteRequest(_prev: RequestFormState, form: FormData): Pr
 const NO_TABLE = "Falta preparar la base de datos para los productos nuevos. Avísale al administrador.";
 const PRODUCT_GONE = "Ese producto nuevo ya no existe.";
 const missingTable = (e: { code?: string }) => e.code === "42P01" || e.code === "PGRST205";
-/** Enlace a la foto, con su versión: si cambia la foto, el navegador no muestra la vieja. */
-const photoUrl = (id: string, path: string | null) => (path ? `/api/requests/products/${id}/photo?v=${path.slice(9, 17)}` : null);
 
 /** Prepara la subida de la foto de un producto nuevo: devuelve el enlace firmado y la ruta. */
 export async function startRequestPhotoUpload(filename: string, type: string, size: number): Promise<Result<{ path: string; url: string; type: string }>> {
@@ -197,7 +195,7 @@ export async function createRequestProduct(input: { name?: string; photo_path?: 
     if (!ins.error && ins.data) {
       const p = ins.data as Found;
       revalidatePath("/requests");
-      return { ok: true, existed: false, product: { id: p.id, name: p.name, photo: photoUrl(p.id, p.photo_path) } };
+      return { ok: true, existed: false, product: { id: p.id, name: p.name, photo: requestPhotoUrl(p.id, p.photo_path) } };
     }
     // otra persona lo creó a la vez: se usa ese
     if (ins.error?.code !== "23505") return drop(ins.error && missingTable(ins.error) ? NO_TABLE : `No se pudo guardar: ${ins.error?.message ?? "sin respuesta"}`);
@@ -211,7 +209,7 @@ export async function createRequestProduct(input: { name?: string; photo_path?: 
     found = { ...found, photo_path: photo };
   }
   revalidatePath("/requests");
-  return { ok: true, existed: true, product: { id: found.id, name: found.name, photo: photoUrl(found.id, found.photo_path) } };
+  return { ok: true, existed: true, product: { id: found.id, name: found.name, photo: requestPhotoUrl(found.id, found.photo_path) } };
 }
 
 /** Productos del catálogo de Drop (de todas las cuentas) para vincular un producto nuevo. */

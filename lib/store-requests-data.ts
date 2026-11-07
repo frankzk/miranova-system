@@ -5,7 +5,7 @@ import { COUNTRIES } from "./countries";
 import { listProducts } from "./queries";
 import { db } from "./supabase";
 import {
-  isProspect, isRequestStatus, isRequestType, norm, prospectSuggestions, REQUEST_PHOTO_TYPES, requestItems, storeSuggestions, type DropProductRef, type ProspectSuggestion,
+  isProspect, isRequestStatus, isRequestType, norm, prospectSuggestions, REQUEST_PHOTO_TYPES, requestItems, requestPhotoUrl, storeSuggestions, type DropProductRef, type ProspectSuggestion,
   type RequestItem, type RequestProduct, type StoreRequest, type StoreSuggestion,
 } from "./store-requests";
 
@@ -141,7 +141,7 @@ export async function listRequestProducts(): Promise<RequestProduct[]> {
     return {
       id: r.id,
       name: r.name,
-      photo: r.photo_path ? `/api/requests/products/${r.id}/photo` : null,
+      photo: requestPhotoUrl(r.id, r.photo_path),
       linked: r.account_id && r.product_external_id
         ? { account_id: r.account_id, external_id: r.product_external_id, name: p?.name ?? "Ya no está en el catálogo", sku: p?.sku ?? null, image_url: p?.image_url ?? null, account_name: accountName.get(r.account_id) ?? "" }
         : null,

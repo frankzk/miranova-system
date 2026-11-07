@@ -85,6 +85,9 @@ export function requestPhotoProblem(type: string, filename: string, size: number
 /** Ruta que el servidor le da a la foto de un producto nuevo ("products/<uuid>.<ext>"). */
 export const isRequestPhotoPath = (path: string) => /^products\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/.test(path);
 
+/** Enlace a la foto de un producto nuevo, con su versión: si cambia la foto, el navegador no muestra la vieja. */
+export const requestPhotoUrl = (id: string, path: string | null) => (path ? `/api/requests/products/${id}/photo?v=${path.slice(9, 17)}` : null);
+
 /** Nombre de un producto nuevo: sin espacios de más y hasta 160 letras (vacío = no válido). */
 export const cleanProductName = (name: string) => name.trim().replace(/\s+/g, " ").slice(0, 160);
 

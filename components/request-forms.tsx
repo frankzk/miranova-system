@@ -220,6 +220,13 @@ export function RequestForm({
     const seen = new Set<string>();
     return [...extra, ...products].filter((p) => !seen.has(norm(p)) && !!seen.add(norm(p)));
   }, [extra, products]);
+  // a dónde va el foco cuando se cierra la ventana (después de que ella lo devuelva al botón)
+  const focusAfter = useRef<(() => HTMLElement | null | undefined) | null>(null);
+  useEffect(() => {
+    if (creating !== null || !focusAfter.current) return;
+    focusAfter.current()?.focus();
+    focusAfter.current = null;
+  }, [creating, lines.length]);
   const productInputs = () => [...(linesRef.current?.querySelectorAll<HTMLInputElement>('input[name="product"]') ?? [])];
   const openNew = () => {
     // si ya escribió un producto que no está en la lista, se propone ese nombre
@@ -236,10 +243,10 @@ export function RequestForm({
     const target = inputs.find((i) => norm(i.value) === norm(name)) ?? inputs.find((i) => !i.value.trim());
     if (target) {
       target.value = name;
-      requestAnimationFrame(() => target.closest(".rq-line")?.querySelector<HTMLInputElement>('input[name="quantity"]')?.focus());
+      focusAfter.current = () => target.closest(".rq-line")?.querySelector<HTMLInputElement>('input[name="quantity"]');
     } else if (lines.length < MAX_ITEMS) {
       setLines((l) => [...l, { key: seq.current++, product: name, quantity: "", allocation: {} }]);
-      requestAnimationFrame(() => linesRef.current?.querySelector<HTMLInputElement>('.rq-line-block:last-child input[name="quantity"]')?.focus());
+      focusAfter.current = () => linesRef.current?.querySelector<HTMLInputElement>('.rq-line-block:last-child input[name="quantity"]');
     } else {
       msg = `Producto “${name}” guardado, pero la solicitud ya tiene ${MAX_ITEMS} productos: quita uno para agregarlo.`;
     }
