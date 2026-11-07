@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { IconDownload, IconPlus, IconSearch } from "@/components/icons";
-import { DeleteRequestForm, RequestForm, RequestStatusSelect } from "@/components/request-forms";
+import { DeleteRequestForm, LinkDropProduct, RequestForm, RequestStatusSelect } from "@/components/request-forms";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { requirePermission } from "@/lib/auth";
@@ -10,9 +10,9 @@ import { can } from "@/lib/permissions";
 import { formatPhone, whatsappChat } from "@/lib/store-contacts";
 import {
   CLIENT_KINDS, REQUEST_STATUSES, norm, requestItems, demandByProduct, filterRequests, inScope, inView, isOverdue, isProspect, parseRequestFilters, REQUEST_VIEWS,
-  requestType,
+  requestProductIndex, requestType, type RequestProduct,
 } from "@/lib/store-requests";
-import { listRequests, requestCountries, requestFormOptions } from "@/lib/store-requests-data";
+import { listRequestProducts, listRequests, requestCountries, requestFormOptions } from "@/lib/store-requests-data";
 import { deleteRequest, saveRequest, setRequestStatus } from "./actions";
 import "../imports/imports.css";
 import "./requests.css";
@@ -20,6 +20,25 @@ import "./requests.css";
 export const metadata = { title: "Solicitudes" };
 
 type SP = Record<string, string | string[] | undefined>;
+
+/** Foto del producto nuevo (o, si ya se vinculó, la de Drop). */
+function Thumb({ p, size }: { p: RequestProduct | undefined; size?: "sm" }) {
+  const src = p?.photo ?? p?.linked?.image_url ?? null;
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className={size ? "rq-thumb rq-thumb-sm" : "rq-thumb"} src={src} alt="" loading="lazy" />;
+}
+
+/** Nombre de una línea, con la foto y la marca de producto nuevo si es uno de los creados aquí. */
+function ProductLabel({ name, p }: { name: string; p: RequestProduct | undefined }) {
+  return (
+    <span className="rq-product-label">
+      <Thumb p={p} size="sm" />
+      <span>{name}</span>
+      {p && !p.linked && <span className="pill rq-new-pill" data-tone="accent" title="Todavía no está en Drop: vincúlalo desde «Lo más pedido»">Nuevo</span>}
+    </span>
+  );
+}
 
 /** "15 oct" de un día "YYYY-MM-DD" (con el año si no es el actual). */
 const day = (ymd: string, today: string) =>
@@ -30,8 +49,13 @@ const day = (ymd: string, today: string) =>
 
 
 export default async function RequestsPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const [user, all, countries, sp] = await Promise.all([requirePermission("requests"), listRequests(), requestCountries(), searchParams]);
-  const options = await requestFormOptions(all);
+  const [user, all, countries, sp, newProducts] = await Promise.all([
+    requirePermission("requests"), listRequests(), requestCountries(), searchParams,
+    // productos nuevos (lo que piden y no está en Drop): si no se pueden leer, la página se ve igual
+    listRequestProducts().catch((e) => (console.error("solicitudes: productos nuevos", e), [] as RequestProduct[])),
+  ]);
+  const options = await requestFormOptions(all, newProducts);
+  const created = requestProductIndex(newProducts);
   const f = parseRequestFilters(sp);
   const rows = filterRequests(all, f);
   const codes = countries.map((c) => c.code);
@@ -132,12 +156,30 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                 <th scope="col" className="r">Total</th><th scope="col">Estado</th></tr></thead>
               <tbody>{demand.map((d) => {
                 const sources = rows.filter((r) => requestItems(r).some((it) => norm(it.product) === norm(d.product)));
+                const np = created.get(norm(d.product));
                 return <tr key={norm(d.product)}>
                   <th scope="row">
-                    <span className="rq-product-name">{d.product}</span>
-                    <span className="sub">
-                      {[d.stores > 0 && `${d.stores} ${d.stores === 1 ? "tienda" : "tiendas"}`, d.prospects > 0 && `${d.prospects} ${d.prospects === 1 ? "cliente potencial" : "clientes potenciales"}`].filter(Boolean).join(" · ")}
-                    </span>
+                    <div className="rq-product-head">
+                      <Thumb p={np} />
+                      <div>
+                        <span className="rq-product-name">{d.product}</span>
+                        <span className="sub">
+                          {[d.stores > 0 && `${d.stores} ${d.stores === 1 ? "tienda" : "tiendas"}`, d.prospects > 0 && `${d.prospects} ${d.prospects === 1 ? "cliente potencial" : "clientes potenciales"}`].filter(Boolean).join(" · ")}
+                        </span>
+                        {np && (
+                          <div className="rq-new">
+                            {np.linked ? (
+                              <span className="pill" data-tone="success" title={np.linked.sku ? `SKU ${np.linked.sku}` : undefined}>
+                                En Drop: {np.linked.name}{np.linked.account_name ? ` · ${np.linked.account_name}` : ""}
+                              </span>
+                            ) : (
+                              <span className="pill" data-tone="accent">Producto nuevo · sin vincular</span>
+                            )}
+                            <LinkDropProduct product={np} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </th>
                   <td className="num strong">{fmtInt(d.units)}</td>
                   {countries.map((c) => <td key={c.code} className="num">{d.country_quantities[c.code] !== undefined ? fmtInt(d.country_quantities[c.code]) : d.unallocated > 0 && d.countries.includes(c.code) ? "—" : "0"}</td>)}
@@ -207,10 +249,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                     <td>
                       {r.items.length > 1 ? (
                         <ul className="rq-items" aria-label="Productos">
-                          {r.items.map((it, i) => <li key={i}><span className="q">{fmtInt(it.quantity)}</span><span>{it.product}</span></li>)}
+                          {r.items.map((it, i) => <li key={i}><span className="q">{fmtInt(it.quantity)}</span><ProductLabel name={it.product} p={created.get(norm(it.product))} /></li>)}
                         </ul>
                       ) : (
-                        <div>{r.items[0]?.product ?? r.product}</div>
+                        <div><ProductLabel name={r.items[0]?.product ?? r.product} p={created.get(norm(r.items[0]?.product ?? r.product))} /></div>
                       )}
                       {r.notes && <div className="sub rq-notes" title={r.notes}>{r.notes}</div>}
                     </td>

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  cleanRequest, demandByProduct, filterRequests, inScope, isDay, isOverdue, matchesRequest, parseRequestFilters, prospectSuggestions, requestItems, storeSuggestions,
-  type StoreRequest,
+  cleanProductName, cleanRequest, demandByProduct, filterRequests, inScope, isDay, isOverdue, isRequestPhotoPath, matchesRequest, norm, parseRequestFilters, prospectSuggestions,
+  requestItems, requestPhotoProblem, requestPhotoType, requestProductIndex, storeSuggestions, type StoreRequest,
 } from "./store-requests.ts";
 
 const ALLOWED = ["HN", "GT", "SV", "CR"];
@@ -265,4 +265,32 @@ test("clientes potenciales ya cargados: uno por nombre con su contacto más reci
     req({ id: "c", store_name: "ZONAHN" }),
   ];
   assert.deepEqual(prospectSuggestions(rows), [{ name: "lab nida", contact: "Karla", phone: "50288887777", email: null }]);
+});
+
+test("producto nuevo: nombre limpio, foto admitida y ruta de la foto", () => {
+  assert.equal(cleanProductName("  Crema   NIDA\n100 ml "), "Crema NIDA 100 ml");
+  assert.equal(cleanProductName("   "), "");
+  assert.equal(cleanProductName("x".repeat(200)).length, 160);
+  assert.equal(requestPhotoType("image/PNG", "a.png"), "image/png");
+  // sin tipo del navegador: por la extensión
+  assert.equal(requestPhotoType("", "foto.JPEG"), "image/jpeg");
+  assert.equal(requestPhotoType("application/octet-stream", "foto.webp"), "image/webp");
+  // un tipo que no es foto no se cambia por la extensión
+  assert.equal(requestPhotoType("application/pdf", "foto.jpg"), null);
+  assert.equal(requestPhotoType("", "foto.gif"), null);
+  assert.equal(requestPhotoProblem("image/gif", "a.gif", 10), "La foto debe ser JPG, PNG o WEBP.");
+  assert.equal(requestPhotoProblem("image/jpeg", "a.jpg", 0), "La foto está vacía.");
+  assert.equal(requestPhotoProblem("image/jpeg", "a.jpg", 11 * 1024 * 1024), "La foto pesa más de 10 MB.");
+  assert.equal(requestPhotoProblem("image/jpeg", "a.jpg", 5000), null);
+  assert.ok(isRequestPhotoPath("products/0f8fad5b-d9cb-469f-a165-70867728950e.jpg"));
+  assert.ok(!isRequestPhotoPath("products/../import-files/x.jpg"));
+  assert.ok(!isRequestPhotoPath("0f8fad5b-d9cb-469f-a165-70867728950e.jpg"));
+  assert.ok(!isRequestPhotoPath("products/0f8fad5b-d9cb-469f-a165-70867728950e.gif"));
+});
+
+test("producto nuevo: se reconoce en las líneas sin importar mayúsculas ni tildes", () => {
+  const idx = requestProductIndex([{ id: "1", name: "Crema Hidratante NIDA", photo: null, linked: null }]);
+  assert.equal(idx.get("crema hidratante nida")?.id, "1");
+  assert.equal(idx.get(norm("  CREMA hidratante  NÍDA "))?.id, "1");
+  assert.equal(idx.get("crema"), undefined);
 });
