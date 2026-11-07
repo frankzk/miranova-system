@@ -92,3 +92,34 @@
 .rq-contact a:hover { text-decoration: underline; }
 /* `.field` fija su display: el atributo hidden necesita ganarle */
 .rq-form .field[hidden] { display: none; }
+
+/* productos nuevos (lo que piden y todavía no está en Drop) */
+.rq-line-actions { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.rq-lines .rq-hint { margin: 6px 0 0; }
+.rq-product-label { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rq-thumb { width: 40px; height: 40px; flex: none; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-app); }
+.rq-thumb-sm { width: 24px; height: 24px; border-radius: 4px; }
+.rq-new-pill { font-size: 10.5px; padding: 0 6px; }
+.rq-product-head { display: flex; align-items: flex-start; gap: 10px; }
+.rq-new { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; font-weight: 400; }
+.rq-new .pill { max-width: 280px; white-space: normal; text-align: left; }
+.rq-link-btn { color: var(--accent-ink); padding-inline: 6px; }
+.rq-pop-wide { width: min(520px, 100%); }
+.rq-photo-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rq-photo-preview, .rq-photo-empty { width: 64px; height: 64px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; flex: none; }
+.rq-photo-empty { display: grid; place-items: center; color: var(--ink-3); background: var(--bg-app); border-style: dashed; }
+.rq-photo-pick label.btn { cursor: pointer; }
+.rq-photo-pick label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rq-linked-now { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); font-size: var(--t-sm); }
+.rq-drop-results { display: grid; gap: 4px; max-height: min(320px, 50vh); overflow-y: auto; }
+.rq-drop-results .im-pop-hint { padding: 4px 0; }
+.rq-drop-result { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-surface); text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.rq-drop-result:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-app); }
+.rq-drop-result:disabled { cursor: default; opacity: 0.7; }
+.rq-drop-result[data-on] { border-color: var(--success); opacity: 1; }
+.rq-drop-result img, .rq-thumb-empty { width: 40px; height: 40px; flex: none; border-radius: 6px; object-fit: cover; background: var(--bg-app); border: 1px solid var(--line); }
+.rq-drop-result .grow { display: grid; gap: 2px; min-width: 0; }
+.rq-drop-result .strong { overflow-wrap: anywhere; }
+.rq-drop-result .sub { font-size: var(--t-xs); color: var(--ink-3); }
+.rq-linked-now .grow, .rq-drop-result .grow { flex: 1; min-width: 0; }
+.rq-drop-result .strong { font-weight: 550; font-size: var(--t-sm); }

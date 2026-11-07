@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { IMPORT_FILE_TYPES, MAX_IMPORT_FILE_BYTES } from "@/lib/imports";
 import { MAX_MEDIA_BYTES, MEDIA_TYPES } from "@/lib/media-rules";
 import { MAX_BANK_PDF } from "@/lib/reconciliation";
+import { MAX_REQUEST_PHOTO_BYTES, REQUEST_PHOTO_TYPES } from "@/lib/store-requests";
 
 // Solo para desarrollo local con datos de prueba (MIRANOVA_FIXTURES=1): imita los enlaces
 // firmados de Supabase Storage guardando los archivos en memoria. En Vercel no existe (404).
@@ -29,6 +30,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   if (banking) {
     if (file.type !== "application/pdf") return Response.json({ error: "mime type not supported" }, { status: 415 });
     if (file.size > MAX_BANK_PDF) return Response.json({ error: "Payload too large" }, { status: 413 });
+    files().set(key, { type: file.type, data: new Uint8Array(await file.arrayBuffer()), created_at: new Date().toISOString() });
+    return Response.json({ Key: key });
+  }
+  // fotos de los productos nuevos de Solicitudes
+  if (rest[0] === "request-files") {
+    if (!REQUEST_PHOTO_TYPES[file.type]) return Response.json({ error: "mime type not supported" }, { status: 415 });
+    if (file.size > MAX_REQUEST_PHOTO_BYTES) return Response.json({ error: "Payload too large" }, { status: 413 });
     files().set(key, { type: file.type, data: new Uint8Array(await file.arrayBuffer()), created_at: new Date().toISOString() });
     return Response.json({ Key: key });
   }
