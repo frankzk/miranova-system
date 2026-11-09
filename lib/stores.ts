@@ -34,13 +34,25 @@ export type StoreRow = {
 
 export type Health = "growing" | "new" | "stable" | "declining" | "alert" | "inactive";
 
-export const HEALTH: Record<Health, { label: string; tone: string; hint: string }> = {
-  growing: { label: "Creciendo", tone: "success", hint: "Ritmo de 7 días más de 15% arriba de los 7 anteriores" },
-  new: { label: "Nueva", tone: "accent", hint: "Vende esta semana y no vendía la anterior" },
-  stable: { label: "Estable", tone: "info", hint: "Variación entre −15% y +15%" },
-  declining: { label: "En descenso", tone: "warning", hint: "Ritmo de 7 días más de 15% abajo" },
-  alert: { label: "Alerta", tone: "danger", hint: "Caída mayor a 35%, o vendía seguido y lleva 2+ días sin pedidos" },
-  inactive: { label: "Inactiva", tone: "neutral", hint: "Sin pedidos en los últimos 7 días" },
+export const HEALTH: Record<Health, { label: string; tone: string; hint: string; description: string; example: string }> = {
+  growing: { label: "Creciendo", tone: "success", hint: "Ritmo de 7 días más de 15% arriba de los 7 anteriores",
+    description: "Sus pedidos aumentaron más de 15% frente a los 7 días anteriores, con al menos 6 pedidos entre ambas semanas. Si se frenó después de vender casi a diario, pasa a Alerta.",
+    example: "Por ejemplo: pasó de 20 a 24 pedidos, un aumento de 20%." },
+  new: { label: "Nueva", tone: "accent", hint: "Vende esta semana y no vendía la anterior",
+    description: "Recibió pedidos en los últimos 7 días y ninguno en los 7 anteriores. También puede ser una tienda que volvió a vender, no necesariamente una recién creada.",
+    example: "Por ejemplo: pasó de 0 a 3 pedidos esta semana." },
+  stable: { label: "Estable", tone: "info", hint: "Variación entre −15% y +15%",
+    description: "Sus pedidos variaron entre −15% y +15%. También se usa cuando hay menos de 6 pedidos entre ambas semanas, porque una variación pequeña puede exagerar el porcentaje. Las señales de Inactiva o Alerta tienen prioridad.",
+    example: "Por ejemplo: pasó de 20 a 22 pedidos, un aumento de 10%." },
+  declining: { label: "En descenso", tone: "warning", hint: "Ritmo de 7 días más de 15% abajo",
+    description: "Sus pedidos bajaron más de 15% y menos de 35% frente a los 7 días anteriores, con al menos 6 pedidos entre ambas semanas. Una señal de freno por falta de pedidos puede llevarla a Alerta.",
+    example: "Por ejemplo: pasó de 20 a 16 pedidos, una caída de 20%." },
+  alert: { label: "Alerta", tone: "danger", hint: "Caída de 35% o más, o vendía seguido y lleva 2+ días sin pedidos",
+    description: "Sus pedidos cayeron 35% o más, con al menos 6 entre ambas semanas. También entra aquí si vendió en 5 o más días de la semana anterior y lleva al menos 2 días sin pedidos. Si llega a 7 días sin pedidos, pasa a Inactiva.",
+    example: "Por ejemplo: pasó de 20 a 13 pedidos, una caída de 35%." },
+  inactive: { label: "Inactiva", tone: "neutral", hint: "Sin pedidos en los últimos 7 días",
+    description: "No recibió pedidos en los últimos 7 días. Puede tener muchas ventas anteriores y aun así estar inactiva hoy.",
+    example: "Por ejemplo: lleva 8 días sin vender, aunque haya recibido 256 pedidos en los últimos 90 días." },
 };
 export const HEALTH_ORDER: Health[] = ["alert", "declining", "inactive", "stable", "growing", "new"];
 
