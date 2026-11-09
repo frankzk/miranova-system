@@ -7,11 +7,12 @@ import type { FollowupState } from "./followup-forms";
 import { IconArrowRight, IconExternal } from "./icons";
 import { StoreContactSection } from "./store-contact";
 import { StoreFollowups } from "./store-followups";
+import { HealthPill } from "./store-health-help";
 import type { StoreContactView } from "@/lib/contacts";
 import { fmtInt, fmtMoney } from "@/lib/format";
 import { storeHref } from "@/lib/store-links";
 import type { StoreDetail } from "@/lib/store-metrics";
-import { HEALTH, type Health, type Opportunity } from "@/lib/stores";
+import { type Health, type Opportunity } from "@/lib/stores";
 
 type Action<S> = (prev: S, form: FormData) => Promise<S>;
 
@@ -45,7 +46,7 @@ export function StoreDrawer({ d, contact, health, ops, closeHref, me, canOrders,
         <div className="grow">
           <h2 className="sheet-title">{s.name}</h2>
           <p className="sheet-sub">
-            {health && <><span className="pill" data-tone={HEALTH[health].tone} title={HEALTH[health].hint}>{HEALTH[health].label}</span>{" "}</>}
+            {health && <><HealthPill h={health} />{" "}</>}
             {lastSale(k.days_since)} · {s.account_name}
           </p>
         </div>

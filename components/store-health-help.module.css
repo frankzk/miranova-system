@@ -1,0 +1,16 @@
+.anchor { display: inline-flex; align-items: center; flex: none; gap: 0; vertical-align: middle; }
+.info, .badge { font: inherit; cursor: help; border: 0; }
+.info { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 32px; padding: 0; margin-left: -6px; color: var(--ink-3); background: transparent; border-radius: var(--r-sm); }
+.info:hover, .info[aria-expanded="true"] { color: var(--accent-ink); background: var(--accent-soft); }
+.badge { font-size: var(--t-xs); font-weight: 550; }
+.badge:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge svg { opacity: .7; }
+.info:focus-visible, .badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { position: fixed; z-index: 160; width: min(330px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--ink); background: var(--bg-surface); box-shadow: var(--shadow-float, 0 12px 32px oklch(28% .04 250 / .18)); font-size: var(--t-sm); line-height: 1.55; text-align: left; white-space: normal; animation: appear 150ms cubic-bezier(.16, 1, .3, 1); }
+.panel strong { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
+.panel p { margin: 8px 0 0; }
+.panel .example { color: var(--ink-2); }
+.panel .note { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: var(--t-xs); }
+@keyframes appear { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (pointer: coarse) { .info { width: 36px; height: 40px; } .badge { min-height: 36px; } }
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }

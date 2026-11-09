@@ -6,13 +6,14 @@ import { StoreChart } from "@/components/store-chart";
 import { StoreContactBar } from "@/components/store-contact";
 import { StoreFollowups } from "@/components/store-followups";
 import { PageHead } from "@/components/ui";
+import { HealthPill } from "@/components/store-health-help";
 import { currentUser, requirePermission } from "@/lib/auth";
 import { storeContactView } from "@/lib/contacts";
 import { fmtInt, fmtMoney, fmtShort } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { storeDetail } from "@/lib/store-detail";
 import { fmtDay, pctChange, vsAverage, type StoreDetail } from "@/lib/store-metrics";
-import { classify, HEALTH, opportunities, type StoreRow } from "@/lib/stores";
+import { classify, opportunities, type StoreRow } from "@/lib/stores";
 import { addFollowup, updateFollowup } from "./actions";
 import { linkStore, mergeContacts, saveContact, unlinkStore } from "./contact-actions";
 import "./store-detail.css";
@@ -77,7 +78,7 @@ export default async function StorePage({ params }: { params: Params }) {
         title={s.name}
         sub={
           <>
-            <span className="pill" data-tone={HEALTH[health].tone} title={HEALTH[health].hint}>{HEALTH[health].label}</span>{" "}
+            <HealthPill h={health} />{" "}
             {lastSale(k.days_since)} · {s.account_name} · {s.currency}
             {k.first_at && <> · primera venta registrada {fmtDay(k.first_at.slice(0, 10), s.today)}</>}
           </>

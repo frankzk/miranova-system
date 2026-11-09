@@ -9,6 +9,7 @@ import { StoreDrawerLink } from "@/components/store-drawer-link";
 import { StoreSearch, type StoreOption } from "@/components/store-search";
 import { RangePicker } from "@/components/range-picker";
 import { PageHead } from "@/components/ui";
+import { HealthPill, StoreHealthHelp } from "@/components/store-health-help";
 import { listAccounts } from "@/lib/accounts";
 import { requirePermission } from "@/lib/auth";
 import { contactIndex, contactKey, storeProfiles } from "@/lib/contacts";
@@ -265,7 +266,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
                 <li key={`${s.account_id}:${s.store_id}`} className="row-qc">
                   <StoreDrawerLink href={fichaHref(s)} name={s.name}>
                     <span className="t">{s.name}</span>
-                    <HealthPill h={healthOf(s)} />
+                    <HealthPill h={healthOf(s)} passive />
                     <span className="s">
                       {fmtInt(s.prev7)} → {fmtInt(s.d7)} pedidos · {lastSale(s)}
                       {showAccount && <> · {s.account_name}</>}
@@ -280,7 +281,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
               <li key={`px:${s.account_id}:${s.store_id}`} className="row-qc">
                 <StoreDrawerLink href={fichaHref(s)} name={s.name}>
                   <span className="t">{s.name}</span>
-                  <HealthPill h={healthOf(s)} />
+                  <HealthPill h={healthOf(s)} passive />
                   <span className="s">
                     {fmtInt(s.prev7)} → {fmtInt(s.d7)} pedidos · {lastSale(s)}
                     {showAccount && <> · {s.account_name}</>}
@@ -294,15 +295,18 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         </section>
       )}
 
+      <p className="hint" style={{ marginBottom: 6 }}>Los estados reflejan los últimos 7 días. Pasa el cursor o toca ⓘ para ver cada criterio.</p>
       <nav className="tabs" aria-label="Filtrar por estado">
         <Link href={href({ h: undefined, px: undefined })} aria-current={!h && !px}>
           Todas <span className="c">{fmtInt(pool.length)}</span>
         </Link>
         {HEALTH_ORDER.map((k) => (
-          <Link key={k} href={href({ h: k, px: undefined })} aria-current={h === k} title={HEALTH[k].hint}>
-            <span className="dot" data-tone={HEALTH[k].tone} aria-hidden />
-            {HEALTH[k].label} <span className="c">{fmtInt(counts[k] ?? 0)}</span>
-          </Link>
+          <StoreHealthHelp key={k} health={k}>
+            <Link href={href({ h: k, px: undefined })} aria-current={h === k}>
+              <span className="dot" data-tone={HEALTH[k].tone} aria-hidden />
+              {HEALTH[k].label} <span className="c">{fmtInt(counts[k] ?? 0)}</span>
+            </Link>
+          </StoreHealthHelp>
         ))}
         {hasPx && (
           <Link
@@ -501,9 +505,6 @@ function GroupLink({ url }: { url: string | null }) {
   );
 }
 
-function HealthPill({ h }: { h: Health }) {
-  return <span className="pill" data-tone={HEALTH[h].tone} title={HEALTH[h].hint}>{HEALTH[h].label}</span>;
-}
 
 function Delta({ s }: { s: StoreRow }) {
   const c = change(s);
