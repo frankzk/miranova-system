@@ -94,14 +94,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         title="Órdenes"
         sub={<>{fmtInt(counts.all ?? 0)} órdenes · {scope.label}</>}
         actions={
-          can(user, "export") && (
-            <>
-              <a className="btn" href={exportHref("xlsx")} download title="Descargar en Excel (.xlsx), con los filtros aplicados: una fila por producto">
-                <IconDownload /> Descargar Excel
-              </a>
-              <a className="btn btn-ghost" href={exportHref("csv")} download title="Los mismos datos en CSV">CSV</a>
-            </>
-          )
+          <>
+            <Link className="btn" href="/orders/avisos" title="Avisos de Problemas en gestión para el grupo de WhatsApp de cada tienda">Avisos a tiendas</Link>
+            {can(user, "export") && (
+              <>
+                <a className="btn" href={exportHref("xlsx")} download title="Descargar en Excel (.xlsx), con los filtros aplicados: una fila por producto">
+                  <IconDownload /> Descargar Excel
+                </a>
+                <a className="btn btn-ghost" href={exportHref("csv")} download title="Los mismos datos en CSV">CSV</a>
+              </>
+            )}
+          </>
         }
       />
 

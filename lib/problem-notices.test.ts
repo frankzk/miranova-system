@@ -102,3 +102,14 @@ test("nada que avisar", () => {
   assert.deepEqual(r, { groups: [], missing: [] });
   assert.equal(noticeMessage({ owner_name: null, stores: [], fresh: [], reminders: [] }).split("\n")[0], "¡Hola! Buen día, ¿cómo estás? 😊");
 });
+
+test("reloj de Drop adelantado: no se repite el aviso recién enviado", () => {
+  const future = new Date(NOW + 10 * 60_000).toISOString();
+  const base = { contacts: new Map([[`${HN}|s1`, diego]]), firstNotice: ago(5), now: NOW };
+  // sin avisar: entra igual (como si fuera ahora)
+  assert.equal(buildNotices({ ...base, orders: [order({ id: "f", since: future })], notified: new Map() }).groups[0].fresh.length, 1);
+  // avisado hace un minuto: no sale otra vez
+  assert.deepEqual(buildNotices({ ...base, orders: [order({ id: "f", since: future })], notified: new Map([["f", ago(1 / 1440)]]) }), { groups: [], missing: [] });
+  // volvió a entrar 2 horas después del aviso: sí
+  assert.equal(buildNotices({ ...base, orders: [order({ id: "r", since: ago(1) })], notified: new Map([["r", ago(1 + 3 / 24)]]) }).groups[0].fresh.length, 1);
+});

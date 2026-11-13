@@ -6,7 +6,8 @@ import type { ImportFormState } from "@/components/import-forms";
 import { authorizeAction } from "@/lib/auth";
 import { carrierTracker, PROVIDER_LABEL, trackingKeys, type Carrier } from "@/lib/carrier-tracking";
 import { saveIntegrations } from "@/lib/integrations";
-import { createAssistantKey, listAssistantKeys, revokeAssistantKey } from "@/lib/problem-notices-data";
+import { cleanScopes } from "@/lib/assistant-scopes";
+import { createAssistantKey, listAssistantKeys, revokeAssistantKey, setAssistantKeyScopes } from "@/lib/problem-notices-data";
 import { trackStatusInfo } from "@/lib/tracking17";
 
 // Ajustes → Integraciones: solo el dueño. Las claves se guardan cifradas y nunca se muestran.
@@ -87,8 +88,10 @@ export async function createAssistantKeyAction(_prev: KeyFormState, form: FormDa
   const keys = await listAssistantKeys();
   if (keys === null) return { ok: false, msg: "Falta aplicar la migración de asistentes." };
   if (keys.filter((k) => !k.revoked_at).length >= 10) return { ok: false, msg: "Ya hay 10 llaves activas: revoca alguna antes de crear otra." };
+  const scopes = cleanScopes(form.getAll("scope"));
+  if (!scopes.length) return { ok: false, msg: "Marca al menos una cosa que pueda ver." };
   try {
-    const key = await createAssistantKey(name, auth.user.id);
+    const key = await createAssistantKey(name, scopes, auth.user.id);
     revalidatePath("/settings/integrations");
     return { ok: true, msg: "Llave creada.", key };
   } catch (e) {
@@ -105,4 +108,18 @@ export async function revokeAssistantKeyAction(_prev: ImportFormState, form: For
   await revokeAssistantKey(id);
   revalidatePath("/settings/integrations");
   return { ok: true, msg: "Revocada." };
+}
+
+/** Cambia lo que puede ver una llave (sin cambiar la llave). */
+export async function assistantKeyScopesAction(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction();
+  if (!auth.ok) return fail(auth.msg);
+  if (!auth.user.is_owner) return fail("Solo el dueño puede cambiar los permisos de las llaves.");
+  const id = field(form, "id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Esa llave no existe.");
+  const scopes = cleanScopes(form.getAll("scope"));
+  if (!scopes.length) return fail("Marca al menos una cosa que pueda ver (o revoca la llave).");
+  await setAssistantKeyScopes(id, scopes);
+  revalidatePath("/settings/integrations");
+  return { ok: true, msg: "Permisos guardados. El asistente los ve en su próxima consulta." };
 }

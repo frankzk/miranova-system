@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { ASSISTANT_SCOPES, DEFAULT_SCOPES, scopeLabel, type AssistantScope } from "@/lib/assistant-scopes";
 import { IconCheck, IconCopy } from "./icons";
 import type { ImportFormState } from "./import-forms";
 import { RemoveButton } from "./import-forms";
@@ -11,7 +12,49 @@ export type KeyFormState = { ok: boolean; msg: string; key?: string } | null;
 type CreateAction = (prev: KeyFormState, form: FormData) => Promise<KeyFormState>;
 type Action = (prev: ImportFormState, form: FormData) => Promise<ImportFormState>;
 
-export type KeyRow = { id: string; name: string; key_tail: string; created: string; used: string | null; revoked: boolean };
+export type KeyRow = { id: string; name: string; key_tail: string; scopes: AssistantScope[]; created: string; used: string | null; revoked: boolean };
+
+/** Casillas de lo que puede ver la llave. */
+function ScopeChecks({ initial }: { initial: readonly AssistantScope[] }) {
+  return (
+    <fieldset className="ak-scopes">
+      <legend>Qué puede ver</legend>
+      {ASSISTANT_SCOPES.map((s) => (
+        <label key={s.id}>
+          <input type="checkbox" name="scope" value={s.id} defaultChecked={initial.includes(s.id)} />
+          <span><b>{s.label}</b><span>{s.hint}</span></span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** Cambiar lo que puede ver una llave ya creada. */
+function ScopesForm({ action, k }: { action: Action; k: KeyRow }) {
+  const [state, run] = useActionState(action, null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (state?.ok) setOpen(false); }, [state]);
+  if (!open) {
+    return (
+      <div className="ak-scope-view">
+        <span>{k.scopes.map(scopeLabel).join(" · ")}</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>Cambiar</button>
+        {state?.ok && <span className="ak-saved" role="status"><IconCheck /> Guardado</span>}
+      </div>
+    );
+  }
+  return (
+    <StickyForm state={state} action={run} className="ak-scope-form">
+      <input type="hidden" name="id" value={k.id} />
+      <ScopeChecks initial={k.scopes} />
+      {state && !state.ok && <p className="form-error" role="alert">{state.msg}</p>}
+      <div className="ak-actions">
+        <SubmitButton className="btn btn-primary btn-sm" pending="Guardando…">Guardar permisos</SubmitButton>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancelar</button>
+      </div>
+    </StickyForm>
+  );
+}
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const [done, setDone] = useState(false);
@@ -50,6 +93,7 @@ export function NewAssistantKeyForm({ action, base }: { action: CreateAction; ba
           <span>Nombre</span>
           <input className="input" name="name" defaultValue="Grok" maxLength={60} required autoComplete="off" />
         </label>
+        <ScopeChecks initial={DEFAULT_SCOPES} />
         <SubmitButton className="btn btn-primary" pending="Creando…">Crear llave</SubmitButton>
       </StickyForm>
       {state && !state.ok && <p className="form-error" role="alert">{state.msg}</p>}
@@ -68,16 +112,16 @@ export function NewAssistantKeyForm({ action, base }: { action: CreateAction; ba
   );
 }
 
-export function AssistantKeyList({ keys, revoke }: { keys: KeyRow[]; revoke: Action }) {
+export function AssistantKeyList({ keys, revoke, scopes }: { keys: KeyRow[]; revoke: Action; scopes: Action }) {
   if (!keys.length) return <p className="subtle">Todavía no hay llaves.</p>;
   return (
-    <table className="table ak-table">
-      <thead><tr><th>Nombre</th><th>Llave</th><th>Creada</th><th>Último uso</th><th><span className="sr-only">Acciones</span></th></tr></thead>
+    <table className="table stack ak-table">
+      <thead><tr><th>Nombre</th><th>Puede ver</th><th>Creada</th><th>Último uso</th><th><span className="sr-only">Acciones</span></th></tr></thead>
       <tbody>
         {keys.map((k) => (
           <tr key={k.id} data-off={k.revoked || undefined}>
-            <td className="strong">{k.name}</td>
-            <td className="nowrap">mnv_…{k.key_tail}</td>
+            <td data-slot="id"><span className="strong">{k.name}</span><div className="sub">mnv_…{k.key_tail}</div></td>
+            <td className="ak-scope-cell">{k.revoked ? <span className="subtle">{k.scopes.map(scopeLabel).join(" · ")}</span> : <ScopesForm action={scopes} k={k} />}</td>
             <td className="nowrap">{k.created}</td>
             <td className="nowrap">{k.used ?? <span className="subtle">Nunca</span>}</td>
             <td className="r">

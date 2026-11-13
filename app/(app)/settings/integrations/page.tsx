@@ -9,8 +9,9 @@ import { requireUser } from "@/lib/auth";
 import { integrationStatus } from "@/lib/integrations";
 import { can } from "@/lib/permissions";
 import { listAssistantKeys } from "@/lib/problem-notices-data";
-import { createAssistantKeyAction, revokeAssistantKeyAction, saveIntegrationsAction, testTrackingAction } from "./actions";
+import { assistantKeyScopesAction, createAssistantKeyAction, revokeAssistantKeyAction, saveIntegrationsAction, testTrackingAction } from "./actions";
 import "../../imports/imports.css";
+import "./assistants.css";
 
 export const metadata = { title: "Integraciones" };
 
@@ -51,7 +52,8 @@ export default async function IntegrationsPage() {
         <div className="panel-body ak-body">
           <p className="ak-intro">
             Para que Grok u otro asistente lea los <Link href="/orders/avisos">avisos de Problemas en gestión</Link>, los mande al grupo de
-            cada tienda y los marque enviados. En Grok: <b>grok.com/connectors</b> → Nuevo conector → Personalizado → pega la dirección con la llave.
+            cada tienda y los marque enviados, y consulte lo que le habilites (pedidos, tiendas, traslados). Nunca ve datos del cliente final.
+            En Grok: <b>grok.com/connectors</b> → Nuevo conector → Personalizado → pega la dirección con la llave.
           </p>
           {keys === null ? (
             <p className="form-error">Falta aplicar la migración de asistentes.</p>
@@ -60,7 +62,8 @@ export default async function IntegrationsPage() {
               <NewAssistantKeyForm action={createAssistantKeyAction} base={mcpBase} />
               <AssistantKeyList
                 revoke={revokeAssistantKeyAction}
-                keys={keys.map((k) => ({ id: k.id, name: k.name, key_tail: k.key_tail, created: day(k.created_at), used: k.last_used_at ? day(k.last_used_at) : null, revoked: !!k.revoked_at }))}
+                scopes={assistantKeyScopesAction}
+                keys={keys.map((k) => ({ id: k.id, name: k.name, key_tail: k.key_tail, scopes: k.scopes, created: day(k.created_at), used: k.last_used_at ? day(k.last_used_at) : null, revoked: !!k.revoked_at }))}
               />
             </>
           )}

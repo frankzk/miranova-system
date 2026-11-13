@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
+import { cleanScopes, DEFAULT_SCOPES, type AssistantScope } from "./assistant-scopes";
 import { contactLinks, contactsById, storeDirectory } from "./contacts";
 import { buildNotices, noticeOrders, PROBLEM_CODE, problemSince, type NoticeGroup, type ProblemOrder, type StoreGroup } from "./problem-notices";
 import { db } from "./supabase";
@@ -136,23 +137,24 @@ export async function recentSent(limit = 30): Promise<SentNotice[]> {
 
 // ─── Llaves de asistentes ───
 
-export type AssistantKey = { id: string; name: string; key_tail: string; created_at: string; last_used_at: string | null; revoked_at: string | null };
+export type AssistantKey = { id: string; name: string; key_tail: string; scopes: AssistantScope[]; created_at: string; last_used_at: string | null; revoked_at: string | null };
+export type AssistantWho = { id: string; name: string; scopes: AssistantScope[] };
 
 const KEY_RE = /^mnv_[A-Za-z0-9_-]{43}$/;
 
 export async function listAssistantKeys(): Promise<AssistantKey[] | null> {
-  const { data, error } = await db().from("assistant_keys").select("id, name, key_tail, created_at, last_used_at, revoked_at").order("created_at", { ascending: false });
+  const { data, error } = await db().from("assistant_keys").select("id, name, key_tail, scopes, created_at, last_used_at, revoked_at").order("created_at", { ascending: false });
   if (error) {
     if (missingTable(error)) return null;
     throw error;
   }
-  return (data ?? []) as AssistantKey[];
+  return ((data ?? []) as AssistantKey[]).map((k) => ({ ...k, scopes: cleanScopes(Array.isArray(k.scopes) ? k.scopes : DEFAULT_SCOPES) }));
 }
 
 /** Crea una llave; devuelve la llave completa (se muestra una sola vez; se guarda solo su hash). */
-export async function createAssistantKey(name: string, userId: string): Promise<string> {
+export async function createAssistantKey(name: string, scopes: AssistantScope[], userId: string): Promise<string> {
   const key = `mnv_${randomBytes(32).toString("base64url")}`;
-  const { error } = await db().from("assistant_keys").insert({ name, key_hash: sha256(key), key_tail: key.slice(-4), created_by: userId });
+  const { error } = await db().from("assistant_keys").insert({ name, key_hash: sha256(key), key_tail: key.slice(-4), scopes, created_by: userId });
   if (error) throw error;
   return key;
 }
@@ -162,18 +164,24 @@ export async function revokeAssistantKey(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Nombre de la llave si es válida y no está revocada; anota cuándo se usó (como mucho cada 10 min). */
-export async function verifyAssistantKey(key: string | null): Promise<{ id: string; name: string } | null> {
+/** Qué puede ver una llave. */
+export async function setAssistantKeyScopes(id: string, scopes: AssistantScope[]): Promise<void> {
+  const { error } = await db().from("assistant_keys").update({ scopes }).eq("id", id).is("revoked_at", null);
+  if (error) throw error;
+}
+
+/** La llave (nombre y permisos) si es válida y no está revocada; anota cuándo se usó (como mucho cada 10 min). */
+export async function verifyAssistantKey(key: string | null): Promise<AssistantWho | null> {
   if (!key || !KEY_RE.test(key)) return null;
-  const { data, error } = await db().from("assistant_keys").select("id, name, revoked_at, last_used_at").eq("key_hash", sha256(key)).maybeSingle();
+  const { data, error } = await db().from("assistant_keys").select("id, name, scopes, revoked_at, last_used_at").eq("key_hash", sha256(key)).maybeSingle();
   if (error) {
     if (missingTable(error)) return null;
     throw error;
   }
-  const k = data as { id: string; name: string; revoked_at: string | null; last_used_at: string | null } | null;
+  const k = data as { id: string; name: string; scopes: string[] | null; revoked_at: string | null; last_used_at: string | null } | null;
   if (!k || k.revoked_at) return null;
   if (!k.last_used_at || Date.now() - Date.parse(k.last_used_at) > 10 * 60_000) {
     await db().from("assistant_keys").update({ last_used_at: new Date().toISOString() }).eq("id", k.id).then(({ error: e }) => e && console.error("assistant_keys last_used", e));
   }
-  return { id: k.id, name: k.name };
+  return { id: k.id, name: k.name, scopes: cleanScopes(Array.isArray(k.scopes) ? k.scopes : DEFAULT_SCOPES) };
 }

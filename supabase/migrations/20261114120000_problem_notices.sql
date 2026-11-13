@@ -1,6 +1,7 @@
 -- Avisos de "Problemas en gestión" a cada tienda por su grupo de WhatsApp, y llaves para que un asistente
--- (Grok, Claude…) los lea y los marque enviados por MCP (/api/mcp).
---   assistant_keys: llaves de acceso de los asistentes; se guarda solo el hash (sha-256) de la llave.
+-- (Grok, Claude…) los lea y los marque enviados por MCP (/api/mcp), además de lo que se le habilite.
+--   assistant_keys: llaves de acceso de los asistentes; se guarda solo el hash (sha-256) de la llave, y
+--     `scopes` dice qué puede ver (lib/assistant-scopes.ts).
 --   problem_notice_batches: cada aviso armado para un grupo (pedidos y texto) y cuándo se marcó enviado.
 --   problem_notices: último aviso de cada pedido, para no repetirlo y recordarlo cada 3 días.
 
@@ -11,6 +12,7 @@ create table if not exists public.assistant_keys (
   name         text not null check (length(btrim(name)) between 1 and 60),
   key_hash     text not null unique check (key_hash ~ '^[0-9a-f]{64}$'),
   key_tail     text not null,                                   -- últimos 4 caracteres, para reconocerla
+  scopes       text[] not null default '{avisos}',              -- qué puede ver: avisos, pedidos, tiendas, traslados
   created_by   uuid references public.app_users(id) on delete set null,
   created_at   timestamptz not null default now(),
   last_used_at timestamptz,

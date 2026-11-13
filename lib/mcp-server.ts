@@ -1,23 +1,29 @@
 import "server-only";
+import { scopeLabel } from "./assistant-scopes";
 import { countryByCode } from "./countries";
 import { handleMcp, parseErrorResponse, type McpServerInfo, type McpTool } from "./mcp";
-import { markNoticeSent, noticesToday, verifyAssistantKey, type IssuedNotice } from "./problem-notices-data";
+import { orderTools, storeTools, transferTools } from "./mcp-panel-tools";
+import { markNoticeSent, noticesToday, verifyAssistantKey, type AssistantWho, type IssuedNotice } from "./problem-notices-data";
 
 // Herramientas del panel para asistentes (Grok, Claude…) por MCP. Rutas: /api/mcp (llave en
 // "Authorization: Bearer …") y /api/mcp/<llave> (para clientes que solo aceptan una URL).
 
-const INFO: McpServerInfo = {
-  name: "miranova-panel",
-  title: "Panel de Miranova",
-  version: "1.0.0",
-  instructions: [
-    "Panel de Miranova. Avisos diarios a las tiendas de sus pedidos con \"Problemas en gestión\":",
-    "1. Llama avisos_problemas_en_gestion.",
-    "2. Por cada aviso de la lista `avisos`: abre su enlace abrir_en_whatsapp_web (o busca el grupo en WhatsApp Web), pega el campo `mensaje` EXACTAMENTE igual, sin cambiar ni un número ni el texto, y envíalo.",
-    "3. Apenas esté enviado, llama marcar_aviso_enviado con su aviso_id. Si no pudiste enviarlo, no lo marques: saldrá otra vez en la próxima consulta.",
-    "Los de `sin_grupo` no tienen el grupo de WhatsApp cargado en el panel: no los envíes; dile a la persona cuáles son.",
-  ].join("\n"),
-};
+const NOTICE_STEPS = [
+  "Avisos diarios a las tiendas de sus pedidos con \"Problemas en gestión\":",
+  "1. Llama avisos_problemas_en_gestion.",
+  "2. Por cada aviso de la lista `avisos`: abre su enlace abrir_en_whatsapp_web (o busca el grupo en WhatsApp Web), pega el campo `mensaje` EXACTAMENTE igual, sin cambiar ni un número ni el texto, y envíalo.",
+  "3. Apenas esté enviado, llama marcar_aviso_enviado con su aviso_id. Si no pudiste enviarlo, no lo marques: saldrá otra vez en la próxima consulta.",
+  "Los de `sin_grupo` no tienen el grupo de WhatsApp cargado en el panel: no los envíes; dile a la persona cuáles son.",
+].join("\n");
+
+function info(who: AssistantWho): McpServerInfo {
+  const lines = [
+    `Panel de Miranova (operación de dropshipping contra entrega en Honduras, Guatemala, El Salvador y Costa Rica). Esta llave ("${who.name}") puede ver: ${who.scopes.map(scopeLabel).join(", ")}.`,
+    "No hay datos del cliente final (nombre, teléfono, dirección); no los inventes ni los pidas.",
+  ];
+  if (who.scopes.includes("avisos")) lines.push("", NOTICE_STEPS);
+  return { name: "miranova-panel", title: "Panel de Miranova", version: "1.1.0", instructions: lines.join("\n") };
+}
 
 const countryName = (c: string) => countryByCode(c)?.name ?? c;
 
@@ -35,7 +41,7 @@ function noticeView(g: IssuedNotice) {
   };
 }
 
-function tools(who: { name: string }): McpTool[] {
+function noticeTools(who: AssistantWho): McpTool[] {
   return [
     {
       name: "avisos_problemas_en_gestion",
@@ -93,6 +99,16 @@ function tools(who: { name: string }): McpTool[] {
   ];
 }
 
+/** Herramientas según lo que puede ver la llave. */
+function tools(who: AssistantWho): McpTool[] {
+  return [
+    ...(who.scopes.includes("avisos") ? noticeTools(who) : []),
+    ...(who.scopes.includes("pedidos") ? orderTools : []),
+    ...(who.scopes.includes("tiendas") ? storeTools : []),
+    ...(who.scopes.includes("traslados") ? transferTools : []),
+  ];
+}
+
 const json = (body: unknown, status = 200, headers?: Record<string, string>) => Response.json(body, { status, headers });
 
 /** Atiende un POST de MCP con la llave dada (del encabezado o de la URL). */
@@ -105,7 +121,7 @@ export async function serveMcp(req: Request, key: string | null): Promise<Respon
   } catch {
     return json(parseErrorResponse(), 400);
   }
-  const r = await handleMcp(body, tools(who), INFO);
+  const r = await handleMcp(body, tools(who), info(who));
   return r.json === undefined ? new Response(null, { status: r.status }) : json(r.json, r.status);
 }
 

@@ -16,6 +16,11 @@ export const FIRST_DAYS = 3;
 const DAY = 86_400_000;
 /** Holgura para que un aviso diario a una hora parecida no se corra un día. */
 const SLACK = 6 * 3_600_000;
+/**
+ * Solo cuenta como que "volvió a entrar" si entró más de una hora después del último aviso: el reloj de
+ * Drop puede ir unos minutos adelantado y el aviso no debe repetirse por eso.
+ */
+const REENTRY = 3_600_000;
 
 export type ProblemOrder = {
   id: string;
@@ -127,12 +132,13 @@ export function buildNotices(input: {
   const newFrom = Math.max(windowFrom, start - FIRST_DAYS * DAY);
   const by = new Map<string, NoticeGroup>();
   for (const o of input.orders) {
-    const since = Date.parse(o.since);
+    // una fecha "en el futuro" (reloj de Drop adelantado) cuenta como ahora
+    const since = Math.min(Date.parse(o.since), now);
     if (!Number.isFinite(since) || since < windowFrom) continue;
     const last = input.notified.get(o.id);
     const lastAt = last ? Date.parse(last) : NaN;
     let kind: "fresh" | "reminders" | null = null;
-    if (!Number.isFinite(lastAt) || lastAt < since) kind = since >= newFrom ? "fresh" : null;
+    if (!Number.isFinite(lastAt) || since > lastAt + REENTRY) kind = since >= newFrom ? "fresh" : null;
     else if (now - lastAt >= REMIND_DAYS * DAY - SLACK) kind = "reminders";
     if (!kind) continue;
     const contact = input.contacts.get(storeKey(o)) ?? null;

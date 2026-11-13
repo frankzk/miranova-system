@@ -1,0 +1,22 @@
+/* Órdenes › Avisos a tiendas */
+.nt-back { margin: 0 0 4px; font-size: var(--t-sm); }
+.nt-back a { color: var(--ink-2); }
+.nt-help { margin: 0 0 16px; max-width: 760px; font-size: var(--t-sm); color: var(--ink-2); line-height: 1.55; }
+.nt-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.nt-card .panel-head { align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
+.nt-card h3 { margin: 0; font-size: var(--t-md, 15px); }
+.nt-card .panel-head .sub { margin: 2px 0 0; font-size: var(--t-xs); color: var(--ink-3); }
+.nt-counts { margin: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.nt-body { display: grid; gap: 12px; }
+.nt-message {
+  margin: 0; padding: 12px 14px; max-height: 280px; overflow: auto; border-radius: var(--r); background: var(--bg-subtle); border: 1px solid var(--line);
+  font-family: inherit; font-size: var(--t-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.nt-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nt-actions form { display: contents; }
+.nt-actions .im-msg { flex-basis: 100%; margin: 0; }
+.nt-section { margin-top: 28px; }
+.nt-section h2 { font-size: var(--t-lg, 17px); margin: 0 0 6px; }
+.nt-section h2 .sub { font-weight: 400; color: var(--ink-3); font-size: var(--t-sm); margin-left: 4px; }
+.nt-actions .im-msg { font-size: var(--t-sm); color: var(--success); }
+.nt-actions .im-msg[data-ok="false"] { color: var(--danger); }
