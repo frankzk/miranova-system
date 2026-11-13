@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { authorizeRouteAny } from "@/lib/auth";
-import { MONEY_DOCS, type DocKind } from "@/lib/imports";
+import { PRIVATE_DOCS, type DocKind } from "@/lib/imports";
 import { signedRead } from "@/lib/imports-data";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/supabase";
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data } = await db().from("import_documents").select("kind, storage_path, filename").eq("id", id).maybeSingle();
   const doc = data as { kind: DocKind; storage_path: string; filename: string | null } | null;
   if (!doc) return Response.json({ error: "No existe" }, { status: 404 });
-  if (MONEY_DOCS.includes(doc.kind) && !can(user, "money")) return Response.json({ error: "Sin permiso" }, { status: 403 });
+  if (PRIVATE_DOCS.includes(doc.kind) && !can(user, "money")) return Response.json({ error: "Sin permiso" }, { status: 403 });
   const dl = req.nextUrl.searchParams.get("dl") === "1";
   const url = await signedRead(doc.storage_path, TTL_S, dl ? (doc.filename ?? "documento").replace(/[^\w.\- ]+/g, "_") : undefined);
   return new Response(null, { status: 302, headers: { Location: url, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } });

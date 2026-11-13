@@ -13,7 +13,7 @@ import { requireAnyPermission } from "@/lib/auth";
 import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
-  allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
+  allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport, PRIVATE_DOCS,
   isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, TRACKED_STATUSES, trackingUrl, transportLabel, whatsappMessage, type DropState,
   type ImportStatus,
 } from "@/lib/imports";
@@ -81,7 +81,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
     return t + (m?.total ?? 0);
   }, 0);
   const recovery = priced ? recoveryShare(landed.totals.total, revenue) : null;
-  const visibleDocs = docs.filter((d) => money || !MONEY_DOCS.includes(d.kind));
+  const visibleDocs = docs.filter((d) => money || !PRIVATE_DOCS.includes(d.kind));
   const docName = new Map(docs.map((d) => [d.id, d]));
   const alert = needsReport(imp, today);
   const late = isActive(imp.status) && imp.eta !== null && imp.eta < today;
@@ -458,13 +458,13 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                   <li key={d.id}>
                     <span className="tag">{docKindLabel(d.kind)}</span>
                     <span className="grow clip"><a href={`/api/imports/doc/${d.id}`} target="_blank" rel="noreferrer">{d.filename ?? "archivo"}</a><span className="sub"> · {kb(d.size_bytes)}</span></span>
-                    {edit && readable(d) && (
+                    {edit && readable(d) && (money || !MONEY_DOCS.includes(d.kind)) && (
                       <SideSheet trigger="Leer con IA" triggerClass="btn btn-ghost btn-sm im-ai-btn" title="Leer con IA" sub={d.filename ?? "Documento"}>
                         <InvoiceReader docId={d.id} docName={d.filename ?? "el documento"} importId={imp.id} money={money} action={addInvoiceLines} />
                       </SideSheet>
                     )}
                     <a className="btn btn-ghost btn-sm" href={`/api/imports/doc/${d.id}?dl=1`} aria-label={`Descargar ${d.filename ?? "archivo"}`}><IconDownload /></a>
-                    {edit && <RemoveButton action={removeImportDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />}
+                    {edit && (money || !MONEY_DOCS.includes(d.kind)) && <RemoveButton action={removeImportDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />}
                   </li>
                 ))}
               </ul>

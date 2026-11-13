@@ -108,6 +108,11 @@ export const isDocKind = (v: unknown): v is DocKind => DOC_KINDS.some((k) => k.i
 export const docKindLabel = (id: string) => DOC_KINDS.find((k) => k.id === id)?.label ?? id;
 /** Documentos con montos: solo los ve quien tiene permiso de Dinero. */
 export const MONEY_DOCS: DocKind[] = ["proforma", "invoice", "payment"];
+/**
+ * Los que además solo se pueden VER con Dinero. La factura comercial la ve todo Compras (también "solo ver":
+ * Boxful la necesita para la aduana); subirla, borrarla o leerla con IA sigue siendo con Dinero.
+ */
+export const PRIVATE_DOCS: DocKind[] = ["proforma", "payment"];
 
 /**
  * Lo imprescindible de cada importación, en orden de importancia: la factura comercial (subida
