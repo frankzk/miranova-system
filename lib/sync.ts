@@ -17,6 +17,7 @@ import { GROUPS } from "./status";
 import { ingestPayload, purgeIngestLog, saveCatalog, saveProducts, type AccountCtx } from "./store";
 import { walletBalance } from "./wallet";
 import { movementList, oldestMovementAt, settlementsFromPage } from "./drop-settlements";
+import { boxfulSettlements } from "./boxful-settlements";
 import { guessOrigin, isOriginCountry } from "./bank-origin";
 
 const DAY = 86_400_000;
@@ -35,7 +36,9 @@ const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ven
 const OPEN_REFRESH_MAX_DAYS = 120;
 const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
-const SETTLEMENT_PROBE_EVERY_MS = 6 * 3_600_000; // Boxful: diagnóstico de la ruta de liquidaciones
+const BOXFUL_FIRST_DAYS = 180; // Boxful: la primera lectura…
+const BOXFUL_WINDOW_DAYS = 45; // …y las siguientes
+const BOXFUL_CHUNK_DAYS = 31; // por ventanas (cada liquidación trae todos sus envíos: respuestas grandes)
 const SETTLEMENTS_EVERY_MS = 30 * 60_000; // liquidaciones de Drop (en la billetera)
 const SETTLEMENTS_WINDOW_DAYS = 30; // después de la primera lectura completa, se relee este tramo…
 const MAX_BALANCE_PAGES = 300; // …o hasta la liquidación pendiente más vieja; tope de páginas de 100
@@ -129,7 +132,7 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
   // Cuenta de dropshipper dedicada a espiar el catálogo: baja solo el catálogo, no órdenes.
   if (acc.catalog_only) return syncCatalogAccount(acc, deadline);
   // Boxful (Mireva): solo las liquidaciones de Conciliación, no pedidos.
-  if (acc.platform === "boxful") return syncBoxfulAccount(acc);
+  if (acc.platform === "boxful") return syncBoxfulAccount(acc, deadline - 30_000);
 
   const c = connectorFor(acc.platform, acc.country, acc.timezone);
   const pageSize = c.pageSize ?? SOYDROP_PAGE_SIZE;
@@ -335,39 +338,76 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
 }
 
 /**
- * Boxful de Mireva: inicia sesión y lee sus liquidaciones de los últimos 4 meses (solo lectura). Por ahora
- * guarda una muestra de la respuesta en el diagnóstico de la cuenta (cada 6 h) para terminar la lectura con su
- * forma real; todavía no escribe liquidaciones.
+ * Boxful de Mireva: solo sus liquidaciones (lib/boxful-settlements.ts), cada 30 min. La primera vez, 6 meses por
+ * ventanas de un mes; después, los últimos 45 días. Van en la empresa Miranova con operación Mireva, donde están
+ * sus PDF y sus abonos. De cada liquidación se guarda lo de la liquidación: nunca los envíos ni datos de clientes.
  */
-async function syncBoxfulAccount(acc: Account): Promise<SyncResult> {
+async function syncBoxfulAccount(acc: Account, deadline: number): Promise<SyncResult> {
   try {
+    const fresh = Date.now() - Date.parse(acc.settlements_sync_at ?? "") < SETTLEMENTS_EVERY_MS;
+    if (fresh) return { ok: true, message: acc.last_sync_msg ?? "Al día", saved: 0, changed: 0 };
+    // sin la migración de liquidaciones: no leer nada
+    const ready = await db().from("settlements").select("id").limit(1);
+    if (ready.error) throw ready.error;
     let session = await loadSession(acc);
-    const last = (acc.debug as { boxful_list?: { at?: string } } | null)?.boxful_list?.at;
-    if (!last || Date.now() - Date.parse(last) > SETTLEMENT_PROBE_EVERY_MS) {
-      const end = new Date();
-      const begin = new Date(end.getTime() - 120 * DAY);
-      let res;
+    const full = !acc.settlements_sync_at;
+    const end = new Date();
+    const start = new Date(end.getTime() - (full ? BOXFUL_FIRST_DAYS : BOXFUL_WINDOW_DAYS) * DAY);
+    const payloads: unknown[] = [];
+    let complete = true;
+    for (let from = start; from < end; from = new Date(from.getTime() + BOXFUL_CHUNK_DAYS * DAY)) {
+      if (Date.now() > deadline) {
+        complete = false;
+        break;
+      }
+      const to = new Date(Math.min(end.getTime(), from.getTime() + BOXFUL_CHUNK_DAYS * DAY));
       try {
-        res = await boxful.fetchSettlements(session, begin, end);
+        payloads.push((await boxful.fetchSettlements(session, from, to)).payload);
       } catch (e) {
         if (!(e instanceof SessionExpired)) throw e;
         session = await freshSession((await getAccount(acc.id))!);
-        res = await boxful.fetchSettlements(session, begin, end);
+        payloads.push((await boxful.fetchSettlements(session, from, to)).payload);
       }
-      const fresh = (await getAccount(acc.id))!;
-      const debug: Record<string, unknown> = { ...(fresh.debug ?? {}), boxful_list: { at: new Date().toISOString(), status: res.status, sample: res.text.slice(0, 12000) } };
-      delete debug.boxful_probe;
-      await updateAccount(acc.id, { debug: debug as Account["debug"] });
     }
-    const message = "Sesión iniciada en Boxful. Liquidaciones encontradas: falta terminar de leerlas (muestra guardada).";
-    await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message, settlements_msg: message });
-    return { ok: true, message, saved: 0, changed: 0 };
+    const found = boxfulSettlements(payloads);
+    payloads.length = 0; // los envíos (con datos de clientes) no se guardan ni se quedan en memoria
+    const operation = guessOrigin(acc.name, acc.platform_ref_name).operation ?? "mireva";
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: acc.timezone || "America/Tegucigalpa" });
+    const now = new Date().toISOString();
+    const rows = found.map((s) => ({
+      ...s,
+      company: "miranova",
+      source: "boxful",
+      account_id: acc.id,
+      operation,
+      country: isOriginCountry(acc.country) ? acc.country : null,
+      currency: acc.currency,
+      requested_on: day.format(new Date(s.requested_at)),
+      synced_at: now,
+    }));
+    for (let i = 0; i < rows.length; i += 200) {
+      const { error } = await db().from("settlements").upsert(rows.slice(i, i + 200), { onConflict: "source,external_id" });
+      if (error) throw error;
+    }
+    const message = `${found.length} liquidaciones de Boxful leídas (${full ? "últimos 6 meses" : "últimos 45 días"})${complete ? "" : " · faltó tiempo: sigue en la próxima"}`;
+    const debug = { ...((await getAccount(acc.id))?.debug ?? {}) } as Record<string, unknown>;
+    delete debug.boxful_list;
+    delete debug.boxful_probe;
+    await updateAccount(acc.id, {
+      settlements_sync_at: complete || !full ? now : null,
+      settlements_msg: message,
+      last_sync_at: now,
+      last_sync_ok: true,
+      last_sync_msg: message,
+      debug: debug as Account["debug"],
+    });
+    return { ok: true, message, saved: found.length, changed: 0 };
   } catch (e) {
     const message = e instanceof PlatformError || e instanceof SessionExpired
       ? e.message
       : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
-    console.error(`boxful sync ${acc.name}`, e);
-    await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message }).catch(() => {});
+    console.error(`boxful sync ${acc.name}`, e instanceof Error ? e.message : String(e));
+    await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message, settlements_msg: message }).catch(() => {});
     return { ok: false, message, saved: 0, changed: 0 };
   }
 }

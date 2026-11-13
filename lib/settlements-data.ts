@@ -9,7 +9,7 @@ export type SettlementSource = { id: string; name: string; settlements_sync_at: 
 const FIELDS =
   "id,company,source,account_id,external_id,reference,confirmation,operation,country,requested_at,requested_on,status,status_label," +
   "failure_reason,currency,amount_cents,usd_rate,usd_amount_cents,bank,bank_account,evidence,boxful_id,linked_by,linked_at," +
-  "reviewed_by,reviewed_at,review_note";
+  "reviewed_by,reviewed_at,review_note,shipments:raw->shipments_count";
 
 const missing = (e: { code?: string } | null) => !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "42703");
 
@@ -52,6 +52,7 @@ export async function settlementData(company: Company): Promise<{
     usd_rate: r.usd_rate === null ? null : Number(r.usd_rate),
     usd_amount_cents: r.usd_amount_cents === null ? null : Number(r.usd_amount_cents),
     evidence: Array.isArray(r.evidence) ? r.evidence.filter((u): u is string => typeof u === "string") : [],
+    shipments: typeof r.shipments === "number" ? r.shipments : null,
   }));
   return {
     settlements,

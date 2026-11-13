@@ -75,6 +75,7 @@ export const fixtures: FixtureModule = {
       pdf(14, 2, { reference: "Miranova SV", amount_cents: 500000, origin_operation: "miranova", origin_country: "SV" }),
       closedPdf,
       closedMercury,
+      pdf(18, 10, { reference: "2352659", amount_cents: 345293, origin_operation: "mireva", origin_country: "HN" }),
       pdf(17, 9, { reference: "Miranova SV - Pago Bodega", amount_cents: 30000, notes: "Arriendo bodega El Salvador", origin_operation: "miranova", origin_country: "SV" }),
     ],
     settlements: [
@@ -84,6 +85,7 @@ export const fixtures: FixtureModule = {
       settlement(4, { reference: "K7Q2LM0P", country: "SV", currency: "USD", usd_rate: 1, amount_cents: 500000, days: 3, boxful_id: "b0000000-0000-4000-8000-000000000014", linked_by: owner, linked_at: now }),
       settlement(5, { reference: "2IPDBP91", amount_cents: 22291100, status: "rejected", status_label: "Rechazada", failure_reason: "Cuenta de destino no válida", days: 95 }),
       settlement(6, { reference: "4O57O4YJ", confirmation: "2290011", amount_cents: 20600000, days: 52, boxful_id: "b0000000-0000-4000-8000-000000000015", linked_by: owner, linked_at: now }),
+      settlement(8, { source: "boxful", account_id: null, operation: "mireva", reference: "2352476-2353166-2352477-2352659-42401306", usd_rate: null, amount_cents: 9391879, shipments: 208, days: 8 }),
       settlement(7, { reference: "WKHYOORV", account_id: GT, country: "GT", currency: "GTQ", usd_rate: 0.130664957, amount_cents: 4020000, status: "pending", status_label: "Pendiente", days: 1 }),
     ],
     settlement_exempt_entries: [],
