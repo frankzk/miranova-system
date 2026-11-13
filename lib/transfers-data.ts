@@ -93,6 +93,18 @@ export async function getTransfer(id: string): Promise<(TransferFull & { documen
   };
 }
 
+/** Tipos de documento de cada traslado (para marcar en la lista cuáles tienen manifiesto). */
+export async function documentKinds(): Promise<Map<string, string[]>> {
+  const { data, error } = await db().from("transfer_documents").select("transfer_id, kind").limit(20000);
+  if (error) {
+    if (missingTable(error)) return new Map();
+    throw error;
+  }
+  const out = new Map<string, string[]>();
+  for (const d of (data ?? []) as { transfer_id: string; kind: string }[]) out.set(d.transfer_id, [...(out.get(d.transfer_id) ?? []), d.kind]);
+  return out;
+}
+
 /** Repartos dados por enviar sin traslado. */
 export async function listSettled(): Promise<Set<string>> {
   const { data, error } = await db().from("transfer_settled").select("source").limit(20000);

@@ -331,7 +331,7 @@ const where = (c: Choice) => [c.account_name, ...(c.also ?? [])].filter(Boolean)
  * Buscar y elegir un producto del catálogo de Drop (manda account_id y product_id). Con `foreign`,
  * al buscar también muestra lo que solo está en Drop de otro país (se agrega como producto nuevo).
  */
-function CatalogPicker({ choices, foreign = [], country, pick, setPick, initial = "", empty }: {
+export function CatalogPicker({ choices, foreign = [], country, pick, setPick, initial = "", empty }: {
   choices: Choice[]; foreign?: Choice[]; country?: string; pick: Choice | null; setPick: (c: Choice | null) => void; initial?: string; empty: string;
 }) {
   const [q, setQ] = useState(initial);
@@ -608,11 +608,15 @@ export function TrackRefreshForm({ action, importId }: { action: Action; importI
   );
 }
 
-export function RemoveButton({ action, name, value, label = "Quitar", confirmText }: { action: Action; name: string; value: string; label?: string; confirmText?: string }) {
+/** Botón que envía un formulario con un id (y, si hace falta, otros campos fijos en `extra`). */
+export function RemoveButton({ action, name, value, label = "Quitar", confirmText, extra }: {
+  action: Action; name: string; value: string; label?: string; confirmText?: string; extra?: Record<string, string>;
+}) {
   const [state, run] = useActionState(action, null);
   return (
     <StickyForm state={state} action={run} className="im-inline" onSubmit={(e) => { if (confirmText && !window.confirm(confirmText)) e.preventDefault(); }}>
       <input type="hidden" name={name} value={value} />
+      {Object.entries(extra ?? {}).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
       <SubmitButton className="btn btn-ghost btn-sm" pending="…">{label}</SubmitButton>
       {state && !state.ok && <Msg state={state} />}
     </StickyForm>
