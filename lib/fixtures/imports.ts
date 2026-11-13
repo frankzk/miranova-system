@@ -29,6 +29,9 @@ export const fixtures: FixtureModule = {
         ordered_at: date(-10), eta: date(2), arrived_at: null, transport: "courier", carrier: "DHL", tracking_number: "1234567890", tracking_url: null,
         weight_kg: 42, reported_at: null, reported_by: null, notes: "Pedido mixto: peladores y mini ventiladores.", created_by: OWNER,
         created_at: iso(-12), updated_at: iso(-1),
+        // lo último que dijo DHL (el seguimiento automático lo actualiza cada 3 horas)
+        track_registered: "1234567890", track_status: "InTransit", track_sub_status: "transit", track_event: "Salió de la instalación de DHL · CINCINNATI HUB - USA",
+        track_location: "CINCINNATI HUB - USA", track_event_at: iso(-0.2), track_eta: date(3), track_checked_at: iso(-0.1), track_error: null,
       },
       {
         id: B, code: `IMP-${new Date().getFullYear()}-002`, supplier_id: S2, supplier: "Shenzhen Gadgets", origin: "China", dest_country: "GT", status: "quote",
@@ -42,8 +45,8 @@ export const fixtures: FixtureModule = {
       },
     ],
     import_items: [
-      { id: "c1000000-0000-4000-8000-000000000001", import_id: A, account_id: HN, product_external_id: "p1", name: "Set de Pelador de Verduras Abridor", sku: "00940184", image_url: null, photo_path: null, qty: 300, unit_cost: 1.8, unit_weight_kg: 0.12, sale_price_usd: null, position: 0, created_at: iso(-12) },
-      { id: "c1000000-0000-4000-8000-000000000002", import_id: A, account_id: HN, product_external_id: "p4", name: "MINI FAN", sku: "MINI.FAN", image_url: null, photo_path: null, qty: 150, unit_cost: 3.2, unit_weight_kg: 0.25, sale_price_usd: null, position: 1, created_at: iso(-12) },
+      { id: "c1000000-0000-4000-8000-000000000001", import_id: A, account_id: HN, product_external_id: "p1", name: "Set de Pelador de Verduras Abridor", sku: "00940184", image_url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%232f855a'/%3E%3Ccircle cx='20' cy='20' r='10' fill='white' fill-opacity='.6'/%3E%3C/svg%3E", photo_path: null, qty: 300, unit_cost: 1.8, unit_weight_kg: 0.12, sale_price_usd: null, position: 0, created_at: iso(-12) },
+      { id: "c1000000-0000-4000-8000-000000000002", import_id: A, account_id: HN, product_external_id: "p4", name: "MINI FAN", sku: "MINI.FAN", image_url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%233b5bdb'/%3E%3Ccircle cx='20' cy='20' r='10' fill='white' fill-opacity='.6'/%3E%3C/svg%3E", photo_path: null, qty: 150, unit_cost: 3.2, unit_weight_kg: 0.25, sale_price_usd: null, position: 1, created_at: iso(-12) },
       { id: "c1000000-0000-4000-8000-000000000003", import_id: B, account_id: null, product_external_id: null, name: "Lámpara LED plegable", sku: null, image_url: null, photo_path: null, qty: 200, unit_cost: 2.5, unit_weight_kg: null, sale_price_usd: 9, position: 0, created_at: iso(-2) },
       {
         id: "c1000000-0000-4000-8000-000000000004", import_id: C, account_id: HN, product_external_id: "p2", name: "PRODUCTO EXCLUSIVO DLG", sku: "10954739", image_url: null, photo_path: null,

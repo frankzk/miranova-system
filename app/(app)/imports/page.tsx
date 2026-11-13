@@ -11,6 +11,7 @@ import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { ARRIVED, importChecklist, isActive, isLate, needsReport, staleDays, statusInfo, trackingUrl } from "@/lib/imports";
 import { listImports, listSuppliers } from "@/lib/imports-data";
+import { trackPlace } from "@/lib/track-place";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
 import { can } from "@/lib/permissions";
 import { createImport } from "./actions";
@@ -145,7 +146,10 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                         {r.products.length > 0 && (
                           <ul className="im-prods" aria-label="Productos">
                             {r.products.slice(0, 3).map((p, i) => (
-                              <li key={i} title={`${p.name} · ${fmtInt(p.qty)} u.`}><span className="q">{fmtInt(p.qty)} u.</span> {p.name}</li>
+                              <li key={i} title={`${p.name} · ${fmtInt(p.qty)} u.`}>
+                                {p.image ? <img src={p.image} alt="" loading="lazy" /> : <span className="im-thumb-none" aria-hidden />}
+                                <span className="t"><span className="q">{fmtInt(p.qty)} u.</span> {p.name}</span>
+                              </li>
                             ))}
                             {r.products.length > 3 && <li className="more">+{r.products.length - 3} más</li>}
                           </ul>
@@ -154,6 +158,16 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
                       <td className="nowrap">{countryByCode(r.dest_country)?.name ?? r.dest_country}</td>
                       <td data-slot="status">
                         <span className="pill" data-tone={st.tone}>{st.label}</span>
+                        {(() => {
+                          // dónde va según la paquetera (solo si lo guardado es de la guía actual)
+                          const place = r.tracking_number && r.track_registered === r.tracking_number && isActive(r.status)
+                            ? trackPlace({ status: r.track_status, location: r.track_location }, r) : null;
+                          return place && (
+                            <div className="im-where" data-phase={place.phase} title={r.track_event ?? undefined}>
+                              {place.label}{place.city && place.phase !== "delivered" ? <span className="sub"> · {place.city}</span> : null}
+                            </div>
+                          );
+                        })()}
                         {stale !== null && <div className="sub im-warn-text">sin novedades hace {stale} días</div>}
                       </td>
                       <td className="num">{fmtInt(r.units)}<div className="sub">{r.lines} {r.lines === 1 ? "producto" : "productos"}</div></td>

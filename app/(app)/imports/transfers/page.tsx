@@ -104,7 +104,12 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                   <div className="sub clip">{[t.carrier, t.reference && `manifiesto ${t.reference}`].filter(Boolean).join(" · ") || "—"}</div>
                   {t.items.length > 0 && (
                     <ul className="im-prods" aria-label="Productos">
-                      {t.items.slice(0, 3).map((i) => <li key={i.id} title={`${lineLabel(i)} · ${fmtInt(i.qty)} u.`}><span className="q">{fmtInt(i.qty)} u.</span> {lineLabel(i)}</li>)}
+                      {t.items.slice(0, 3).map((i) => (
+                  <li key={i.id} title={`${lineLabel(i)} · ${fmtInt(i.qty)} u.`}>
+                    {i.image_url ? <img src={i.image_url} alt="" loading="lazy" /> : <span className="im-thumb-none" aria-hidden />}
+                    <span className="t"><span className="q">{fmtInt(i.qty)} u.</span> {lineLabel(i)}</span>
+                  </li>
+                ))}
                       {t.items.length > 3 && <li className="more">+{t.items.length - 3} más</li>}
                     </ul>
                   )}

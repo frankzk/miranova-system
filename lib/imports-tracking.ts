@@ -23,7 +23,7 @@ type Row = {
 
 export type TrackRun = { ok: true; checked: number; updated: number } | { ok: false; error: string };
 
-const RESET = { track_status: null, track_sub_status: null, track_event: null, track_event_at: null, track_eta: null };
+const RESET = { track_status: null, track_sub_status: null, track_event: null, track_event_at: null, track_eta: null, track_location: null };
 
 /** Guarda lo que dijo la paquetera y pasa al historial las novedades nuevas. true si hubo novedades. */
 async function save(r: Row, info: TrackInfo, now: string): Promise<boolean> {
@@ -38,6 +38,7 @@ async function save(r: Row, info: TrackInfo, now: string): Promise<boolean> {
     track_status: info.status, track_sub_status: info.subStatus,
     track_event: info.latest ? `${info.latest.text}${info.latest.location ? ` · ${info.latest.location}` : ""}` : null,
     track_event_at: info.latest?.at ?? r.track_event_at, track_eta: info.eta, track_checked_at: now, track_error: null,
+    track_location: info.latest?.location ?? null,
   }).eq("id", r.id);
   r.done = true;
   return fresh.length > 0;
