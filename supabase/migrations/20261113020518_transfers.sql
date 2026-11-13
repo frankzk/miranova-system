@@ -113,7 +113,7 @@ alter table public.transfer_documents enable row level security;
 alter table public.transfer_events    enable row level security;
 alter table public.transfer_settled   enable row level security;
 
--- Bodegas de hoy (se editan en Compras › Traslados › Puntos).
+-- Bodegas de hoy (se editan en Compras › Traslados › Bodegas).
 insert into public.transfer_points (code, name, country, city, goods, is_origin, is_destination, accounts, position) values
   ('boxful_gt',    'Boxful Guatemala',          'GT', 'Ciudad de Guatemala', 'both',    true,  true,  '{miranova_gt}', 10),
   ('moi_gt',       'Bodega de Moi',             'GT', null,                  'maquila', true,  true,  '{dropi_gt}', 20),
