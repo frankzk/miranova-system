@@ -1,19 +1,28 @@
+import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AssistantKeyList, NewAssistantKeyForm } from "@/components/assistant-keys";
 import { IntegrationsForm, TrackTestForm } from "@/components/integrations-form";
 import { SettingsSubnav } from "@/components/settings-subnav";
 import { PageHead } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { integrationStatus } from "@/lib/integrations";
 import { can } from "@/lib/permissions";
-import { saveIntegrationsAction, testTrackingAction } from "./actions";
+import { listAssistantKeys } from "@/lib/problem-notices-data";
+import { assistantKeyScopesAction, createAssistantKeyAction, revokeAssistantKeyAction, saveIntegrationsAction, testTrackingAction } from "./actions";
 import "../../imports/imports.css";
+import "./assistants.css";
 
 export const metadata = { title: "Integraciones" };
 
 export default async function IntegrationsPage() {
   const me = await requireUser();
   if (!me.is_owner) redirect("/sin-acceso");
-  const status = await integrationStatus();
+  const [status, keys, h] = await Promise.all([integrationStatus(), listAssistantKeys(), headers()]);
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "miranova-system.vercel.app";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const mcpBase = `${proto}://${host}/api/mcp`;
+  const day = (iso: string) => new Date(iso).toLocaleString("es-HN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Tegucigalpa" });
   // paqueteras con clave completa, para probarlas con una guía
   const testable = [
     { id: "dhl", label: "DHL", ok: !!status.dhl.source },
@@ -38,6 +47,28 @@ export default async function IntegrationsPage() {
           </div>
         </section>
       )}
+      <section className="panel" aria-labelledby="int-mcp">
+        <div className="panel-head"><h2 id="int-mcp">Asistentes (MCP)</h2></div>
+        <div className="panel-body ak-body">
+          <p className="ak-intro">
+            Para que Grok u otro asistente lea los <Link href="/orders/avisos">avisos de Problemas en gestión</Link>, los mande al grupo de
+            cada tienda y los marque enviados, y consulte lo que le habilites (pedidos, tiendas, traslados). Nunca ve datos del cliente final.
+            En Grok: <b>grok.com/connectors</b> → Nuevo conector → Personalizado → pega la dirección con la llave.
+          </p>
+          {keys === null ? (
+            <p className="form-error">Falta aplicar la migración de asistentes.</p>
+          ) : (
+            <>
+              <NewAssistantKeyForm action={createAssistantKeyAction} base={mcpBase} />
+              <AssistantKeyList
+                revoke={revokeAssistantKeyAction}
+                scopes={assistantKeyScopesAction}
+                keys={keys.map((k) => ({ id: k.id, name: k.name, key_tail: k.key_tail, scopes: k.scopes, created: day(k.created_at), used: k.last_used_at ? day(k.last_used_at) : null, revoked: !!k.revoked_at }))}
+              />
+            </>
+          )}
+        </div>
+      </section>
       <p className="footnote">
         Con las claves de DHL, FedEx y UPS, sus guías se actualizan solas cada 3 horas directo con cada paquetera (estado, última novedad y
         llegada estimada); con la de 17TRACK, las de cualquier otra paquetera. También se puede pedir al instante con &ldquo;Actualizar ahora&rdquo; en cada importación. Con la de Anthropic, en Documentos aparece “Leer con IA” en las facturas (PDF o foto) para proponer los

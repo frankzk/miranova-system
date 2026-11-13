@@ -1,0 +1,32 @@
+/* Ajustes › Integraciones › Asistentes (MCP) */
+.ak-body { display: grid; gap: 16px; }
+.ak-intro { margin: 0; font-size: var(--t-sm); color: var(--ink-2); line-height: 1.55; }
+.ak-new { display: grid; gap: 10px; }
+.ak-form { display: grid; gap: 12px; max-width: 560px; }
+.ak-form .field { margin: 0; max-width: 260px; }
+.ak-form .btn { justify-self: start; }
+.ak-scopes { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.ak-scopes legend { padding: 0; margin-bottom: 6px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.ak-scopes label { display: flex; gap: 10px; align-items: flex-start; font-size: var(--t-sm); cursor: pointer; }
+.ak-scopes input { margin-top: 3px; width: 16px; height: 16px; flex: none; }
+.ak-scopes label > span { display: grid; gap: 1px; }
+.ak-scopes label > span > span { color: var(--ink-3); font-size: var(--t-xs); line-height: 1.45; }
+.ak-created { border: 1px solid var(--success-line, var(--line)); background: var(--success-soft, var(--bg-subtle)); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 10px; }
+.ak-created p { margin: 0; font-size: var(--t-sm); }
+.ak-created details summary { cursor: pointer; font-size: var(--t-sm); color: var(--ink-2); }
+.ak-created details[open] { display: grid; gap: 10px; }
+.ak-copy { margin: 0; }
+.ak-copy-row { display: flex; gap: 8px; }
+.ak-copy-row .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-xs); }
+.ak-table tr[data-off] td { color: var(--ink-3); }
+.ak-scope-view { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--t-sm); }
+.ak-saved { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-size: var(--t-xs); }
+.ak-saved svg { width: 14px; height: 14px; }
+.ak-scope-form { display: grid; gap: 10px; }
+.ak-actions { display: flex; gap: 8px; }
+.ak-scope-cell { min-width: 220px; white-space: normal; }
+@media (max-width: 640px) {
+  .table.stack.ak-table tr { grid-template-columns: minmax(0, 1fr); }
+  .table.stack.ak-table td { grid-column: 1 / -1; grid-row: auto; }
+  .ak-copy-row { flex-direction: column; }
+}
