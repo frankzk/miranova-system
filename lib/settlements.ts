@@ -42,6 +42,8 @@ export type Settlement = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_note: string | null;
+  /** cuántos envíos paga (Boxful) */
+  shipments?: number | null;
 };
 
 const DAY = 86_400_000;

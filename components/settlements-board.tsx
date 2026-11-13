@@ -43,21 +43,22 @@ type Group = "pdf" | "confirm" | "waiting" | "review";
 const TILES: { id: Group; label: string; hint: string; tone: string }[] = [
   { id: "pdf", label: "Falta comprobante", hint: "Sube o elige el PDF", tone: "warning" },
   { id: "confirm", label: "Para confirmar", hint: "Ya encontramos la pareja: un clic", tone: "accent" },
-  { id: "waiting", label: "Esperando", hint: "A Drop o a que entre a Mercury", tone: "info" },
-  { id: "review", label: "Revisar", hint: "Rechazadas en Drop", tone: "danger" },
+  { id: "waiting", label: "Esperando", hint: "A la plataforma o a que entre a Mercury", tone: "info" },
+  { id: "review", label: "Revisar", hint: "Rechazadas por la plataforma", tone: "danger" },
 ];
 
 const STEP_PILL: Record<Step, { text: string; tone: string }> = {
   needs_pdf: { text: "Falta comprobante", tone: "warning" },
   confirm_pdf: { text: "Para confirmar", tone: "accent" },
   confirm_mercury: { text: "Para confirmar", tone: "accent" },
-  waiting_platform: { text: "Pendiente en Drop", tone: "info" },
+  waiting_platform: { text: "Pendiente de pago", tone: "info" },
   waiting_mercury: { text: "Esperando a Mercury", tone: "info" },
   review: { text: "Revisar", tone: "danger" },
   reviewed: { text: "Revisada", tone: "neutral" },
   closed: { text: "Cerrada", tone: "success" },
 };
 
+const platform = (s: Settlement) => (s.source === "boxful" ? "Boxful" : "Drop");
 const countryName = (c: string | null) => ORIGIN_COUNTRIES.find((x) => x.id === c)?.label ?? c ?? "";
 const ago = (iso: string | null) => {
   if (!iso) return "nunca";
@@ -122,11 +123,11 @@ export function SettlementsBoard({ company, today, settlements, exempt, sources,
       <section className="stl">
         <Flow />
         <div className="bank-empty">
-          <strong>{company === "mireva" ? "Las liquidaciones de Mireva vienen de Boxful" : "Todavía no hay liquidaciones de Drop"}</strong>
+          <strong>{company === "mireva" ? "Las liquidaciones de Mireva están en la empresa Miranova" : "Todavía no hay liquidaciones"}</strong>
           <p>
             {company === "mireva"
-              ? "Se conectan en la fase 2, cuando agreguemos la cuenta de Boxful de Mireva. Mientras tanto, sus PDF y abonos siguen en Movimientos."
-              : "Se leen solas de la billetera de cada cuenta de Drop cada 30 minutos. Si acabas de publicar, espera la próxima sincronización."}
+              ? "Como sus PDF y sus abonos, se ven en la empresa Miranova, marcadas con operación Mireva. Cambia la empresa arriba."
+              : "Se leen solas de Drop y de Boxful cada 30 minutos. Si acabas de publicar, espera la próxima sincronización."}
           </p>
         </div>
         <Sources sources={sources} />
@@ -184,7 +185,7 @@ export function SettlementsBoard({ company, today, settlements, exempt, sources,
         {!shown.length && (
           <div className="bank-empty">
             <strong>{group || scope === "open" ? "Nada pendiente aquí" : "Sin resultados"}</strong>
-            <p>{q || country ? "Prueba con otra búsqueda o país." : "Cuando Drop registre otra liquidación aparecerá sola."}</p>
+            <p>{q || country ? "Prueba con otra búsqueda o país." : "Cuando Drop o Boxful registren otra liquidación aparecerá sola."}</p>
           </div>
         )}
       </div>
@@ -198,7 +199,7 @@ export function SettlementsBoard({ company, today, settlements, exempt, sources,
 function Flow() {
   return (
     <p className="stl-flow">
-      <span><b>1</b>Drop la registra</span><i aria-hidden="true">→</i>
+      <span><b>1</b>Drop o Boxful la registra</span><i aria-hidden="true">→</i>
       <span><b>2</b>Llega el comprobante (PDF)</span><i aria-hidden="true">→</i>
       <span><b>3</b>Entra la plata a Mercury</span>
     </p>
@@ -230,7 +231,7 @@ function Row({ v, company, today, loose, names, byId }: {
       <div className="stl-who" role="cell">
         <strong>{op}{s.country ? <em> · {countryName(s.country)}</em> : null}</strong>
         <code>{s.reference}</code>
-        <span>Drop · {shortDay(s.requested_on)}</span>
+        <span>{platform(s)} · {shortDay(s.requested_on)}{s.shipments ? ` · ${s.shipments} envíos` : ""}</span>
         {s.confirmation && <span>Confirmación {s.confirmation}</span>}
       </div>
 
@@ -239,13 +240,13 @@ function Row({ v, company, today, loose, names, byId }: {
         <span className="stl-label">1 · Registrada</span>
         <strong>{money(s.amount_cents, s.currency)}</strong>
         {s.status === "rejected" ? (
-          <span className="stl-note bad">{s.status_label} en Drop{s.failure_reason ? `: ${s.failure_reason}` : ""}</span>
+          <span className="stl-note bad">{s.status_label} en {platform(s)}{s.failure_reason ? `: ${s.failure_reason}` : ""}</span>
         ) : (
           <>
             {v.expectedUsd !== null && s.currency !== "USD" && (
-              <span className="stl-meta">{s.usd_amount_cents ? `Enviado ${usd(v.expectedUsd)}` : `≈ ${usd(v.expectedUsd)} · tasa de Drop`}</span>
+              <span className="stl-meta">{s.usd_amount_cents ? `Enviado ${usd(v.expectedUsd)}` : `≈ ${usd(v.expectedUsd)} · tasa de ${platform(s)}`}</span>
             )}
-            {s.status === "pending" && <span className="stl-note">{s.status_label} en Drop</span>}
+            {s.status === "pending" && <span className="stl-note">{s.status_label} en {platform(s)}</span>}
           </>
         )}
       </div>
@@ -273,7 +274,7 @@ function Row({ v, company, today, loose, names, byId }: {
           </Suggestion>
         ) : (
           <>
-            <span className="stl-wait">{v.step === "waiting_platform" ? "Drop todavía no la paga" : "Todavía no llega"}</span>
+            <span className="stl-wait">{v.step === "waiting_platform" ? `${platform(s)} todavía no la paga` : "Todavía no llega"}</span>
             {v.step === "needs_pdf" && v.pdfOptions.length > 0 && (
               <span className="stl-note">{v.pdfOptions.length} parecido{v.pdfOptions.length === 1 ? "" : "s"}: revisa cuál es</span>
             )}
@@ -482,12 +483,12 @@ function PickMercury({ pdf, options }: { pdf: BankEntry; options: Candidate[] })
 function Detail({ v, company, names, byId }: { v: SettlementView; company: Company; names: Record<string, string>; byId: Map<string, BankEntry> }) {
   const { s } = v;
   const rows: [string, string][] = [
-    ["Código en Drop", s.reference],
+    [s.source === "boxful" ? "Números de confirmación" : "Código en Drop", s.reference],
     ["Número de confirmación", s.confirmation || "—"],
-    ["Estado en Drop", s.status_label + (s.failure_reason ? ` · ${s.failure_reason}` : "")],
+    [`Estado en ${platform(s)}`, s.status_label + (s.failure_reason ? ` · ${s.failure_reason}` : "")],
     ["Pedida", s.requested_on],
     ["Monto", money(s.amount_cents, s.currency)],
-    ...(s.usd_rate && s.currency !== "USD" ? [["Tasa de Drop", `1 ${s.currency} = ${s.usd_rate} USD`] as [string, string]] : []),
+    ...(s.usd_rate && s.currency !== "USD" ? [[`Tasa de ${platform(s)}`, `1 ${s.currency} = ${s.usd_rate} USD`] as [string, string]] : []),
     ...(v.expectedUsd !== null ? [[s.usd_amount_cents ? "Enviado en USD" : "Esperado en USD", usd(v.expectedUsd)] as [string, string]] : []),
     ["Banco de destino", [s.bank, s.bank_account].filter(Boolean).join(" · ") || "—"],
   ];
@@ -501,7 +502,7 @@ function Detail({ v, company, names, byId }: { v: SettlementView; company: Compa
         ))}
       </dl>
       {s.evidence.length > 0 && (
-        <p>{s.evidence.map((u, i) => <a key={u} className="btn" href={u} target="_blank" rel="noreferrer">Comprobante de Drop {s.evidence.length > 1 ? i + 1 : ""} ↗</a>)}</p>
+        <p>{s.evidence.map((u, i) => <a key={u} className="btn" href={u} target="_blank" rel="noreferrer">Comprobante de {platform(s)} {s.evidence.length > 1 ? i + 1 : ""} ↗</a>)}</p>
       )}
       {v.step === "review" && <ReviewForm s={s} />}
       {v.pdf && <UnlinkForm s={s} pdf={v.pdf} company={company} matched={!!v.match} />}
@@ -522,7 +523,7 @@ function ReviewForm({ s }: { s: Settlement }) {
       <input type="hidden" name="company" value={s.company} />
       <label className="field">
         <span>¿Qué pasó?</span>
-        <textarea className="input" name="note" rows={2} required minLength={3} maxLength={500} placeholder="Ej.: Drop la rechazó por la cuenta; se volvió a pedir como QB65AIKE" />
+        <textarea className="input" name="note" rows={2} required minLength={3} maxLength={500} placeholder="Ej.: la rechazaron por la cuenta; se volvió a pedir como QB65AIKE" />
       </label>
       <Msg state={state} />
       <SubmitButton className="btn" pending="Guardando…">Marcar revisada</SubmitButton>
