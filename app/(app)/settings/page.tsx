@@ -125,16 +125,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                       <SubmitButton pending="Conectando…">Guardar acceso</SubmitButton>
                     </form>
 
-                    <div className="inline-form" style={{ justifyContent: "space-between" }}>
-                      <p className="muted" style={{ fontSize: "var(--t-sm)", flex: "1 1 260px" }}>
-                        {a.backfill_cursor ? "El historial se está cargando por meses." : "Historial completo cargado."} Puedes volver a traerlo
-                        si faltan órdenes antiguas.
+                    {a.platform === "boxful" ? (
+                      <p className="muted" style={{ fontSize: "var(--t-sm)" }}>
+                        Solo trae las liquidaciones para <strong>Conciliación</strong>: no baja pedidos ni aparece en el resto del panel.
                       </p>
-                      <form action={loadHistory}>
-                        <input type="hidden" name="id" value={a.id} />
-                        <SubmitButton pending="Cargando…">Volver a cargar historial</SubmitButton>
-                      </form>
-                    </div>
+                    ) : (
+                      <div className="inline-form" style={{ justifyContent: "space-between" }}>
+                        <p className="muted" style={{ fontSize: "var(--t-sm)", flex: "1 1 260px" }}>
+                          {a.backfill_cursor ? "El historial se está cargando por meses." : "Historial completo cargado."} Puedes volver a traerlo
+                          si faltan órdenes antiguas.
+                        </p>
+                        <form action={loadHistory}>
+                          <input type="hidden" name="id" value={a.id} />
+                          <SubmitButton pending="Cargando…">Volver a cargar historial</SubmitButton>
+                        </form>
+                      </div>
+                    )}
 
                     <div className="inline-form" style={{ justifyContent: "space-between" }}>
                       <p className="muted" style={{ fontSize: "var(--t-sm)", flex: "1 1 260px" }}>
@@ -176,7 +182,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <form action={createAccount} className="panel-body">
           <div className="form-grid">
             <label className="field">
-              <span>Plataforma</span>
+              <span>Plataforma <span className="hint">Boxful: solo las liquidaciones de Mireva para Conciliación.</span></span>
               <select className="select" name="platform" defaultValue="soydrop">
                 {PLATFORMS.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}{p.ready ? "" : " · próximamente"}</option>

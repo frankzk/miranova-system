@@ -66,7 +66,8 @@ const SUMMARY_FIELDS =
  * comparten) y sin el conteo de órdenes ni el diagnóstico, que solo usa Ajustes.
  */
 export const listAccounts = cache(async (): Promise<AccountSummary[]> => {
-  const { data, error } = await db().from("accounts").select(SUMMARY_FIELDS).order("created_at");
+  // Boxful (solo liquidaciones de Conciliación) no tiene pedidos: fuera del selector y de las secciones
+  const { data, error } = await db().from("accounts").select(SUMMARY_FIELDS).neq("platform", "boxful").order("created_at");
   if (error) throw error;
   return data as AccountSummary[];
 });

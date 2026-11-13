@@ -23,6 +23,8 @@ export const countryByCode = (code: string) => COUNTRIES.find((c) => c.code === 
 export const PLATFORMS = [
   { id: "soydrop", name: "Drop (soydrop.com)", ready: true },
   { id: "dropi", name: "Dropi", ready: true },
+  // solo para las liquidaciones de Conciliación (no baja pedidos ni aparece en el resto del panel)
+  { id: "boxful", name: "Boxful (solo liquidaciones)", ready: true },
 ] as const;
 
 export type PlatformId = (typeof PLATFORMS)[number]["id"];
