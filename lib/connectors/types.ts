@@ -1,3 +1,5 @@
+import type { MovementSummary } from "../drop-settlements.ts";
+
 export type PlatformAccount = { ref: string; name: string };
 
 /** Sesión serializable: se guarda cifrada y se reutiliza entre sincronizaciones. */
@@ -39,6 +41,8 @@ export interface Connector {
   discoverWalletPath?(session: Session): Promise<{ path: string | null; attempts: ProbeAttempt[] }>;
   /** Descarga la billetera (el saldo se lee con walletBalance de lib/wallet.ts). */
   fetchWallet?(session: Session, path: string): Promise<OrdersPage>;
+  /** Diagnóstico de solo lectura: movimientos de la billetera y rutas candidatas de liquidaciones. */
+  probeSettlements?(session: Session): Promise<{ movements: MovementSummary; attempts: ProbeAttempt[] }>;
 }
 
 export class SessionExpired extends Error {
