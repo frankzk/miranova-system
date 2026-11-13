@@ -21,6 +21,7 @@ import { uploadedBankPdf } from "@/lib/bank-pdf-storage";
 import { readBoxfulDocument } from "@/lib/boxful-pdf";
 import type { BoxfulReadResult } from "@/lib/boxful-document";
 import { integrationKey } from "@/lib/integrations";
+import { linkPdf } from "@/lib/settlements-link";
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const fail = (msg: string) => ({ ok: false as const, msg });
@@ -162,7 +163,7 @@ export async function saveBankEntry(
       document_sha256: createHash("sha256").update(bytes).digest("hex"),
     };
   }
-  const { error } = await db()
+  const { data: saved, error } = await db()
     .from("bank_entries")
     .insert({
       ...clean.row,
@@ -171,8 +172,17 @@ export async function saveBankEntry(
       version: 1,
       created_by: auth.user.id,
       updated_by: auth.user.id,
-    });
+    })
+    .select("id")
+    .single();
   if (error) return fail(bankError(error));
+  // registrado desde una liquidación (Conciliación › Liquidaciones): queda vinculado a ella
+  const settlementId = field(form, "settlement_id");
+  if (settlementId && clean.row.source === "boxful" && saved?.id) {
+    const linked = await linkPdf(settlementId, clean.row.company, saved.id, auth.user.id);
+    if (!linked?.ok) return done(`Comprobante registrado, pero no se pudo vincular a la liquidación: ${linked?.msg ?? ""} Vincúlalo desde la liquidación.`);
+    return done("Comprobante registrado y vinculado a la liquidación.");
+  }
   return done("Movimiento registrado. Ya puedes revisarlo para conciliar.");
 }
 

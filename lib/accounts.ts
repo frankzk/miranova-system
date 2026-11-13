@@ -33,6 +33,9 @@ export type Account = {
   wallet_at: string | null;
   wallet_msg: string | null;
   wallet_probe_at: string | null;
+  // Liquidaciones de Drop (lib/drop-settlements.ts): última lectura y resumen.
+  settlements_sync_at: string | null;
+  settlements_msg: string | null;
   enabled: boolean;
   last_sync_at: string | null;
   last_sync_ok: boolean | null;
