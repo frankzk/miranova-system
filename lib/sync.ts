@@ -32,6 +32,7 @@ const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ven
 const OPEN_REFRESH_MAX_DAYS = 120;
 const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
+const SETTLEMENT_PROBE_EVERY_MS = 6 * 3_600_000; // diagnóstico de liquidaciones de Drop
 
 /** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
 const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
@@ -263,6 +264,23 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
         await syncWallet(acc, (fn) => withSession(fn), c);
       } catch (e) {
         await updateAccount(acc.id, { wallet_msg: `No se pudo leer el saldo: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+
+    // 3c'. diagnóstico de liquidaciones (solo lectura, cada 6 h): dónde entrega Drop las solicitudes
+    // de liquidación, para conciliarlas con el PDF y con Mercury. Un fallo aquí no detiene lo demás.
+    if (c.probeSettlements && Date.now() < deadline - 60_000) {
+      const last = (acc.debug as { settlement_probe?: { at?: string } } | null)?.settlement_probe?.at;
+      if (!last || Date.now() - Date.parse(last) > SETTLEMENT_PROBE_EVERY_MS) {
+        let probe: Record<string, unknown>;
+        try {
+          probe = { at: new Date().toISOString(), ...(await withSession((s) => c.probeSettlements!(s))) };
+        } catch (e) {
+          if (e instanceof SessionExpired) throw e;
+          probe = { at: new Date().toISOString(), error: e instanceof Error ? e.message : String(e) };
+        }
+        const fresh = (await getAccount(acc.id))!;
+        await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), settlement_probe: probe } });
       }
     }
 

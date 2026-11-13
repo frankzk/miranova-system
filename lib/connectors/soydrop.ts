@@ -1,6 +1,7 @@
 import { extractOrders } from "../normalize.ts";
 import { extractProducts } from "../products.ts";
 import { walletBalance } from "../wallet.ts";
+import { movementList, summarizeMovements } from "../drop-settlements.ts";
 import {
   type Connector, type DateRange, type LoginResult, type OrdersPage, type PlatformAccount, type ProbeAttempt,
   type Session, PlatformError, SessionExpired,
@@ -56,6 +57,15 @@ const WALLET_PATH_CANDIDATES = [
   "/wallet-transactions", "/wallets/transactions", "/wallet/transactions", "/wallet/movements",
   "/wallets/movements", "/balance-movements", "/balance/movements", "/transactions",
 ];
+// Liquidaciones ("Solicitudes de liquidación" en app.soydrop.com/settlements). La ruta no es pública:
+// se revisan los movimientos de la billetera (ahí está cada abono, con su tasa de cambio) y estas candidatas.
+const SETTLEMENT_PATH_CANDIDATES = [
+  "/settlements", "/settlements/", "/settlements/me", "/settlements/vendor", "/settlements/requests", "/settlement-requests",
+  "/vendor/settlements", "/vendors/settlements", "/balance-requests", "/balance-movements/requests",
+  "/withdrawals", "/withdrawal-requests", "/withdraw-requests", "/payouts", "/liquidations",
+];
+const MOVEMENTS_PAGE_SIZE = 100;
+const MOVEMENTS_PROBE_PAGES = 10;
 /** Claims del token que suelen ser el id de la cuenta (para rutas tipo /wallets/:id). */
 const ACCOUNT_ID_CLAIMS = ["accountId", "account", "accountRef", "ref", "vendorId", "sub"];
 
@@ -307,6 +317,49 @@ export const soydrop: Connector = {
     const { json, text } = await readJson(res);
     if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
     return { url, payload: json };
+  },
+
+  // Solo lectura: qué tipos de movimiento trae la billetera y qué responden las rutas candidatas
+  // de liquidaciones. Se guarda como diagnóstico para armar la conciliación de 3 pasos.
+  async probeSettlements(session) {
+    const pages: unknown[] = [];
+    const attempts: ProbeAttempt[] = [];
+    let firstId: unknown;
+    for (let page = 1; page <= MOVEMENTS_PROBE_PAGES; page++) {
+      const path = `/balance-movements?page=${page}&limit=${MOVEMENTS_PAGE_SIZE}`;
+      const res = await fetch(`${API}${path}`, { headers: authHeaders(session), cache: "no-store" });
+      if (res.status === 401) throw new SessionExpired();
+      const { json, text } = await readJson(res);
+      if (!res.ok || json === null) {
+        attempts.push({ path, status: res.status, orders: 0, sample: text.slice(0, 600) });
+        // sin parámetros, como la lee el saldo
+        if (page === 1) {
+          const plain = await fetch(`${API}/balance-movements`, { headers: authHeaders(session), cache: "no-store" });
+          const r = await readJson(plain);
+          if (plain.ok && r.json !== null) pages.push(r.json);
+        }
+        break;
+      }
+      const list = movementList(json);
+      // si la paginación no se respeta, la segunda página repite la primera
+      if (page === 1) firstId = list[0]?.id;
+      else if (list[0]?.id !== undefined && list[0]?.id === firstId) {
+        attempts.push({ path, status: res.status, orders: list.length, sample: "la página se repite: no acepta page/limit" });
+        break;
+      }
+      pages.push(json);
+      if (list.length < MOVEMENTS_PAGE_SIZE) break;
+    }
+    for (const path of SETTLEMENT_PATH_CANDIDATES) {
+      try {
+        const res = await fetch(`${API}${path}?page=1&limit=20`, { headers: authHeaders(session), cache: "no-store" });
+        const { json, text } = await readJson(res);
+        attempts.push({ path, status: res.status, orders: json ? movementList(json).length : 0, sample: text.slice(0, res.ok ? 3000 : 200) });
+      } catch (e) {
+        attempts.push({ path, status: -1, orders: 0, sample: String(e) });
+      }
+    }
+    return { movements: summarizeMovements(pages), attempts };
   },
 
   // La web de Drop carga "states-cities/" para traducir cityId/stateId a nombres.
