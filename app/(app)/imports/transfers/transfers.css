@@ -87,3 +87,12 @@
   .tr-vgrid .input { width: 50px; padding-left: 4px; padding-right: 4px; }
   .tr-vtotal { min-width: 36px; }
 }
+
+/* pestañas En ruta / Por enviar y filtros de En ruta */
+.tr-sections a { font-size: var(--t-lg, 16px); font-weight: 600; padding: 10px 12px 12px; }
+.tr-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; }
+.tr-filters .chips { margin: 0; }
+.tr-filters .segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.tr-filters .segmented::-webkit-scrollbar { display: none; }
+.tr-filters .segmented a { white-space: nowrap; }
+.tr-page .panel + .panel, .tr-page .panel + .tr-filters, .tr-page .panel + .table-wrap { margin-top: 16px; }
