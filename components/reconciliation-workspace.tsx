@@ -12,6 +12,7 @@ import {
 } from "@/lib/reconciliation";
 import { BankEntryForm, BankOriginForm, BankReasonForm } from "./reconciliation-forms";
 import { originLabel } from "@/lib/bank-origin";
+import { money } from "@/lib/settlements";
 import { SideSheet } from "./side-sheet";
 import { BankLinkPicker } from "./bank-link-picker";
 
@@ -29,6 +30,12 @@ const activity: Record<string, string> = {
   reconciled: "Conciliación confirmada",
   reversed: "Conciliación revertida",
   voided: "Movimiento anulado",
+  linked: "Comprobante vinculado a una liquidación",
+  unlinked: "Comprobante desvinculado de una liquidación",
+  reviewed: "Liquidación rechazada revisada",
+  unreviewed: "Revisión de liquidación quitada",
+  exempted: "Comprobante marcado «no es liquidación»",
+  unexempted: "Marca «no es liquidación» quitada",
 };
 const stamp = (s: string) =>
   new Intl.DateTimeFormat("es-PE", {
@@ -744,23 +751,53 @@ export function BankWorkspace({
                       {names[a.actor_id] ?? "Usuario"} · {stamp(a.created_at)}
                     </p>
                     <span className="hint">
-                      {String(
-                        a.snapshot.reference ??
-                          `${(a.snapshot.boxful_snapshot as BankEntry | undefined)?.reference ?? "Boxful"} → ${(a.snapshot.mercury_snapshot as BankEntry | undefined)?.reference ?? "Mercury"}`,
-                      )}
+                      {a.entity_type === "settlements"
+                        ? `Liquidación ${String(a.snapshot.reference ?? "")} · ${money(Number(a.snapshot.amount_cents ?? 0), String(a.snapshot.currency ?? "USD"))}`
+                        : a.entity_type === "settlement_exempt_entries"
+                          ? String(a.snapshot.reason ?? "")
+                          : String(
+                              a.snapshot.reference ??
+                                `${(a.snapshot.boxful_snapshot as BankEntry | undefined)?.reference ?? "Boxful"} → ${(a.snapshot.mercury_snapshot as BankEntry | undefined)?.reference ?? "Mercury"}`,
+                            )}
                     </span>
-                    <details>
-                      <summary>Datos guardados en este evento</summary>
-                      {a.entity_type === "bank_matches" ? (
-                        <MatchSnapshot
-                          match={a.snapshot as unknown as BankMatch}
-                        />
-                      ) : (
-                        <EntrySnapshot
-                          entry={a.snapshot as unknown as BankEntry}
-                        />
-                      )}
-                    </details>
+                    {a.entity_type === "settlements" ? (
+                      <details>
+                        <summary>Datos guardados en este evento</summary>
+                        <dl className="bank-audit-data">
+                          {[
+                            ["Liquidación", a.snapshot.reference],
+                            ["Confirmación", a.snapshot.confirmation],
+                            ["Estado en Drop", a.snapshot.status_label],
+                            ["Comprobante", a.snapshot.boxful_id ? (byId.get(String(a.snapshot.boxful_id))?.reference ?? "Comprobante") : "Sin comprobante"],
+                            ["Nota de revisión", a.snapshot.review_note],
+                          ]
+                            .filter(([, v]) => !!v)
+                            .map(([k, v]) => (
+                              <div key={String(k)}>
+                                <dt>{String(k)}</dt>
+                                <dd>{String(v)}</dd>
+                              </div>
+                            ))}
+                        </dl>
+                      </details>
+                    ) : a.entity_type === "settlement_exempt_entries" ? (
+                      <span className="hint">
+                        Comprobante: {byId.get(String(a.snapshot.entry_id ?? ""))?.reference ?? "—"}
+                      </span>
+                    ) : (
+                      <details>
+                        <summary>Datos guardados en este evento</summary>
+                        {a.entity_type === "bank_matches" ? (
+                          <MatchSnapshot
+                            match={a.snapshot as unknown as BankMatch}
+                          />
+                        ) : (
+                          <EntrySnapshot
+                            entry={a.snapshot as unknown as BankEntry}
+                          />
+                        )}
+                      </details>
+                    )}
                   </div>
                 </li>
               ))}

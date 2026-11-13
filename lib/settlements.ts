@@ -83,26 +83,28 @@ const STRONG = 0.015;
 export function pdfCandidates(s: Settlement, entries: BankEntry[], used: Set<string>): Candidate[] {
   const expected = expectedUsdCents(s);
   const requested = requestedDay(s);
-  const out: Candidate[] = [];
+  const found: (Candidate & { tier: number })[] = [];
   for (const e of entries) {
     if (e.source !== "boxful" || e.company !== s.company || e.void_reason || (used.has(e.id) && e.id !== s.boxful_id)) continue;
     if (s.operation && e.origin_operation && e.origin_operation !== s.operation) continue;
     if (s.country && e.origin_country && e.origin_country !== s.country) continue;
-    const refOk = referenceMatches(s, e);
-    const sameOriginal = e.original_currency === s.currency && e.original_amount_cents === s.amount_cents;
     const diffCents = expected === null ? null : e.amount_cents - expected;
     const ratio = expected ? Math.abs(e.amount_cents - expected) / expected : Infinity;
     const days = (day(e.occurred_on) - requested) / DAY;
     const inWindow = days >= -3 && days <= 21;
-    if (refOk) out.push({ entry: e, strong: true, reason: "La referencia está en esta liquidación", diffCents });
-    else if (sameOriginal && inWindow) out.push({ entry: e, strong: true, reason: "Mismo monto en " + s.currency, diffCents });
-    else if (ratio <= CLOSE && inWindow) out.push({ entry: e, strong: ratio <= STRONG && days >= -1 && days <= 7, reason: "Monto y fecha parecidos", diffCents });
+    // 0: la referencia; 1: el mismo monto en la moneda de la liquidación; 2: monto y fecha parecidos
+    if (referenceMatches(s, e)) found.push({ entry: e, strong: true, reason: "La referencia está en esta liquidación", diffCents, tier: 0 });
+    else if (e.original_currency === s.currency && e.original_amount_cents === s.amount_cents && inWindow)
+      found.push({ entry: e, strong: true, reason: "Mismo monto en " + s.currency, diffCents, tier: 1 });
+    else if (ratio <= CLOSE && inWindow)
+      found.push({ entry: e, strong: ratio <= STRONG && days >= -1 && days <= 7, reason: "Monto y fecha parecidos", diffCents, tier: 2 });
   }
-  const rank = (c: Candidate) => (c.strong ? 0 : 1);
-  out.sort((a, b) => rank(a) - rank(b) || Math.abs(a.diffCents ?? 0) - Math.abs(b.diffCents ?? 0));
-  // una sugerencia "fuerte" solo si es la única fuerte; si hay varias, que elija la persona
-  if (out.filter((c) => c.strong).length > 1) for (const c of out) if (c.reason === "Monto y fecha parecidos") c.strong = false;
-  return out.slice(0, 6);
+  found.sort((a, b) => a.tier - b.tier || Math.abs(a.diffCents ?? 0) - Math.abs(b.diffCents ?? 0));
+  // "fuerte" (un clic) solo el único del mejor nivel que tenga alguno; si hay empate, que elija la persona
+  const best = found.find((c) => c.strong)?.tier;
+  const top = found.filter((c) => c.strong && c.tier === best);
+  for (const c of found) c.strong = top.length === 1 && c === top[0];
+  return found.slice(0, 6).map(({ tier: _tier, ...c }) => c);
 }
 
 /** Abonos de Mercury para el comprobante ya vinculado: los de siempre, con el mismo monto y fecha cercana como "fuerte". */
@@ -144,7 +146,7 @@ export function settlementViews(settlements: Settlement[], entries: BankEntry[],
   // los ya vinculados y los que no son liquidación no se proponen
   const used = new Set([...settlements.map((s) => s.boxful_id).filter((id): id is string => !!id), ...exempt]);
   const active = matches.filter((m) => !m.reversed_at);
-  return settlements.map((s) => {
+  const views = settlements.map((s) => {
     const expectedUsd = expectedUsdCents(s);
     const base = { s, expectedUsd, pdf: null, pdfOptions: [], match: null, mercury: null, mercuryOptions: [] };
     if (s.status === "rejected") return { ...base, step: s.reviewed_at ? "reviewed" : "review" };
@@ -158,6 +160,20 @@ export function settlementViews(settlements: Settlement[], entries: BankEntry[],
     if (match) return { ...base, pdf, match, mercury: byId.get(match.mercury_id) ?? match.mercury_snapshot, step: "closed" };
     const mercuryOptions = mercuryCandidates(pdf, entries, matches);
     return { ...base, pdf, mercuryOptions, step: mercuryOptions.some((c) => c.strong) ? "confirm_mercury" : "waiting_mercury" };
+  }) as SettlementView[];
+  // un mismo PDF o abono no puede ser la sugerencia "de un clic" de dos liquidaciones
+  const strongCount = new Map<string, number>();
+  for (const v of views) for (const c of [...v.pdfOptions, ...v.mercuryOptions]) if (c.strong) strongCount.set(c.entry.id, (strongCount.get(c.entry.id) ?? 0) + 1);
+  return views.map((v) => {
+    const shared = (c: Candidate) => c.strong && (strongCount.get(c.entry.id) ?? 0) > 1;
+    if (![...v.pdfOptions, ...v.mercuryOptions].some(shared)) return v;
+    const pdfOptions = v.pdfOptions.map((c) => (shared(c) ? { ...c, strong: false } : c));
+    const mercuryOptions = v.mercuryOptions.map((c) => (shared(c) ? { ...c, strong: false } : c));
+    const step: Step =
+      v.step === "confirm_pdf" && !pdfOptions.some((c) => c.strong) ? (v.s.status === "pending" ? "waiting_platform" : "needs_pdf")
+      : v.step === "confirm_mercury" && !mercuryOptions.some((c) => c.strong) ? "waiting_mercury"
+      : v.step;
+    return { ...v, pdfOptions, mercuryOptions, step };
   });
 }
 

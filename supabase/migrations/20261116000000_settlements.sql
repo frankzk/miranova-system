@@ -53,7 +53,9 @@ create index settlements_company_requested on public.settlements(company, reques
 -- Cuándo se leyeron por última vez las liquidaciones de cada cuenta (null: falta la primera lectura completa).
 alter table public.accounts
   add column if not exists settlements_sync_at timestamptz,
-  add column if not exists settlements_msg text;
+  add column if not exists settlements_msg text,
+  -- primera lectura completa a medias: desde qué página sigue (null: no hay nada pendiente)
+  add column if not exists settlements_resume_page integer check (settlements_resume_page is null or settlements_resume_page > 1);
 -- el diagnóstico de solo lectura que sirvió para encontrarlas ya no hace falta
 update public.accounts set debug = debug - 'settlement_probe' where debug ? 'settlement_probe';
 
@@ -72,59 +74,87 @@ create table public.settlement_exempt_entries (
 );
 create unique index settlement_exempt_active on public.settlement_exempt_entries(entry_id) where revoked_at is null;
 
--- Vincular solo un PDF de Boxful, vigente y de la misma empresa. Cada cambio de vínculo o revisión, con autor.
+-- Vincular solo un PDF de Boxful vigente, de la misma empresa y no marcado "no es liquidación". Cada vínculo
+-- o revisión dice quién lo hizo (changed_by, igual a linked_by / reviewed_by) y queda en bank_audit; después
+-- changed_by vuelve a null, así el próximo cambio tiene que decirlo otra vez. La sincronización no toca nada de esto.
 create function public.settlement_guard() returns trigger language plpgsql security invoker set search_path = '' as $$
-declare e public.bank_entries;
+declare e public.bank_entries; op text;
 begin
   if TG_OP = 'DELETE' then raise exception 'Las liquidaciones no se borran.'; end if;
-  if TG_OP = 'UPDATE' and (NEW.boxful_id is distinct from OLD.boxful_id or NEW.reviewed_at is distinct from OLD.reviewed_at
-      or NEW.review_note is distinct from OLD.review_note) then
-    if NEW.changed_by is null then raise exception 'Falta quién hizo el cambio.'; end if;
-  end if;
-  if NEW.boxful_id is not null and (TG_OP = 'INSERT' or NEW.boxful_id is distinct from OLD.boxful_id) then
-    select * into e from public.bank_entries where id = NEW.boxful_id for share;
-    if e.id is null or e.source <> 'boxful' or e.company <> NEW.company then
-      raise exception 'Elige un comprobante de Boxful de la misma empresa.';
+  if TG_OP = 'INSERT' then
+    if NEW.boxful_id is not null or NEW.reviewed_at is not null then
+      raise exception 'Una liquidación llega sin comprobante ni revisión: eso lo confirma una persona.';
     end if;
-    if e.void_reason is not null then raise exception 'Ese comprobante está anulado.'; end if;
-  end if;
-  return NEW;
-end $$;
-create trigger settlement_guard before insert or update or delete on public.settlements for each row execute function public.settlement_guard();
-
-create function public.settlement_write_audit() returns trigger language plpgsql security invoker set search_path = '' as $$
-declare op text; actor uuid;
-begin
-  if TG_TABLE_NAME = 'settlement_exempt_entries' then
-    if TG_OP = 'INSERT' then
-      op := 'exempted'; actor := NEW.created_by;
-    elsif OLD.revoked_at is null and NEW.revoked_at is not null then
-      op := 'unexempted'; actor := NEW.revoked_by;
-    else
-      raise exception 'Solo se puede deshacer, con autor.';
-    end if;
-    insert into public.bank_audit(company, entity_id, entity_type, operation, actor_id, snapshot)
-    values (NEW.company, NEW.entry_id, TG_TABLE_NAME, op, actor, to_jsonb(NEW));
+    NEW.changed_by := null;
     return NEW;
   end if;
   if NEW.boxful_id is distinct from OLD.boxful_id then
     op := case when NEW.boxful_id is null then 'unlinked' else 'linked' end;
   elsif NEW.reviewed_at is distinct from OLD.reviewed_at or NEW.review_note is distinct from OLD.review_note then
     op := case when NEW.reviewed_at is null then 'unreviewed' else 'reviewed' end;
-  else
-    return NEW; -- la sincronización: no es un cambio de una persona
+  end if;
+  if op is null then
+    NEW.changed_by := null; -- la sincronización: datos de la plataforma
+    return NEW;
+  end if;
+  if NEW.changed_by is null then raise exception 'Falta quién hizo el cambio.'; end if;
+  if op = 'linked' then
+    if NEW.linked_by is distinct from NEW.changed_by then raise exception 'El vínculo debe llevar a quien lo hizo.'; end if;
+    -- bloquea el comprobante: vincularlo y marcarlo "no es liquidación" no pueden cruzarse
+    select * into e from public.bank_entries where id = NEW.boxful_id for no key update;
+    if e.id is null or e.source <> 'boxful' or e.company <> NEW.company then
+      raise exception 'Elige un comprobante de Boxful de la misma empresa.';
+    end if;
+    if e.void_reason is not null then raise exception 'Ese comprobante está anulado.'; end if;
+    if exists (select 1 from public.settlement_exempt_entries where entry_id = NEW.boxful_id and revoked_at is null) then
+      raise exception 'Ese comprobante está marcado como «no es liquidación».';
+    end if;
+  elsif op = 'reviewed' and NEW.reviewed_by is distinct from NEW.changed_by then
+    raise exception 'La revisión debe llevar a quien la hizo.';
   end if;
   insert into public.bank_audit(company, entity_id, entity_type, operation, actor_id, snapshot)
-  values (NEW.company, NEW.id, TG_TABLE_NAME, op, NEW.changed_by, to_jsonb(NEW) - 'raw');
+  values (NEW.company, NEW.id, 'settlements', op, NEW.changed_by, to_jsonb(NEW) - 'raw' - 'changed_by');
+  NEW.changed_by := null;
   return NEW;
 end $$;
-create trigger settlement_audit after update on public.settlements for each row execute function public.settlement_write_audit();
-create trigger settlement_exempt_audit after insert or update on public.settlement_exempt_entries for each row execute function public.settlement_write_audit();
+create trigger settlement_guard before insert or update or delete on public.settlements for each row execute function public.settlement_guard();
+
+-- Las marcas "no es liquidación" no se borran (se deshacen con autor) y no van en un comprobante ya vinculado.
+create function public.settlement_exempt_guard() returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  if TG_OP = 'DELETE' then raise exception 'Las marcas no se borran: se deshacen.'; end if;
+  if TG_OP = 'UPDATE' then
+    if OLD.revoked_at is not null or NEW.revoked_at is null or
+      (to_jsonb(NEW) - array['revoked_at', 'revoked_by']) is distinct from (to_jsonb(OLD) - array['revoked_at', 'revoked_by']) then
+      raise exception 'Solo se puede deshacer una marca vigente, con autor.';
+    end if;
+    return NEW;
+  end if;
+  if NEW.revoked_at is not null then raise exception 'Una marca nueva debe estar vigente.'; end if;
+  perform 1 from public.bank_entries where id = NEW.entry_id for no key update;
+  if not exists (select 1 from public.bank_entries where id = NEW.entry_id and source = 'boxful' and company = NEW.company) then
+    raise exception 'Elige un comprobante de Boxful de esta empresa.';
+  end if;
+  if exists (select 1 from public.settlements where boxful_id = NEW.entry_id) then
+    raise exception 'Ese comprobante está vinculado a una liquidación. Desvincúlalo primero.';
+  end if;
+  return NEW;
+end $$;
+create trigger settlement_exempt_guard before insert or update or delete on public.settlement_exempt_entries for each row execute function public.settlement_exempt_guard();
+
+create function public.settlement_exempt_audit() returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  insert into public.bank_audit(company, entity_id, entity_type, operation, actor_id, snapshot)
+  values (NEW.company, NEW.entry_id, 'settlement_exempt_entries',
+    case when TG_OP = 'INSERT' then 'exempted' else 'unexempted' end,
+    case when TG_OP = 'INSERT' then NEW.created_by else NEW.revoked_by end, to_jsonb(NEW));
+  return NEW;
+end $$;
+create trigger settlement_exempt_audit after insert or update on public.settlement_exempt_entries for each row execute function public.settlement_exempt_audit();
 
 alter table public.settlements enable row level security;
 alter table public.settlement_exempt_entries enable row level security;
-revoke all on public.settlements, public.settlement_exempt_entries from anon, authenticated;
-grant select, insert, update on public.settlements to service_role;
-grant select, insert, update on public.settlement_exempt_entries to service_role;
-revoke execute on function public.settlement_guard(), public.settlement_write_audit() from public, anon, authenticated;
-grant execute on function public.settlement_guard(), public.settlement_write_audit() to service_role;
+revoke all on public.settlements, public.settlement_exempt_entries from anon, authenticated, service_role;
+grant select, insert, update on public.settlements, public.settlement_exempt_entries to service_role;
+revoke execute on function public.settlement_guard(), public.settlement_exempt_guard(), public.settlement_exempt_audit() from public, anon, authenticated;
+grant execute on function public.settlement_guard(), public.settlement_exempt_guard(), public.settlement_exempt_audit() to service_role;

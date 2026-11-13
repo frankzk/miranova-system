@@ -36,7 +36,8 @@ const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
 const SETTLEMENTS_EVERY_MS = 30 * 60_000; // liquidaciones de Drop (en la billetera)
 const SETTLEMENTS_WINDOW_DAYS = 30; // después de la primera lectura completa, se relee este tramo…
-const MAX_BALANCE_PAGES = 150; // …o hasta la liquidación pendiente más vieja; tope de páginas de 100
+const MAX_BALANCE_PAGES = 300; // …o hasta la liquidación pendiente más vieja; tope de páginas de 100
+const BALANCE_PAGES_PER_RUN = 30; // por sincronización, para no comerse el tiempo de las demás cuentas
 
 /** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
 const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
@@ -468,8 +469,14 @@ async function syncSettlements(
   fetchPage: (s: Session, page: number) => Promise<{ payload: unknown }>,
   deadline: number,
 ): Promise<void> {
-  if (acc.settlements_sync_at && Date.now() - Date.parse(acc.settlements_sync_at) < SETTLEMENTS_EVERY_MS) return;
-  const full = !acc.settlements_sync_at;
+  const resume = acc.settlements_resume_page ?? null;
+  if (acc.settlements_sync_at && !resume && Date.now() - Date.parse(acc.settlements_sync_at) < SETTLEMENTS_EVERY_MS) return;
+  // sin la migración todavía (o sin acceso a la tabla): no leer nada de Drop
+  const ready = await db().from("settlements").select("id").limit(1);
+  if (ready.error) throw ready.error;
+  // primera lectura completa (o una a medias): por tandas, retomando donde quedó
+  const full = !acc.settlements_sync_at || !!resume;
+  const start = resume ?? 1;
   let cutoff: number | null = null;
   if (!full) {
     const { data, error } = await db().from("settlements").select("requested_at").eq("account_id", acc.id).eq("status", "pending").order("requested_at").limit(1);
@@ -480,12 +487,7 @@ async function syncSettlements(
   const movements: unknown[] = [];
   let pages = 0;
   let complete = false;
-  let outOfTime = false;
-  for (let page = 1; page <= MAX_BALANCE_PAGES; page++) {
-    if (Date.now() >= deadline) {
-      outOfTime = true;
-      break;
-    }
+  for (let page = start; page < start + BALANCE_PAGES_PER_RUN && page <= MAX_BALANCE_PAGES && Date.now() < deadline; page++) {
     const res = await withSession((s) => fetchPage(s, page));
     pages++;
     const list = movementList(res.payload);
@@ -515,11 +517,15 @@ async function syncSettlements(
     const { error } = await db().from("settlements").upsert(rows.slice(i, i + 200), { onConflict: "source,external_id" });
     if (error) throw error;
   }
+  // la primera lectura sigue en la próxima sincronización desde la página que falta (las nuevas que entren
+  // mientras tanto corren todo hacia atrás: se releen algunas, ninguna se salta)
+  const next = start + pages;
+  const pending = full && !complete && next <= MAX_BALANCE_PAGES;
   await updateAccount(acc.id, {
-    // si la primera lectura se quedó sin tiempo, la próxima vuelve a empezar desde el principio
-    // (si llegó al tope de páginas, ya trae las más nuevas: no se repite)
-    settlements_sync_at: full && outOfTime ? null : now,
-    settlements_msg: `${found.length} liquidaciones leídas en ${pages} página${pages === 1 ? "" : "s"} de la billetera${complete ? "" : outOfTime ? " (falta leer más: sigue en la próxima sincronización)" : " (solo las más recientes)"}`,
+    settlements_sync_at: pending ? acc.settlements_sync_at : now,
+    // si no alcanzó a leer ni una página, se queda donde estaba (desde la 1: sin página guardada)
+    settlements_resume_page: pending && next > 1 ? next : null,
+    settlements_msg: `${found.length} liquidaciones leídas en ${pages} página${pages === 1 ? "" : "s"} de la billetera${pending ? " (sigue en la próxima sincronización)" : complete ? "" : " (solo las más recientes)"}`,
   });
 }
 

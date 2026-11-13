@@ -105,3 +105,21 @@ test("montos y días", () => {
   assert.equal(signedUsd(150), "+US$ 1.50");
   assert.equal(daysBetween("2026-11-04", "2026-11-13"), 9);
 });
+
+test("un clic solo si la sugerencia es única: referencia primero; empates y PDF compartidos, a elegir", () => {
+  // la referencia gana aunque otro tenga el mismo monto en HNL y un USD más cercano
+  const byRef = entry({ reference: "2355766", amount_cents: 1_300_000 });
+  const sameHnl = entry({ reference: "Otro", amount_cents: 1_410_549, original_currency: "HNL", original_amount_cents: 36_300_000 });
+  const c = pdfCandidates(settlement(), [sameHnl, byRef], new Set());
+  assert.equal(c[0].entry.id, byRef.id);
+  assert.deepEqual(c.map((x) => x.strong), [true, false]);
+  // dos con el mismo monto original: ninguno de un clic
+  const twinA = entry({ reference: "A", amount_cents: 1, original_currency: "HNL", original_amount_cents: 36_300_000 });
+  const twinB = entry({ reference: "B", amount_cents: 2, original_currency: "HNL", original_amount_cents: 36_300_000 });
+  assert.equal(pdfCandidates(settlement(), [twinA, twinB], new Set()).some((x) => x.strong), false);
+  // un mismo PDF sugerido "fuerte" para dos liquidaciones: queda a elegir en las dos
+  const pdf = entry({ reference: "Miranova HN", amount_cents: 1_408_549 });
+  const two = settlementViews([settlement(), settlement({ id: "s2", external_id: "x2", reference: "OTRA", confirmation: "" })], [pdf], []);
+  assert.deepEqual(two.map((v) => v.step), ["needs_pdf", "needs_pdf"]);
+  assert.equal(two.every((v) => v.pdfOptions.length === 1 && !v.pdfOptions[0].strong), true);
+});

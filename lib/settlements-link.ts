@@ -17,13 +17,22 @@ export async function linkPdf(settlementId: string, company: string, boxfulId: s
   if (entry.error || exempt.error) return fail("No se pudo revisar el comprobante. Actualiza la página.");
   if (!entry.data || entry.data.source !== "boxful" || entry.data.void_reason) return fail("Elige un comprobante de Boxful vigente de esta empresa.");
   if (exempt.data?.length) return fail("Ese comprobante está marcado como «no es liquidación». Quítale esa marca primero.");
-  const { data, error } = await db()
+  // si ya tenía uno y lo anularon, se reemplaza; si tiene uno vigente, no
+  const cur = await db().from("settlements").select("boxful_id").eq("id", settlementId).eq("company", company).maybeSingle();
+  if (cur.error) return fail("No se pudo revisar la liquidación. Actualiza la página.");
+  if (!cur.data) return fail("La liquidación ya no existe. Actualiza la página.");
+  const current = cur.data.boxful_id as string | null;
+  if (current) {
+    const old = await db().from("bank_entries").select("void_reason").eq("id", current).maybeSingle();
+    if (old.error) return fail("No se pudo revisar el comprobante anterior. Actualiza la página.");
+    if (old.data && !old.data.void_reason) return fail("La liquidación ya tiene comprobante. Actualiza la página.");
+  }
+  const update = db()
     .from("settlements")
     .update({ boxful_id: boxfulId, linked_by: userId, linked_at: new Date().toISOString(), changed_by: userId })
     .eq("id", settlementId)
-    .eq("company", company)
-    .is("boxful_id", null)
-    .select("id");
+    .eq("company", company);
+  const { data, error } = await (current ? update.eq("boxful_id", current) : update.is("boxful_id", null)).select("id");
   if (error) return fail(error.code === "23505" ? "Ese comprobante ya está en otra liquidación." : bankError(error));
   if (!data?.length) return fail("La liquidación ya tiene comprobante. Actualiza la página.");
   return { ok: true, msg: "Comprobante vinculado." };
