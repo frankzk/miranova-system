@@ -73,10 +73,13 @@ export async function createTransfer(_prev: TransferFormState, form: FormData): 
   const points = await listPoints();
   const h = cleanHeader(headerInput(form), points);
   if (!h.ok) return fail(h.msg);
-  // empieza "Preparando": sale con "Marcar como enviado", cuando ya tiene sus productos
-  const res = await insertTransfer({ ...h.row, shipped_at: null, status: "preparing" }, auth.user.id);
+  // con fecha de salida (ya salió) queda "En camino" y los productos se agregan después; sin ella,
+  // "Preparando" hasta "Marcar como enviado"
+  const shipped = h.row.shipped_at;
+  if (shipped && shipped > todayIn()) return fail("La fecha de salida no puede ser futura: si todavía no sale, déjala vacía.");
+  const res = await insertTransfer({ ...h.row, status: shipped ? "transit" : "preparing" }, auth.user.id);
   if ("error" in res) return res.error;
-  await logEvent(res.id, auth.user.id, "Traslado creado");
+  await logEvent(res.id, auth.user.id, shipped ? `Traslado creado. Salió el ${dayLabel(shipped)}${h.row.eta ? `; llegada estimada ${dayLabel(h.row.eta)}` : ""}` : "Traslado creado");
   revalidatePath("/imports/transfers");
   redirect(`/imports/transfers/${res.id}`);
 }
@@ -91,12 +94,15 @@ export async function updateTransfer(_prev: TransferFormState, form: FormData): 
   if (!h.ok) return fail(h.msg);
   if (t.items.length && h.row.dest_country !== t.dest_country) return fail("Ya tiene productos para otro país: quítalos antes de cambiar el país.");
   if (t.items.some((i) => i.dest_id === h.row.origin_id)) return fail("Un producto va a la misma bodega de origen: cámbialo antes.");
-  // mientras se prepara no tiene salida: se confirma con "Marcar como enviado"
-  const row = t.status === "preparing" ? { ...h.row, shipped_at: null } : h.row;
-  if (t.status !== "preparing" && !row.shipped_at) return fail("Ya salió: escribe la fecha de salida.");
-  const { error } = await db().from("transfers").update({ ...row, updated_at: new Date().toISOString() }).eq("id", t.id);
+  const row = h.row;
+  if ((t.status === "transit" || t.status === "arrived") && !row.shipped_at) return fail("Ya salió: escribe la fecha de salida.");
+  if (row.shipped_at && row.shipped_at > todayIn()) return fail("La fecha de salida no puede ser futura: si todavía no sale, déjala vacía.");
+  if (t.status === "cancelled" && !t.shipped_at) row.shipped_at = null;
+  // si se estaba preparando y ahora tiene fecha de salida, ya va en camino
+  const leaves = t.status === "preparing" && !!row.shipped_at;
+  const { error } = await db().from("transfers").update({ ...row, ...(leaves ? { status: "transit" } : {}), updated_at: new Date().toISOString() }).eq("id", t.id);
   if (error) return dbError("No se pudo guardar", error);
-  await logEvent(t.id, auth.user.id, "Datos del traslado editados");
+  await logEvent(t.id, auth.user.id, leaves ? `Salió el ${dayLabel(row.shipped_at!)}${row.eta ? `; llegada estimada ${dayLabel(row.eta)}` : ""}` : "Datos del traslado editados");
   return done(t.id, "Guardado.");
 }
 

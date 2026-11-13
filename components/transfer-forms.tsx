@@ -52,7 +52,8 @@ export type TransferHeader = {
 function HeaderFields({ v, points, countries, locked }: { v: TransferHeader; points: TransferPoint[]; countries: Country[]; locked: boolean }) {
   const origins = points.filter((p) => p.active && p.is_origin);
   const destCountries = countries.filter((c) => points.some((p) => p.active && p.is_destination && p.country === c.code));
-  const shipped = !!v.status && v.status !== "preparing";
+  // ya salió: la fecha es obligatoria; si es nuevo o se está preparando, se pone solo si ya salió
+  const shipped = v.status === "transit" || v.status === "arrived" || (v.status === "cancelled" && !!v.shipped_at);
   return (
     <div className="im-grid">
       <label className="field">
@@ -84,10 +85,15 @@ function HeaderFields({ v, points, countries, locked }: { v: TransferHeader; poi
         <span>N.º de manifiesto o guía <span className="hint">opcional</span></span>
         <input className="input" name="reference" defaultValue={v.reference ?? ""} maxLength={80} spellCheck={false} />
       </label>
-      {shipped && (
+      {shipped ? (
         <label className="field">
           <span>Salió el</span>
-          <input className="input" type="date" name="shipped_at" defaultValue={v.shipped_at ?? ""} max={today()} required />
+          <input className="input" type="date" name="shipped_at" defaultValue={v.shipped_at ?? ""} max={today()} required={v.status !== "cancelled"} />
+        </label>
+      ) : v.status !== "cancelled" && (
+        <label className="field">
+          <span>Fecha de salida <span className="hint">si ya salió</span></span>
+          <input className="input" type="date" name="shipped_at" defaultValue="" max={today()} />
         </label>
       )}
       <label className="field">
@@ -107,6 +113,7 @@ export function NewTransferForm({ action, points, countries }: { action: Action;
   return (
     <StickyForm state={state} action={run} className="im-form">
       <HeaderFields v={{}} points={points} countries={countries} locked={false} />
+      <p className="hint">Con fecha de salida queda “En camino”; sin ella, “Preparando” hasta que lo marques como enviado.</p>
       <Msg state={state} />
       <SubmitButton className="btn btn-primary" pending="Creando…">Crear traslado</SubmitButton>
     </StickyForm>
