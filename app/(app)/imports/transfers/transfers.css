@@ -3,7 +3,11 @@
 .tr-back a { color: var(--ink-2); }
 
 /* cuadro de rutas */
-.tr-routes th[scope="row"] { font-weight: 550; white-space: normal; min-width: 220px; }
+.tr-routes tbody th[scope="row"] {
+  font-weight: 550; font-size: var(--t-sm); color: var(--ink); white-space: normal; min-width: 220px;
+  padding: 11px 14px; background: transparent; vertical-align: top;
+}
+.tr-routes tbody tr:last-child th { border-bottom: 0; }
 .tr-route { display: block; color: var(--ink); }
 .tr-routes th[scope="row"] .sub { display: block; font-weight: 400; }
 .tr-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-size: var(--t-sm); }
@@ -39,6 +43,19 @@
 .tr-note { font-style: italic; }
 .tr-add { margin: 0 0 16px; }
 .tr-notes { margin: 12px 0 0; font-size: var(--t-sm); color: var(--ink-2); white-space: pre-line; }
+
+/* móvil: las tablas apiladas dicen qué es cada número */
+@media (max-width: 640px) {
+  .table.stack.tr-lines tr { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 10px; }
+  .table.stack.tr-pending-table tr { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+  .table.stack.tr-lines td[data-slot="id"], .table.stack.tr-pending-table td[data-slot="id"],
+  .table.stack.tr-pending-table td.tr-wide, .table.stack.tr-lines td.r, .table.stack.tr-pending-table td.r { grid-column: 1 / -1; grid-row: auto; }
+  .table.stack.tr-lines td[data-label], .table.stack.tr-pending-table td[data-label] { text-align: left; }
+  .table.stack.tr-lines td[data-label]::before, .table.stack.tr-pending-table td[data-label]::before {
+    content: attr(data-label); display: block; font-size: var(--t-xs); font-weight: 400; color: var(--ink-3);
+  }
+  .table.stack.tr-lines td.r, .table.stack.tr-pending-table td.r { display: flex; justify-content: flex-end; gap: 8px; }
+}
 
 /* bodegas */
 .tr-points tr[data-off] td { color: var(--ink-3); }

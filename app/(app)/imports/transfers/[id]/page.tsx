@@ -11,7 +11,7 @@ import { requirePermission } from "@/lib/auth";
 import { COUNTRIES, countryByCode } from "@/lib/countries";
 import { fmtInt, todayIn } from "@/lib/format";
 import { catalogChoices } from "@/lib/imports-data";
-import { byDestination, destinationsFor, goodUnits, hasIssues, isLate, shortage, totals, transferStatus } from "@/lib/transfers";
+import { byDestination, dayLabel, destinationsFor, goodUnits, hasIssues, isLate, shortage, totals, transferStatus } from "@/lib/transfers";
 import { getTransfer, listPoints } from "@/lib/transfers-data";
 import {
   addTransferLine, deleteTransfer, registerArrival, removeTransferDocument, removeTransferLine, setTransferCancelled, shipTransfer, updateTransfer,
@@ -23,7 +23,7 @@ import "../transfers.css";
 export const metadata = { title: "Traslado" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const day = (d: string | null) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("es-HN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "—");
+const day = dayLabel;
 const when = (iso: string) => new Date(iso).toLocaleString("es-HN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Tegucigalpa" });
 const kb = (n: number | null) => (n ? (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`) : "");
 const DOC_LABEL: Record<string, string> = { manifest: "Manifiesto", photo: "Foto", other: "Documento" };

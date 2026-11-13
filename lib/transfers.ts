@@ -114,6 +114,12 @@ export function isDay(s: string): boolean {
 /** Cuenta los días entre dos fechas "YYYY-MM-DD" (b − a). */
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
+/** "2026-11-12" → "12 nov 2026" (para pantalla e historial). */
+export function dayLabel(d: string | null): string {
+  if (!d || !isDay(d)) return d ?? "—";
+  return new Date(`${d}T12:00:00Z`).toLocaleDateString("es-HN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).replace(/\./g, "");
+}
+
 // ─── Puntos y rutas ───
 
 /** ¿La bodega recibe esta clase de producto? */
@@ -299,6 +305,12 @@ export type PendingRow = {
 export const requestSource = (requestId: string, product: string, country: string) => `req:${requestId}:${norm(product)}:${country}`;
 export const labSource = (labId: string, account: string) => `lab:${labId}:${account}`;
 
+/** "Maya" → "Laboratorio Maya"; "Laboratorios Maya" queda igual. */
+export const labName = (name: string | null | undefined) => {
+  const n = (name ?? "").trim();
+  return !n ? "Laboratorio" : /^laboratorio/i.test(n) ? n : `Laboratorio ${n}`;
+};
+
 /**
  * Lo que falta mandar a cada país: lo repartido en las solicitudes abiertas (por país) y en las compras de
  * Laboratorios (por cuenta, que tiene su bodega), menos lo que ya salió en traslados no cancelados con esa misma
@@ -346,7 +358,8 @@ export function pendingToSend(input: {
       if (!point || point.country === HUB_COUNTRY) continue;
       add({
         source: labSource(l.id, account), kind: "maquila", product: l.product, country: point.country, dest_id: point.id, allocated: Number(qty),
-        from: l.lab_name ? `Laboratorio ${l.lab_name}` : "Laboratorio", state: labStatus(l.status).label, date: l.requested_at,
+        from: `${labName(l.lab_name)} · para ${LAB_DESTINATIONS.find((d) => d.id === account)?.label ?? account}`,
+        state: labStatus(l.status).label, date: l.requested_at,
       });
     }
   }

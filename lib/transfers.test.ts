@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { LabPurchase } from "./lab-purchases.ts";
 import type { StoreRequest } from "./store-requests.ts";
 import {
-  byDestination, cleanArrival, cleanHeader, cleanLine, cleanPoint, defaultDest, defaultOrigin, destinationsFor, isLate, labSource, nextTransferCode,
+  byDestination, cleanArrival, cleanHeader, cleanLine, cleanPoint, dayLabel, defaultDest, defaultOrigin, destinationsFor, isLate, labName, labSource, nextTransferCode,
   pendingToSend, pointCode, requestSource, routeSummary, sentBySource, shortage, statusAfterArrivals, totals,
   type TransferFull, type TransferItem, type TransferPoint,
 } from "./transfers.ts";
@@ -124,6 +124,15 @@ test("por enviar: repartos a otros países menos lo enviado; Guatemala no cuenta
   // lo de Laboratorios va a la bodega de su cuenta
   const labs = pendingToSend({ requests: [], labs: [lab({})], points: POINTS, sent: new Map(), settled: new Set() });
   assert.deepEqual(labs.map((r) => [r.country, r.dest_id, r.pending]), [["HN", "miranova_sps", 300], ["SV", "alex_sv", 200]]);
+  // cada fila dice de qué laboratorio y para qué cuenta (no se ven repetidas)
+  assert.deepEqual(labs.map((r) => r.from), ["Laboratorio Maya · para Miranova HN", "Laboratorio Maya · para Miranova SV"]);
+  assert.equal(labName("Laboratorios Maya"), "Laboratorios Maya");
+  assert.equal(labName(null), "Laboratorio");
+});
+
+test("fechas legibles", () => {
+  assert.equal(dayLabel("2026-11-12"), "12 nov 2026");
+  assert.equal(dayLabel(null), "—");
 });
 
 test("enviado por clave: sin traslados cancelados", () => {

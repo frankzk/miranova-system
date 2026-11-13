@@ -175,11 +175,11 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                         {list.map((r) => (
                           <tr key={r.source}>
                             <td data-slot="id"><span className="strong">{r.product}</span><div className="sub">{r.kind === "maquila" ? "Maquilado" : "Importado"}</div></td>
-                            <td>{r.from}<div className="sub">{r.state} · {shortDay(r.date)}</div></td>
-                            <td>{r.dest_id ? pointName(r.dest_id) : <span className="subtle">se elige al armar</span>}</td>
-                            <td className="num">{fmtInt(r.allocated)}</td>
-                            <td className="num">{r.sent ? fmtInt(r.sent) : <span className="subtle">0</span>}</td>
-                            <td className="num strong">{fmtInt(r.pending)}</td>
+                            <td className="tr-wide">{r.from}<div className="sub">{r.state} · {shortDay(r.date)}</div></td>
+                            <td className="tr-wide" data-label="Bodega">{r.dest_id ? pointName(r.dest_id) : <span className="subtle">se elige al armar</span>}</td>
+                            <td className="num" data-label="Repartido">{fmtInt(r.allocated)}</td>
+                            <td className="num" data-label="Enviado">{r.sent ? fmtInt(r.sent) : <span className="subtle">0</span>}</td>
+                            <td className="num strong" data-label="Falta">{fmtInt(r.pending)}</td>
                             <td className="r"><SettleForm action={settlePending} source={r.source} product={r.product} /></td>
                           </tr>
                         ))}

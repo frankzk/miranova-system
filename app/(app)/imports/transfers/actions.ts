@@ -7,7 +7,7 @@ import { IMPORT_FILE_TYPES, importFileProblem, importFileType, MAX_IMPORT_FILE_B
 import { db } from "@/lib/supabase";
 import { todayIn } from "@/lib/format";
 import {
-  cleanArrival, cleanHeader, cleanLine, cleanPoint, isDay, isItemKind, nextTransferCode, pointCode, statusAfterArrivals,
+  cleanArrival, cleanHeader, cleanLine, cleanPoint, dayLabel, isDay, isItemKind, nextTransferCode, pointCode, statusAfterArrivals,
   type TransferArrival, type TransferItem,
 } from "@/lib/transfers";
 import { getTransfer, listPending, listPoints, listTransfers, removeTransferFiles, signedTransferUpload, storedTransferFile } from "@/lib/transfers-data";
@@ -117,7 +117,7 @@ export async function shipTransfer(_prev: TransferFormState, form: FormData): Pr
   const reference = field(form, "reference").slice(0, 80) || t.reference;
   const { error } = await db().from("transfers").update({ status: "transit", shipped_at: shipped, eta, carrier, reference, updated_at: new Date().toISOString() }).eq("id", t.id);
   if (error) return dbError("No se pudo guardar", error);
-  await logEvent(t.id, auth.user.id, `Salió el ${shipped}${eta ? `; llegada estimada ${eta}` : ""}`);
+  await logEvent(t.id, auth.user.id, `Salió el ${dayLabel(shipped)}${eta ? `; llegada estimada ${dayLabel(eta)}` : ""}`);
   return done(t.id, "Marcado como enviado.");
 }
 
@@ -260,7 +260,7 @@ export async function registerArrival(_prev: TransferFormState, form: FormData):
   const got = c.rows.reduce((s, r) => s + r.received_qty, 0);
   const dmg = c.rows.reduce((s, r) => s + r.damaged_qty, 0);
   const missing = items.reduce((s, i) => s + Math.max(0, i.qty - (c.rows.find((r) => r.id === i.id)?.received_qty ?? 0)), 0);
-  await logEvent(t.id, auth.user.id, `Llegó a ${pointName(points, destId)} el ${arrived}: ${got.toLocaleString("en-US")} de ${sent.toLocaleString("en-US")} u.${missing ? `, merma ${missing}` : ""}${dmg ? `, ${dmg} dañadas` : ""}`);
+  await logEvent(t.id, auth.user.id, `Llegó a ${pointName(points, destId)} el ${dayLabel(arrived)}: ${got.toLocaleString("en-US")} de ${sent.toLocaleString("en-US")} u.${missing ? `, merma ${missing.toLocaleString("en-US")}` : ""}${dmg ? `, ${dmg.toLocaleString("en-US")} dañadas` : ""}`);
   return done(t.id, status === "arrived" ? "Llegada guardada. El traslado llegó completo." : "Llegada guardada.");
 }
 
