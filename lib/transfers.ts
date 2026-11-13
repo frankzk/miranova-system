@@ -85,6 +85,9 @@ export type TransferItem = {
   product_external_id: string | null;
   image_url: string | null;
   qty: number;
+  /** Variante del producto ("Negro / XL") o null; variant_id es su id en Drop si salió del catálogo. */
+  variant?: string | null;
+  variant_id?: string | null;
   /** De qué reparto sale (ver pendingToSend), o null si se agregó a mano. */
   source: string | null;
   received_qty: number | null;
@@ -110,6 +113,9 @@ export function isDay(s: string): boolean {
   if (!m) return false;
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).toISOString().slice(0, 10) === s;
 }
+
+/** Nombre de una línea con su variante: "Brasier Corrector · Negro / XL". */
+export const lineLabel = (i: { name: string; variant?: string | null }) => (i.variant ? `${i.name} · ${i.variant}` : i.name);
 
 /** Cuenta los días entre dos fechas "YYYY-MM-DD" (b − a). */
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
@@ -210,7 +216,7 @@ export const isLate = (t: Pick<Transfer, "status" | "eta">, today: string) => t.
  * ser más que las recibidas. Vacío no vale: si no llegó nada, es 0.
  */
 export function cleanArrival(
-  items: readonly Pick<TransferItem, "id" | "name">[],
+  items: readonly (Pick<TransferItem, "id" | "name"> & { variant?: string | null })[],
   input: Record<string, { received?: string; damaged?: string; note?: string }>,
 ): { ok: true; rows: { id: string; received_qty: number; damaged_qty: number; received_note: string | null }[] } | { ok: false; msg: string } {
   const rows = [];
@@ -218,12 +224,12 @@ export function cleanArrival(
     const v = input[i.id] ?? {};
     const rec = (v.received ?? "").replace(/[,\s]/g, "");
     const dmg = (v.damaged ?? "").replace(/[,\s]/g, "") || "0";
-    if (!/^\d+$/.test(rec)) return { ok: false, msg: `Escribe cuántas llegaron de “${i.name}” (0 si no llegó ninguna).` };
-    if (!/^\d+$/.test(dmg)) return { ok: false, msg: `Revisa las dañadas de “${i.name}”: un número entero.` };
+    if (!/^\d+$/.test(rec)) return { ok: false, msg: `Escribe cuántas llegaron de “${lineLabel(i)}” (0 si no llegó ninguna).` };
+    if (!/^\d+$/.test(dmg)) return { ok: false, msg: `Revisa las dañadas de “${lineLabel(i)}”: un número entero.` };
     const received_qty = Number(rec);
     const damaged_qty = Number(dmg);
-    if (received_qty > 1_000_000 || damaged_qty > 1_000_000) return { ok: false, msg: `Revisa las cantidades de “${i.name}”.` };
-    if (damaged_qty > received_qty) return { ok: false, msg: `${i.name}: no pueden ser más dañadas que recibidas.` };
+    if (received_qty > 1_000_000 || damaged_qty > 1_000_000) return { ok: false, msg: `Revisa las cantidades de “${lineLabel(i)}”.` };
+    if (damaged_qty > received_qty) return { ok: false, msg: `${lineLabel(i)}: no pueden ser más dañadas que recibidas.` };
     rows.push({ id: i.id, received_qty, damaged_qty, received_note: (v.note ?? "").trim().slice(0, 300) || null });
   }
   return { ok: true, rows };
@@ -403,11 +409,61 @@ export function cleanHeader(
   };
 }
 
+/** Una variante de un producto de Drop (talla, color…). */
+export type ProductVariant = { id: string; name: string; sku: string | null; attrs: { name: string; value: string }[] };
+
+/** Variantes vigentes de un producto según lo que manda Drop (`raw.variants`). */
+export function productVariants(raw: unknown): ProductVariant[] {
+  const list = raw && typeof raw === "object" && Array.isArray((raw as { variants?: unknown }).variants) ? (raw as { variants: unknown[] }).variants : [];
+  const out: ProductVariant[] = [];
+  for (const v of list as Record<string, unknown>[]) {
+    if (!v || typeof v !== "object" || v.deleted === true || v.active === false) continue;
+    const id = String(v.id ?? v._id ?? "").trim();
+    const attrs = (Array.isArray(v.attributes) ? v.attributes : [])
+      .map((a: { name?: unknown; value?: unknown }) => ({ name: String(a?.name ?? "").trim(), value: String(a?.value ?? "").trim() }))
+      .filter((a) => a.name && a.value);
+    const name = String(v.name ?? "").trim() || attrs.map((a) => a.value).join(" / ");
+    if (!id || !name || out.some((x) => x.id === id)) continue;
+    out.push({ id: id.slice(0, 80), name: name.slice(0, 80), sku: String(v.sku ?? "").trim().slice(0, 80) || null, attrs });
+  }
+  return out;
+}
+
+const SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "XXXL", "3XL", "4XL", "5XL"];
+/** Orden natural de tallas (S, M, L, XL…; números de menor a mayor); lo demás, alfabético. */
+export function compareSize(a: string, b: string): number {
+  const ia = SIZES.indexOf(a.toUpperCase()), ib = SIZES.indexOf(b.toUpperCase());
+  if (ia >= 0 && ib >= 0) return ia - ib;
+  const na = Number(a.replace(",", ".")), nb = Number(b.replace(",", "."));
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  if (ia >= 0 !== ib >= 0) return ia >= 0 ? -1 : 1;
+  return a.localeCompare(b, "es", { numeric: true });
+}
+
+/**
+ * Cuadrícula para pedir cantidades: si todas las variantes tienen los mismos dos atributos (Color y
+ * Talla), filas del primero y columnas del segundo (tallas en su orden). Si no, null (va en lista).
+ */
+export function variantGrid(variants: readonly ProductVariant[]): { rowLabel: string; colLabel: string; rows: string[]; cols: string[]; at: (r: string, c: string) => ProductVariant | null } | null {
+  if (variants.length < 2) return null;
+  const names = variants[0].attrs.map((a) => a.name);
+  if (names.length !== 2 || !variants.every((v) => v.attrs.length === 2 && v.attrs[0].name === names[0] && v.attrs[1].name === names[1])) return null;
+  // la talla va en columnas
+  const sizeFirst = /talla|size/i.test(names[0]) && !/talla|size/i.test(names[1]);
+  const [ri, ci] = sizeFirst ? [1, 0] : [0, 1];
+  const uniq = (i: number) => [...new Set(variants.map((v) => v.attrs[i].value))];
+  const isSize = (i: number) => /talla|size/i.test(names[i]) || uniq(i).every((x) => SIZES.includes(x.toUpperCase()) || /^\d+([.,]\d+)?$/.test(x));
+  const rows = uniq(ri).sort((a, b) => (isSize(ri) ? compareSize(a, b) : a.localeCompare(b, "es")));
+  const cols = uniq(ci).sort((a, b) => (isSize(ci) ? compareSize(a, b) : a.localeCompare(b, "es")));
+  const map = new Map(variants.map((v) => [`${v.attrs[ri].value}\u0000${v.attrs[ci].value}`, v]));
+  return { rowLabel: names[ri], colLabel: names[ci], rows, cols, at: (r, c) => map.get(`${r}\u0000${c}`) ?? null };
+}
+
 /** Un producto del traslado: bodega del país (no la de origen), clase, nombre y cantidad entera. */
 export function cleanLine(
-  input: { dest_id?: string; kind?: string; name?: string; sku?: string; qty?: string },
+  input: { dest_id?: string; kind?: string; name?: string; sku?: string; qty?: string; variant?: string },
   ctx: { points: readonly TransferPoint[]; origin_id: string; country: string },
-): { ok: true; row: Pick<TransferItem, "dest_id" | "kind" | "name" | "sku" | "qty"> } | { ok: false; msg: string } {
+): { ok: true; row: Pick<TransferItem, "dest_id" | "kind" | "name" | "sku" | "qty" | "variant"> } | { ok: false; msg: string } {
   const kind = input.kind ?? "import";
   if (!isItemKind(kind)) return { ok: false, msg: "Elige si es importado o maquilado." };
   const name = text(input.name, 200);
@@ -416,8 +472,9 @@ export function cleanLine(
   if (!dest) return { ok: false, msg: `Elige a qué bodega va “${name}”.` };
   if (dest.id === ctx.origin_id) return { ok: false, msg: "La bodega de destino no puede ser la misma de origen." };
   const raw = (input.qty ?? "").replace(/[,\s]/g, "");
-  if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 1_000_000) return { ok: false, msg: `La cantidad de “${name}” debe ser un número entero mayor que cero.` };
-  return { ok: true, row: { dest_id: dest.id, kind, name, sku: text(input.sku, 80) || null, qty: Number(raw) } };
+  const label = input.variant?.trim() ? `${name} (${text(input.variant, 80)})` : name;
+  if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 1_000_000) return { ok: false, msg: `La cantidad de “${label}” debe ser un número entero mayor que cero.` };
+  return { ok: true, row: { dest_id: dest.id, kind, name, sku: text(input.sku, 80) || null, qty: Number(raw), variant: text(input.variant, 80) || null } };
 }
 
 /** Datos de una bodega (punto). */

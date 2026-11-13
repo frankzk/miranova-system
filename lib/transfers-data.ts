@@ -35,6 +35,8 @@ const toItem = (i: TransferItem): TransferItem => ({
   qty: Number(i.qty),
   received_qty: i.received_qty === null || i.received_qty === undefined ? null : Number(i.received_qty),
   damaged_qty: Number(i.damaged_qty ?? 0),
+  variant: i.variant ?? null,
+  variant_id: i.variant_id ?? null,
   position: Number(i.position ?? 0),
 });
 

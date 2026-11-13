@@ -11,7 +11,7 @@ import { requirePermission } from "@/lib/auth";
 import { COUNTRIES, countryByCode } from "@/lib/countries";
 import { fmtInt, todayIn } from "@/lib/format";
 import { catalogChoices } from "@/lib/imports-data";
-import { byDestination, dayLabel, destinationsFor, goodUnits, hasIssues, isLate, shortage, totals, transferStatus } from "@/lib/transfers";
+import { byDestination, dayLabel, destinationsFor, lineLabel, goodUnits, hasIssues, isLate, shortage, totals, transferStatus } from "@/lib/transfers";
 import { getTransfer, listPoints } from "@/lib/transfers-data";
 import {
   addTransferLine, deleteTransfer, registerArrival, removeTransferDocument, removeTransferLine, setTransferCancelled, shipTransfer, updateTransfer,
@@ -129,7 +129,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                 <SideSheet trigger={g.arrival ? "Corregir llegada" : "Registrar llegada"} triggerClass={g.arrival ? "btn btn-ghost btn-sm" : "btn btn-primary btn-sm"} title={`Llegada a ${g.point.name}`} sub={`${t.code} · ${fmtInt(g.totals.sent)} u. salieron`}>
                   <ArrivalForm
                     action={registerArrival} transferId={t.id} destId={g.point.id} arrivedAt={g.arrival?.arrived_at ?? null} note={g.arrival?.note ?? null} minDate={t.shipped_at}
-                    lines={g.items.map((i) => ({ id: i.id, name: i.name, qty: i.qty, received_qty: i.received_qty, damaged_qty: i.damaged_qty, received_note: i.received_note }))}
+                    lines={g.items.map((i) => ({ id: i.id, name: lineLabel(i), qty: i.qty, received_qty: i.received_qty, damaged_qty: i.damaged_qty, received_note: i.received_note }))}
                   />
                 </SideSheet>
               )}
@@ -157,7 +157,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                           <div className="tr-prod">
                             {i.image_url ? <img src={i.image_url} alt="" loading="lazy" /> : <span className="im-noimg" aria-hidden />}
                             <div>
-                              <span className="strong">{i.name}</span>
+                              <span className="strong">{i.name}</span>{i.variant && <span className="tr-variant">{i.variant}</span>}
                               <div className="sub">{[i.kind === "maquila" ? "Maquilado" : "Importado", i.sku && `SKU ${i.sku}`, i.source && (i.source.startsWith("lab:") ? "de Laboratorios" : "de una solicitud")].filter(Boolean).join(" · ")}</div>
                               {i.received_note && <div className="sub tr-note">{i.received_note}</div>}
                             </div>
@@ -170,10 +170,10 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                         <td className="num" data-label="Buenas">{i.received_qty === null ? <span className="subtle">—</span> : fmtInt(goodUnits(i) ?? 0)}</td>
                         {editable && (
                           <td className="r nowrap">
-                            <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={i.name} sub="Unidades, clase y bodega">
+                            <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={lineLabel(i)} sub="Unidades, clase y bodega">
                               <EditLineForm action={updateTransferLine} transferId={t.id} item={i} dests={dests} />
                             </SideSheet>
-                            <RemoveButton action={removeTransferLine} name="item_id" value={i.id} confirmText={`¿Quitar ${i.name} del traslado?`} extra={{ id: t.id }} />
+                            <RemoveButton action={removeTransferLine} name="item_id" value={i.id} confirmText={`¿Quitar ${lineLabel(i)} del traslado?`} extra={{ id: t.id }} />
                           </td>
                         )}
                       </tr>
