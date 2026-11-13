@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
+  classifyBankEntry,
   prepareBankPdf,
   readBankPdf,
   reconcileBank,
@@ -23,6 +24,7 @@ import {
   type EntrySource,
 } from "@/lib/reconciliation";
 import { SubmitButton } from "./submit-button";
+import { guessOrigin, ORIGIN_COUNTRIES, ORIGIN_OPERATIONS } from "@/lib/bank-origin";
 import { useSheet } from "./side-sheet";
 import {
   applyBoxfulProposal,
@@ -75,6 +77,9 @@ export function BankEntryForm({
   const currency = fields.original_currency;
   const setField = (key: keyof BoxfulAutofill, value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
+  // de qué operación y país viene (Boxful): se sugiere con la referencia o el nombre del PDF
+  const [origin, setOrigin] = useState({ operation: entry?.origin_operation ?? "", country: entry?.origin_country ?? "" });
+  const [originTouched, setOriginTouched] = useState(!!entry);
   const [uploading, setUploading] = useState(false);
   const [reading, setReading] = useState(false);
   const [read, setRead] = useState<BoxfulReadResult | null>(null);
@@ -95,6 +100,11 @@ export function BankEntryForm({
     },
     [],
   );
+  useEffect(() => {
+    if (source !== "boxful" || originTouched) return;
+    const g = guessOrigin(fields.reference, pdf?.name);
+    setOrigin({ operation: g.operation ?? "", country: g.country ?? "" });
+  }, [source, originTouched, fields.reference, pdf?.name]);
 
   async function readPdf(
     document: { path: string; name: string },
@@ -419,6 +429,27 @@ export function BankEntryForm({
                   </span>
                 </label>
               )}
+            </>
+          )}
+          {source === "boxful" && (
+            <>
+              <label className="field">
+                <span>Operación de origen</span>
+                <select className="select" name="origin_operation" value={origin.operation}
+                  onChange={(e) => { setOriginTouched(true); setOrigin((o) => ({ ...o, operation: e.target.value })); }}>
+                  <option value="">Sin indicar</option>
+                  {ORIGIN_OPERATIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>País de la operación</span>
+                <select className="select" name="origin_country" value={origin.country}
+                  onChange={(e) => { setOriginTouched(true); setOrigin((o) => ({ ...o, country: e.target.value })); }}>
+                  <option value="">Sin indicar</option>
+                  {ORIGIN_COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                {!originTouched && (origin.operation || origin.country) && <span className="hint">Sugerido por la referencia o el nombre del PDF: revísalo.</span>}
+              </label>
             </>
           )}
           <label className="field">
@@ -768,6 +799,38 @@ export function BankReasonForm({
       <SubmitButton className="btn btn-danger" pending="Guardando…">
         {match ? "Revertir conciliación" : "Anular movimiento"}
       </SubmitButton>
+    </form>
+  );
+}
+
+/** Indicar o corregir de qué operación y país viene una transferencia de Boxful (aunque ya esté conciliada). */
+export function BankOriginForm({ entry }: { entry: BankEntry }) {
+  const [state, run] = useActionState(classifyBankEntry, null);
+  const guess = guessOrigin(entry.reference, entry.notes, entry.document_name);
+  useCloseOnSave(state);
+  return (
+    <form action={run} className="bank-form">
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="company" value={entry.company} />
+      <div className="bank-field-grid">
+        <label className="field">
+          <span>Operación de origen</span>
+          <select className="select" name="origin_operation" defaultValue={entry.origin_operation ?? guess.operation ?? ""}>
+            <option value="">Sin indicar</option>
+            {ORIGIN_OPERATIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>País de la operación</span>
+          <select className="select" name="origin_country" defaultValue={entry.origin_country ?? guess.country ?? ""}>
+            <option value="">Sin indicar</option>
+            {ORIGIN_COUNTRIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <p className="hint">Solo cambia la operación y el país: el importe, la fecha y la conciliación quedan igual. Queda en la auditoría.</p>
+      <Message state={state} />
+      <SubmitButton className="btn btn-primary" pending="Guardando…">Guardar origen</SubmitButton>
     </form>
   );
 }

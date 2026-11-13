@@ -45,6 +45,9 @@ export type BankEntry = {
   updated_at: string;
   version: number;
   void_reason: string | null;
+  /** de qué operación y país viene (solo Boxful; lib/bank-origin.ts) */
+  origin_operation?: string | null;
+  origin_country?: string | null;
 };
 export type BankMatch = {
   id: string;

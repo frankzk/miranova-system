@@ -16,6 +16,7 @@ import {
   type BankState,
 } from "@/lib/reconciliation";
 import { bankError } from "@/lib/reconciliation-data";
+import { cleanOrigin } from "@/lib/bank-origin";
 import { uploadedBankPdf } from "@/lib/bank-pdf-storage";
 import { readBoxfulDocument } from "@/lib/boxful-pdf";
 import type { BoxfulReadResult } from "@/lib/boxful-document";
@@ -100,6 +101,11 @@ export async function saveBankEntry(
   );
   const clean = cleanBankFields(input);
   if (!clean.ok) return clean;
+  // de qué operación y país viene (solo las transferencias de Boxful)
+  const origin = cleanOrigin(field(form, "origin_operation"), field(form, "origin_country"));
+  if (!origin.ok) return origin;
+  // si el formulario no lo trae, no se toca lo que ya tenía
+  const originRow = clean.row.source === "boxful" && form.has("origin_operation") ? origin.row : {};
   const id = field(form, "id");
   if (id) {
     const version = Number(field(form, "version"));
@@ -126,7 +132,7 @@ export async function saveBankEntry(
     }
     const { data, error } = await db()
       .from("bank_entries")
-      .update({ ...clean.row, company: target, notes, version: version + 1, updated_by: auth.user.id })
+      .update({ ...clean.row, ...originRow, company: target, notes, version: version + 1, updated_by: auth.user.id })
       .eq("id", id)
       .eq("company", clean.row.company)
       .eq("source", clean.row.source)
@@ -160,6 +166,7 @@ export async function saveBankEntry(
     .from("bank_entries")
     .insert({
       ...clean.row,
+      ...originRow,
       ...document,
       version: 1,
       created_by: auth.user.id,
@@ -167,6 +174,31 @@ export async function saveBankEntry(
     });
   if (error) return fail(bankError(error));
   return done("Movimiento registrado. Ya puedes revisarlo para conciliar.");
+}
+
+/**
+ * De qué operación (Miranova o Mireva) y país viene una transferencia de Boxful. Se puede indicar aunque
+ * ya esté conciliada: la base solo deja cambiar estos dos campos y no le cambia la versión.
+ */
+export async function classifyBankEntry(_prev: BankState, form: FormData): Promise<BankState> {
+  const auth = await authorizeAction("reconciliation");
+  if (!auth.ok) return auth;
+  const id = field(form, "id");
+  const company = field(form, "company");
+  if (!UUID.test(id) || !isCompany(company)) return fail("Registro no válido.");
+  const origin = cleanOrigin(field(form, "origin_operation"), field(form, "origin_country"));
+  if (!origin.ok) return origin;
+  const { data, error } = await db()
+    .from("bank_entries")
+    .update({ ...origin.row, updated_by: auth.user.id })
+    .eq("id", id)
+    .eq("company", company)
+    .eq("source", "boxful")
+    .is("void_reason", null)
+    .select("id");
+  if (error) return fail(bankError(error));
+  if (!data?.length) return fail("La transferencia ya no existe o está anulada. Actualiza la página.");
+  return done("Origen guardado.");
 }
 
 export async function reconcileBank(

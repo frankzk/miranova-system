@@ -10,7 +10,8 @@ import {
   type Company,
   type EntrySource,
 } from "@/lib/reconciliation";
-import { BankEntryForm, BankReasonForm } from "./reconciliation-forms";
+import { BankEntryForm, BankOriginForm, BankReasonForm } from "./reconciliation-forms";
+import { originLabel } from "@/lib/bank-origin";
 import { SideSheet } from "./side-sheet";
 import { BankLinkPicker } from "./bank-link-picker";
 
@@ -66,6 +67,7 @@ export function BankWorkspace({
       e.counterparty,
       e.bank_account,
       e.notes,
+      originLabel(e.origin_operation, e.origin_country) ?? "",
       usd(e.amount_cents),
       String(e.amount_cents / 100),
     ].some((s) => s.toLowerCase().includes(query));
@@ -180,6 +182,21 @@ export function BankWorkspace({
                           {entry.bank_account ? " · " + entry.bank_account : ""}
                         </span>
                         {entry.notes.startsWith("Empresa por confirmar.") && <span className="pill" data-tone="warning">Empresa por confirmar</span>}
+                        {source === "boxful" && (() => {
+                          // de qué operación y país viene
+                          const o = originLabel(entry.origin_operation, entry.origin_country);
+                          const complete = !!entry.origin_operation && !!entry.origin_country;
+                          return (
+                            <span className="bank-origin">
+                              <span className="pill" data-tone={complete ? "info" : "warning"}>{o ?? "Operación sin indicar"}{o && !complete ? " · falta " + (entry.origin_operation ? "país" : "operación") : ""}</span>
+                              {!entry.void_reason && (
+                                <SideSheet trigger={o ? "Cambiar" : "Indicar"} triggerClass="btn btn-ghost btn-sm" title="Operación de origen" sub={`${entry.reference} · ${usd(entry.amount_cents)}`}>
+                                  <BankOriginForm entry={entry} />
+                                </SideSheet>
+                              )}
+                            </span>
+                          );
+                        })()}
                         {source === "boxful" && entry.document_path && (
                           <a
                             href={"/api/reconciliation/document/" + entry.id}
@@ -213,6 +230,12 @@ export function BankWorkspace({
                             <strong className="bank-ref">
                               {linked.reference}
                             </strong>
+                            {source === "mercury" && (() => {
+                              // el origen al día (el del vínculo es una foto de cuando se concilió)
+                              const now = byId.get(linked.id) ?? linked;
+                              const o = originLabel(now.origin_operation, now.origin_country);
+                              return o ? <span className="bank-meta">De {o}</span> : null;
+                            })()}
                             <span className="bank-meta">
                               {linked.occurred_on} · {usd(linked.amount_cents)}
                             </span>
@@ -834,6 +857,7 @@ function EntrySnapshot({ entry }: { entry: BankEntry }) {
       "Monto original",
       `${(entry.original_amount_cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${entry.original_currency}`,
     ],
+    ...(entry.source === "boxful" ? [["Operación de origen", originLabel(entry.origin_operation, entry.origin_country) ?? "Sin indicar"]] : []),
     ["Emisor / remitente", entry.counterparty],
     ["Cuenta", entry.bank_account],
     ["Notas", entry.notes],
