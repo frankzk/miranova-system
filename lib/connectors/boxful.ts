@@ -1,10 +1,9 @@
-import { type Connector, type LoginResult, type ProbeAttempt, type Session, PlatformError, SessionExpired } from "./types.ts";
+import { type Connector, type LoginResult, type Session, PlatformError, SessionExpired } from "./types.ts";
 
 // Conector para Boxful (app.goboxful.com), solo para las liquidaciones de Mireva (no baja pedidos).
 // Su API vive en api-web.goboxful.com (tomado del JavaScript público de la web):
 //   POST /auth/client  { email, password }  → token del cliente (Bearer)
-// La ruta de liquidaciones no es pública: se busca con la sesión iniciada (solo lectura) y se guarda
-// el diagnóstico en la cuenta para terminar la lectura con la forma real de la respuesta.
+//   GET  /settlement/client?begin=<ISO>&end=<ISO>  → liquidaciones del cliente (encontrada con la sesión iniciada)
 
 const API = process.env.BOXFUL_API_URL ?? "https://api-web.goboxful.com";
 
@@ -73,26 +72,8 @@ const onlySettlements = () => {
   throw new PlatformError("Boxful se conecta solo para las liquidaciones de Conciliación: no baja pedidos.");
 };
 
-/** Rutas candidatas de liquidaciones; con el id del cliente, también las de /client/:id. */
-export function settlementCandidates(clientId: string | undefined, from: string, to: string): string[] {
-  const range = `startDate=${from}&endDate=${to}`;
-  const base = [
-    "/settlement", "/settlements", "/settlement/client", "/settlements/client", "/client-settlement", "/client-settlements",
-    "/settlement/list", "/settlements/list", "/settlement/history", "/settlements/history", "/liquidation", "/liquidations",
-    `/settlement?page=1&limit=10&${range}`, `/settlements?page=1&limit=10&${range}`,
-  ];
-  if (!clientId) return base;
-  const id = encodeURIComponent(clientId);
-  return [
-    ...base,
-    `/client/${id}/settlements`, `/client/${id}/settlement`, `/settlement/client/${id}`, `/settlements/client/${id}`,
-    `/settlement/by-client/${id}`, `/settlement?clientId=${id}`, `/settlements?clientId=${id}`,
-    `/settlement/client/${id}?page=1&limit=10&${range}`, `/client/${id}/settlements?page=1&limit=10&${range}`,
-  ];
-}
-
 export const boxful: Connector & {
-  probeSettlements(session: Session): Promise<{ clientId: string | null; claimKeys: string[]; attempts: ProbeAttempt[] }>;
+  fetchSettlements(session: Session, begin: Date, end: Date): Promise<{ url: string; status: number; payload: unknown; text: string }>;
 } = {
   async login(email, password): Promise<LoginResult> {
     const res = await fetch(`${API}/auth/client`, {
@@ -128,25 +109,13 @@ export const boxful: Connector & {
     return onlySettlements();
   },
 
-  // Solo lectura: qué responde cada ruta candidata (las que contestan bien, con una muestra para ver su forma).
-  async probeSettlements(session) {
-    const claims = jwtClaims(session.token);
-    const clientId = clientIdOf(null, session.token) ?? null;
-    const day = (d: Date) => d.toISOString().slice(0, 10);
-    const to = new Date();
-    const from = new Date(to.getTime() - 120 * 86_400_000);
-    const attempts: ProbeAttempt[] = [];
-    for (const path of settlementCandidates(clientId ?? undefined, day(from), day(to))) {
-      try {
-        const res = await fetch(`${API}${path}`, { headers: auth(session), cache: "no-store" });
-        if (res.status === 401) throw new SessionExpired();
-        const { text } = await readJson(res);
-        attempts.push({ path, status: res.status, orders: 0, sample: text.slice(0, res.ok ? 3000 : 300) });
-      } catch (e) {
-        if (e instanceof SessionExpired) throw e;
-        attempts.push({ path, status: -1, orders: 0, sample: String(e).slice(0, 300) });
-      }
-    }
-    return { clientId, claimKeys: Object.keys(claims), attempts };
+  // Liquidaciones del cliente en un rango de fechas (la web pide begin/end en ISO 8601): solo lectura.
+  async fetchSettlements(session, begin, end) {
+    const url = `${API}/settlement/client?${new URLSearchParams({ begin: begin.toISOString(), end: end.toISOString() })}`;
+    const res = await fetch(url, { headers: auth(session), cache: "no-store" });
+    if (res.status === 401) throw new SessionExpired();
+    const { json, text } = await readJson(res);
+    if (!res.ok || json === null) throw new PlatformError(errorMessage(json, text, res.status));
+    return { url, status: res.status, payload: json, text };
   },
 };
