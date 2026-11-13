@@ -56,11 +56,14 @@ export function BankEntryForm({
   source,
   today,
   entry,
+  settlement,
 }: {
   company: Company;
   source: EntrySource;
   today: string;
   entry?: BankEntry;
+  /** registrar el PDF desde una liquidación (Conciliación › Liquidaciones): queda vinculado a ella */
+  settlement?: { id: string; reference: string; operation: string | null; country: string | null };
 }) {
   const [state, run, saving] = useActionState(saveBankEntry, null);
   const [targetCompany, setTargetCompany] = useState<Company>(company);
@@ -78,8 +81,11 @@ export function BankEntryForm({
   const setField = (key: keyof BoxfulAutofill, value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
   // de qué operación y país viene (Boxful): se sugiere con la referencia o el nombre del PDF
-  const [origin, setOrigin] = useState({ operation: entry?.origin_operation ?? "", country: entry?.origin_country ?? "" });
-  const [originTouched, setOriginTouched] = useState(!!entry);
+  const [origin, setOrigin] = useState({
+    operation: entry?.origin_operation ?? settlement?.operation ?? "",
+    country: entry?.origin_country ?? settlement?.country ?? "",
+  });
+  const [originTouched, setOriginTouched] = useState(!!entry || !!settlement);
   const [uploading, setUploading] = useState(false);
   const [reading, setReading] = useState(false);
   const [read, setRead] = useState<BoxfulReadResult | null>(null);
@@ -187,6 +193,14 @@ export function BankEntryForm({
     <form action={run} className="bank-form">
       <input type="hidden" name="company" value={company} />
       <input type="hidden" name="source" value={source} />
+      {settlement && (
+        <>
+          <input type="hidden" name="settlement_id" value={settlement.id} />
+          <p className="banner" data-tone="info">
+            Al guardarlo queda vinculado a la liquidación <strong>{settlement.reference}</strong>.
+          </p>
+        </>
+      )}
       {entry && (
         <>
           <input type="hidden" name="id" value={entry.id} />

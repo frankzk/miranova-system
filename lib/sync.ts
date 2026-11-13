@@ -1,7 +1,7 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Connector, type Session } from "./connectors";
-import { SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
+import { SOYDROP_BALANCE_PAGE_SIZE, SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { todayIn } from "./format";
 import { advanceImports, linkNewProducts, productsToWatch } from "./imports-data";
 import { refreshTracking } from "./imports-tracking";
@@ -15,6 +15,8 @@ import { extractOrders } from "./normalize";
 import { GROUPS } from "./status";
 import { ingestPayload, purgeIngestLog, saveCatalog, saveProducts, type AccountCtx } from "./store";
 import { walletBalance } from "./wallet";
+import { movementList, oldestMovementAt, settlementsFromPage } from "./drop-settlements";
+import { guessOrigin, isOriginCountry } from "./bank-origin";
 
 const DAY = 86_400_000;
 const RECENT_DAYS = 45; // cada sync revisa estas órdenes (para actualizar sus estados)
@@ -32,7 +34,10 @@ const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ven
 const OPEN_REFRESH_MAX_DAYS = 120;
 const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
-const SETTLEMENT_PROBE_EVERY_MS = 6 * 3_600_000; // diagnóstico de liquidaciones de Drop
+const SETTLEMENTS_EVERY_MS = 30 * 60_000; // liquidaciones de Drop (en la billetera)
+const SETTLEMENTS_WINDOW_DAYS = 30; // después de la primera lectura completa, se relee este tramo…
+const MAX_BALANCE_PAGES = 300; // …o hasta la liquidación pendiente más vieja; tope de páginas de 100
+const BALANCE_PAGES_PER_RUN = 30; // por sincronización, para no comerse el tiempo de las demás cuentas
 
 /** Estados que aún pueden cambiar (por despachar, en tránsito, con problemas). */
 const OPEN_CODES = GROUPS.filter((g) => ["dispatch", "transit", "problem"].includes(g.id)).flatMap((g) => g.codes);
@@ -267,20 +272,13 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
       }
     }
 
-    // 3c'. diagnóstico de liquidaciones (solo lectura, cada 6 h): dónde entrega Drop las solicitudes
-    // de liquidación, para conciliarlas con el PDF y con Mercury. Un fallo aquí no detiene lo demás.
-    if (c.probeSettlements && Date.now() < deadline - 60_000) {
-      const last = (acc.debug as { settlement_probe?: { at?: string } } | null)?.settlement_probe?.at;
-      if (!last || Date.now() - Date.parse(last) > SETTLEMENT_PROBE_EVERY_MS) {
-        let probe: Record<string, unknown>;
-        try {
-          probe = { at: new Date().toISOString(), ...(await withSession((s) => c.probeSettlements!(s))) };
-        } catch (e) {
-          if (e instanceof SessionExpired) throw e;
-          probe = { at: new Date().toISOString(), error: e instanceof Error ? e.message : String(e) };
-        }
-        const fresh = (await getAccount(acc.id))!;
-        await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), settlement_probe: probe } });
+    // 3c'. liquidaciones de Drop (vienen en la billetera): cada 30 min. Un fallo aquí no detiene lo demás.
+    if (c.fetchBalanceMovements && Date.now() < deadline - 60_000) {
+      try {
+        await syncSettlements(acc, (fn) => withSession(fn), c.fetchBalanceMovements.bind(c), deadline - 45_000);
+      } catch (e) {
+        if (e instanceof SessionExpired) throw e;
+        await updateAccount(acc.id, { settlements_msg: `No se pudieron leer las liquidaciones: ${e instanceof Error ? e.message : String(e)}` }).catch(() => {});
       }
     }
 
@@ -457,6 +455,78 @@ async function syncWallet(acc: Account, withSession: <T>(fn: (s: Session) => Pro
     return;
   }
   await updateAccount(acc.id, { wallet_balance: reading.balance, wallet_at: new Date().toISOString(), wallet_msg: null });
+}
+
+/**
+ * Liquidaciones de Drop: cada una llega en la billetera como "Descuento por liquidación" con la solicitud
+ * completa (lib/drop-settlements.ts). La primera vez se lee la billetera entera; después, los últimos 30 días
+ * o hasta la liquidación pendiente más vieja (para ver cuándo la pagan o la rechazan). Solo lectura en Drop:
+ * aquí se guardan los datos de la plataforma, nunca el vínculo con el PDF (ese lo confirma una persona).
+ */
+async function syncSettlements(
+  acc: Account,
+  withSession: <T>(fn: (s: Session) => Promise<T>) => Promise<T>,
+  fetchPage: (s: Session, page: number) => Promise<{ payload: unknown }>,
+  deadline: number,
+): Promise<void> {
+  const resume = acc.settlements_resume_page ?? null;
+  if (acc.settlements_sync_at && !resume && Date.now() - Date.parse(acc.settlements_sync_at) < SETTLEMENTS_EVERY_MS) return;
+  // sin la migración todavía (o sin acceso a la tabla): no leer nada de Drop
+  const ready = await db().from("settlements").select("id").limit(1);
+  if (ready.error) throw ready.error;
+  // primera lectura completa (o una a medias): por tandas, retomando donde quedó
+  const full = !acc.settlements_sync_at || !!resume;
+  const start = resume ?? 1;
+  let cutoff: number | null = null;
+  if (!full) {
+    const { data, error } = await db().from("settlements").select("requested_at").eq("account_id", acc.id).eq("status", "pending").order("requested_at").limit(1);
+    if (error) throw error;
+    const oldestPending = data?.[0] ? Date.parse(data[0].requested_at) : Infinity;
+    cutoff = Math.min(Date.now() - SETTLEMENTS_WINDOW_DAYS * DAY, oldestPending - 2 * DAY);
+  }
+  const movements: unknown[] = [];
+  let pages = 0;
+  let complete = false;
+  for (let page = start; page < start + BALANCE_PAGES_PER_RUN && page <= MAX_BALANCE_PAGES && Date.now() < deadline; page++) {
+    const res = await withSession((s) => fetchPage(s, page));
+    pages++;
+    const list = movementList(res.payload);
+    movements.push(...list);
+    const oldest = oldestMovementAt(res.payload);
+    if (list.length < SOYDROP_BALANCE_PAGE_SIZE || (cutoff !== null && oldest !== null && oldest < cutoff)) {
+      complete = true;
+      break;
+    }
+  }
+  const found = settlementsFromPage({ data: { movements } });
+  const operation = guessOrigin(acc.platform_ref_name, acc.name).operation ?? "miranova";
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: acc.timezone || "America/Tegucigalpa" });
+  const now = new Date().toISOString();
+  const rows = found.map((s) => ({
+    ...s,
+    company: operation,
+    source: "drop",
+    account_id: acc.id,
+    operation,
+    country: isOriginCountry(acc.country) ? acc.country : null,
+    currency: acc.currency,
+    requested_on: day.format(new Date(s.requested_at)),
+    synced_at: now,
+  }));
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await db().from("settlements").upsert(rows.slice(i, i + 200), { onConflict: "source,external_id" });
+    if (error) throw error;
+  }
+  // la primera lectura sigue en la próxima sincronización desde la página que falta (las nuevas que entren
+  // mientras tanto corren todo hacia atrás: se releen algunas, ninguna se salta)
+  const next = start + pages;
+  const pending = full && !complete && next <= MAX_BALANCE_PAGES;
+  await updateAccount(acc.id, {
+    settlements_sync_at: pending ? acc.settlements_sync_at : now,
+    // si no alcanzó a leer ni una página, se queda donde estaba (desde la 1: sin página guardada)
+    settlements_resume_page: pending && next > 1 ? next : null,
+    settlements_msg: `${found.length} liquidaciones leídas en ${pages} página${pages === 1 ? "" : "s"} de la billetera${pending ? " (sigue en la próxima sincronización)" : complete ? "" : " (solo las más recientes)"}`,
+  });
 }
 
 /** Movimientos de inventario de los productos revisados hace más tiempo. Devuelve cuántos movimientos nuevos guardó. */
