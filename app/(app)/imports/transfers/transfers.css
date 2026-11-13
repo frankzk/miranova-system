@@ -63,3 +63,27 @@
 .tr-checks legend { padding: 0; margin-bottom: 6px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
 .tr-checks label { display: flex; gap: 8px; align-items: center; font-size: var(--t-sm); }
 .tr-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 12px; }
+
+/* variantes (color, talla…) */
+.tr-variant { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--bg-subtle); border: 1px solid var(--line); font-size: var(--t-xs); font-weight: 550; color: var(--ink-2); white-space: nowrap; }
+.tr-variants { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.tr-variants legend { padding: 0 4px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.tr-variants legend .hint { font-weight: 400; color: var(--ink-3); margin-left: 4px; }
+.tr-vgrid-wrap { overflow-x: auto; }
+.tr-vgrid { border-collapse: collapse; font-size: var(--t-sm); }
+.tr-vgrid th { font-weight: 550; color: var(--ink-2); padding: 4px 6px; text-align: center; white-space: nowrap; }
+.tr-vgrid tbody th { text-align: left; padding-left: 0; }
+.tr-vgrid td { padding: 3px; text-align: center; }
+.tr-vgrid .input { width: 64px; min-width: 0; text-align: right; padding-left: 6px; padding-right: 6px; }
+.tr-vtotal { font-variant-numeric: tabular-nums; color: var(--ink-3); min-width: 44px; text-align: right !important; }
+.tr-vlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tr-vlist li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tr-vlist .input { width: 90px; text-align: right; }
+.tr-vsum { margin: 0; font-size: var(--t-sm); color: var(--ink-2); }
+@media (max-width: 520px) {
+  .tr-variants { padding: 8px 8px 10px; }
+  .tr-vgrid th { padding: 4px 3px; }
+  .tr-vgrid td { padding: 2px; }
+  .tr-vgrid .input { width: 50px; padding-left: 4px; padding-right: 4px; }
+  .tr-vtotal { min-width: 36px; }
+}

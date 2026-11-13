@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { LabPurchase } from "./lab-purchases.ts";
 import type { StoreRequest } from "./store-requests.ts";
 import {
-  byDestination, cleanArrival, cleanHeader, cleanLine, cleanPoint, dayLabel, defaultDest, defaultOrigin, destinationsFor, isLate, labName, labSource, nextTransferCode,
+  byDestination, cleanArrival, cleanHeader, cleanLine, cleanPoint, compareSize, dayLabel, defaultDest, lineLabel, productVariants, variantGrid, defaultOrigin, destinationsFor, isLate, labName, labSource, nextTransferCode,
   pendingToSend, pointCode, requestSource, routeSummary, sentBySource, shortage, statusAfterArrivals, totals,
   type TransferFull, type TransferItem, type TransferPoint,
 } from "./transfers.ts";
@@ -150,11 +150,45 @@ test("formularios: datos del traslado, producto y bodega", () => {
   assert.equal((cleanHeader({ origin_id: "mireva_tgu", dest_country: "HN" }, POINTS) as { msg: string }).msg, "Elige de dónde sale.");
   assert.equal((cleanHeader({ origin_id: "boxful_gt", dest_country: "HN", shipped_at: "2026-11-10", eta: "2026-11-01" }, POINTS) as { msg: string }).msg, "La llegada estimada no puede ser antes de la salida.");
   const ctx = { points: POINTS, origin_id: "boxful_gt", country: "HN" };
-  assert.deepEqual(cleanLine({ dest_id: "mireva_tgu", kind: "maquila", name: " Crema ", qty: "1,200" }, ctx), { ok: true, row: { dest_id: "mireva_tgu", kind: "maquila", name: "Crema", sku: null, qty: 1200 } });
+  assert.deepEqual(cleanLine({ dest_id: "mireva_tgu", kind: "maquila", name: " Crema ", qty: "1,200" }, ctx), { ok: true, row: { dest_id: "mireva_tgu", kind: "maquila", name: "Crema", sku: null, qty: 1200, variant: null } });
   assert.equal((cleanLine({ dest_id: "alex_sv", name: "Crema", qty: "1" }, ctx) as { msg: string }).msg, "Elige a qué bodega va “Crema”.");
   assert.equal((cleanLine({ dest_id: "mireva_tgu", name: "Crema", qty: "0" }, ctx) as { msg: string }).msg, "La cantidad de “Crema” debe ser un número entero mayor que cero.");
   assert.deepEqual(cleanPoint({ name: " Bodega Norte ", country: "hn", goods: "import", is_destination: true, accounts: ["mireva_hn", "otra", "mireva_hn"] }), {
     ok: true, row: { name: "Bodega Norte", country: "HN", city: null, goods: "import", is_origin: false, is_destination: true, accounts: ["mireva_hn"], active: true },
   });
   assert.equal(pointCode("Bodega Norte", "HN", ["bodega_norte_hn"]), "bodega_norte_hn_2");
+});
+
+test("variantes de Drop: cuadrícula color × talla en orden de tallas", () => {
+  const raw = {
+    variants: [["Negro", "XL"], ["Beige", "XXL"], ["Beige", "L"], ["Negro", "M"], ["Beige", "M"], ["Negro", "XXL"], ["Negro", "L"], ["Beige", "XL"], ["Rojo", "S"]].map(([c, t], i) => ({
+      id: `v${i}`, sku: `${c}-${t}`, name: `${c} / ${t}`, active: true, deleted: c === "Rojo", attributes: [{ name: "Color", value: c }, { name: "Talla", value: t }],
+    })),
+  };
+  const vs = productVariants(raw);
+  assert.equal(vs.length, 8); // la borrada no cuenta
+  assert.deepEqual(vs[0], { id: "v0", name: "Negro / XL", sku: "Negro-XL", attrs: [{ name: "Color", value: "Negro" }, { name: "Talla", value: "XL" }] });
+  const g = variantGrid(vs)!;
+  assert.equal(g.rowLabel, "Color");
+  assert.equal(g.colLabel, "Talla");
+  assert.deepEqual(g.rows, ["Beige", "Negro"]);
+  assert.deepEqual(g.cols, ["M", "L", "XL", "XXL"]);
+  assert.equal(g.at("Negro", "M")?.id, "v3");
+  assert.equal(g.at("Rojo", "S"), null);
+  // talla primero: igual van en columnas
+  const flipped = vs.map((v) => ({ ...v, attrs: [v.attrs[1], v.attrs[0]] }));
+  assert.deepEqual(variantGrid(flipped)!.cols, ["M", "L", "XL", "XXL"]);
+  // un solo atributo o mezclados: lista
+  assert.equal(variantGrid([{ id: "a", name: "500 ml", sku: null, attrs: [{ name: "Tamaño", value: "500 ml" }] }, { id: "b", name: "1 L", sku: null, attrs: [{ name: "Tamaño", value: "1 L" }] }]), null);
+  assert.deepEqual(productVariants(null), []);
+  assert.deepEqual(["10", "8", "XL", "S", "Única"].sort(compareSize), ["S", "XL", "8", "10", "Única"]);
+});
+
+test("línea con variante", () => {
+  const c = cleanLine({ dest_id: "mireva_tgu", kind: "import", name: "Brasier", qty: "50", variant: " Negro /  M " }, { points: POINTS, origin_id: "boxful_gt", country: "HN" });
+  assert.ok(c.ok && c.row.variant === "Negro / M");
+  const bad = cleanLine({ dest_id: "mireva_tgu", kind: "import", name: "Brasier", qty: "0", variant: "Negro / M" }, { points: POINTS, origin_id: "boxful_gt", country: "HN" });
+  assert.ok(!bad.ok && bad.msg.includes("“Brasier (Negro / M)”"));
+  assert.equal(lineLabel({ name: "Brasier", variant: "Negro / M" }), "Brasier · Negro / M");
+  assert.equal(lineLabel({ name: "Brasier", variant: null }), "Brasier");
 });

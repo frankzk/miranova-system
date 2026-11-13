@@ -9,7 +9,7 @@ import { requirePermission } from "@/lib/auth";
 import { COUNTRIES, countryByCode } from "@/lib/countries";
 import { fmtInt, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
-import { byDestination, hasIssues, isLate, routeSummary, totals, transferStatus, TRANSFER_STATUSES, type TransferFull } from "@/lib/transfers";
+import { byDestination, hasIssues, isLate, lineLabel, routeSummary, totals, transferStatus, TRANSFER_STATUSES, type TransferFull } from "@/lib/transfers";
 import { documentKinds, listPending, listPoints, listTransfers } from "@/lib/transfers-data";
 import { buildTransfer, createTransfer, settlePending } from "./actions";
 import "../imports.css";
@@ -240,7 +240,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                             <div className="sub clip">{[t.carrier, t.reference && `manifiesto ${t.reference}`].filter(Boolean).join(" · ") || "—"}</div>
                             {t.items.length > 0 && (
                               <ul className="im-prods" aria-label="Productos">
-                                {t.items.slice(0, 3).map((i) => <li key={i.id} title={`${i.name} · ${fmtInt(i.qty)} u.`}><span className="q">{fmtInt(i.qty)} u.</span> {i.name}</li>)}
+                                {t.items.slice(0, 3).map((i) => <li key={i.id} title={`${lineLabel(i)} · ${fmtInt(i.qty)} u.`}><span className="q">{fmtInt(i.qty)} u.</span> {lineLabel(i)}</li>)}
                                 {t.items.length > 3 && <li className="more">+{t.items.length - 3} más</li>}
                               </ul>
                             )}

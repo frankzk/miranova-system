@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { registerTransferDocument, startTransferUpload } from "@/app/(app)/imports/transfers/actions";
+import { registerTransferDocument, startTransferUpload, transferProductVariants } from "@/app/(app)/imports/transfers/actions";
 import { IMPORT_FILE_ACCEPT, importFileProblem } from "@/lib/imports";
 import { LAB_DESTINATIONS } from "@/lib/lab-purchases";
-import { accepts, defaultDest, defaultOrigin, GOODS, ITEM_KINDS, type ItemKind, type PendingRow, type TransferPoint } from "@/lib/transfers";
+import { accepts, defaultDest, defaultOrigin, GOODS, ITEM_KINDS, variantGrid, type ItemKind, type PendingRow, type ProductVariant, type TransferPoint } from "@/lib/transfers";
 import { IconUpload } from "./icons";
 import { CatalogPicker, type Choice } from "./import-forms";
 import { useSheet } from "./side-sheet";
@@ -203,11 +203,21 @@ export function AddLineForm({ action, transferId, dests, choices, foreign, count
   const [kind, setKind] = useState<ItemKind>("import");
   const [dest, setDest] = useState(() => dests.find((d) => accepts(d, "import"))?.id ?? "");
   const [round, setRound] = useState(0);
+  // variantes del producto elegido (null: cargando)
+  const [variants, setVariants] = useState<ProductVariant[] | null>([]);
   useEffect(() => {
     if (!state?.ok) return;
     setPick(null);
     setRound((r) => r + 1); // limpia la búsqueda y la cantidad
   }, [state]);
+  useEffect(() => {
+    if (!pick) { setVariants([]); return; }
+    let live = true;
+    setVariants(null);
+    transferProductVariants(pick.account_id, pick.external_id).then((v) => live && setVariants(v), () => live && setVariants([]));
+    return () => { live = false; };
+  }, [pick]);
+  const withVariants = source === "catalog" && !!pick && !!variants?.length;
   return (
     <StickyForm state={state} action={run} className="im-form" key={round}>
       <input type="hidden" name="id" value={transferId} />
@@ -218,21 +228,82 @@ export function AddLineForm({ action, transferId, dests, choices, foreign, count
       {source === "catalog" ? (
         <CatalogPicker choices={choices} foreign={foreign} country={country} pick={pick} setPick={setPick} empty="Nada con esa búsqueda. Escribe el nombre." />
       ) : (
-        <label className="field">
-          <span>Producto</span>
-          <input className="input" name="name" maxLength={200} required placeholder="Ej.: Cinturón sin hebilla" />
-        </label>
+        <div className="im-grid">
+          <label className="field">
+            <span>Producto</span>
+            <input className="input" name="name" maxLength={200} required placeholder="Ej.: Cinturón sin hebilla" />
+          </label>
+          <label className="field">
+            <span>Variante <span className="hint">opcional</span></span>
+            <input className="input" name="variant" maxLength={80} placeholder="Ej.: Negro / M" />
+          </label>
+        </div>
       )}
       <div className="im-grid">
         <DestKindFields dests={dests} kind={kind} setKind={setKind} dest={dest} setDest={setDest} />
-        <label className="field">
-          <span>Unidades que salen</span>
-          <input className="input" name="qty" inputMode="numeric" pattern="[0-9][0-9,]*" required placeholder="250" />
-        </label>
+        {!withVariants && (
+          <label className="field">
+            <span>Unidades que salen</span>
+            <input className="input" name="qty" inputMode="numeric" pattern="[0-9][0-9,]*" required={variants !== null} placeholder="250" disabled={variants === null} />
+          </label>
+        )}
       </div>
+      {source === "catalog" && pick && variants === null && <p className="hint" role="status">Buscando las variantes del producto…</p>}
+      {withVariants && <VariantQty variants={variants!} />}
       <Msg state={state} />
-      <SubmitButton className="btn btn-primary" pending="Agregando…" disabled={source === "catalog" && !pick}>Agregar producto</SubmitButton>
+      <SubmitButton className="btn btn-primary" pending="Agregando…" disabled={source === "catalog" && (!pick || variants === null)}>Agregar producto</SubmitButton>
     </StickyForm>
+  );
+}
+
+const qtyOf = (v: string) => { const n = Number(v.replace(/[,\s]/g, "")); return Number.isInteger(n) && n > 0 ? n : 0; };
+
+/** Cantidad por variante: cuadrícula color × talla si se puede, si no una lista. */
+function VariantQty({ variants }: { variants: ProductVariant[] }) {
+  const [q, setQ] = useState<Record<string, string>>({});
+  const grid = useMemo(() => variantGrid(variants), [variants]);
+  const total = variants.reduce((t, v) => t + qtyOf(q[v.id] ?? ""), 0);
+  const input = (v: ProductVariant, label: string) => (
+    <input
+      className="input" name={`vq_${v.id}`} inputMode="numeric" pattern="[0-9][0-9,]*" autoComplete="off" aria-label={label}
+      value={q[v.id] ?? ""} onChange={(e) => { const val = e.target.value; setQ((p) => ({ ...p, [v.id]: val })); }}
+    />
+  );
+  return (
+    <fieldset className="tr-variants">
+      <legend>Unidades por variante <span className="hint">deja vacías las que no salen</span></legend>
+      {grid ? (
+        <div className="tr-vgrid-wrap">
+          <table className="tr-vgrid">
+            <thead>
+              <tr><th scope="col"><span className="sr-only">{grid.rowLabel}</span></th>{grid.cols.map((c) => <th key={c} scope="col">{c}</th>)}<th scope="col">Total</th></tr>
+            </thead>
+            <tbody>
+              {grid.rows.map((r) => (
+                <tr key={r}>
+                  <th scope="row">{r}</th>
+                  {grid.cols.map((c) => {
+                    const v = grid.at(r, c);
+                    return <td key={c}>{v ? input(v, `${grid.rowLabel} ${r}, ${grid.colLabel} ${c}`) : <span className="subtle" title="No existe en Drop">—</span>}</td>;
+                  })}
+                  <td className="tr-vtotal">{grid.cols.reduce((t, c) => { const v = grid.at(r, c); return t + (v ? qtyOf(q[v.id] ?? "") : 0); }, 0).toLocaleString("en-US")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <ul className="tr-vlist">
+          {variants.map((v) => (
+            <li key={v.id}>
+              <span>{v.name}{v.sku && <span className="subtle"> · {v.sku}</span>}</span>
+              {input(v, v.name)}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="tr-vsum">Total: <b>{total.toLocaleString("en-US")} u.</b></p>
+    </fieldset>
   );
 }
 

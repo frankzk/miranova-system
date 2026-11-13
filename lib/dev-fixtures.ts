@@ -120,6 +120,21 @@ const CATALOG: Row[] = [
   created_at_platform: new Date(Date.now() - (i * 5 + 2) * DAY).toISOString(), updated_at: new Date().toISOString(), raw: { sku }, raw_sku: sku,
 }));
 
+// un producto con variantes (color × talla), como las manda Drop en raw.variants
+CATALOG.push({
+  id: "99999999-0000-4000-8000-000000000099", account_id: ACCOUNTS[0].id, external_id: "p-bra", code: "ID-V1H5N",
+  name: "Brasier Corrector de Postura con Refuerzo", sku: "BRA.CORREC", status: "Activo", price: 275, suggested_price: 999, stock: 360,
+  image_url: null, variants_count: 8, currency: "HNL", created_at_platform: new Date(Date.now() - 9 * DAY).toISOString(), updated_at: new Date().toISOString(),
+  raw_sku: "BRA.CORREC",
+  raw: {
+    sku: "BRA.CORREC",
+    variants: [["Negro", "XL"], ["Beige", "XXL"], ["Beige", "L"], ["Negro", "M"], ["Beige", "M"], ["Negro", "XXL"], ["Negro", "L"], ["Beige", "XL"], ["Rojo", "S"]].map(([color, talla], i) => ({
+      id: `6aee63efd4e73b8adf698b${String(10 + i)}`, sku: `${color}-${talla}`, name: `${color} / ${talla}`, active: true, deleted: color === "Rojo", quantity: 40,
+      attributes: [{ name: "Color", value: color }, { name: "Talla", value: talla }],
+    })),
+  },
+});
+
 const GROUP: Record<string, string> = {
   registered: "dispatch", pending: "dispatch", fulfilled: "dispatch", "1": "transit", "2": "transit", "3": "transit", "4": "delivered",
   pending_correction: "problem", "6": "problem", "7": "failed", "8": "failed", "5": "cancelled", cancelled: "cancelled", rejected: "cancelled",

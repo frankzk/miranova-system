@@ -7,8 +7,8 @@ import { IMPORT_FILE_TYPES, importFileProblem, importFileType, MAX_IMPORT_FILE_B
 import { db } from "@/lib/supabase";
 import { todayIn } from "@/lib/format";
 import {
-  cleanArrival, cleanHeader, cleanLine, cleanPoint, dayLabel, isDay, isItemKind, nextTransferCode, pointCode, statusAfterArrivals,
-  type TransferArrival, type TransferItem,
+  cleanArrival, cleanHeader, cleanLine, cleanPoint, dayLabel, isDay, isItemKind, lineLabel, nextTransferCode, pointCode, productVariants, statusAfterArrivals, variantGrid,
+  type ProductVariant, type TransferArrival, type TransferItem,
 } from "@/lib/transfers";
 import { getTransfer, listPending, listPoints, listTransfers, removeTransferFiles, signedTransferUpload, storedTransferFile } from "@/lib/transfers-data";
 
@@ -167,6 +167,16 @@ function editable(t: { status: string; arrivals: TransferArrival[] }, destId: st
   return null;
 }
 
+/** Variantes (color, talla…) de un producto del catálogo, para pedir la cantidad de cada una. */
+export async function transferProductVariants(accountId: string, productId: string): Promise<ProductVariant[]> {
+  const auth = await authorizeAction("imports");
+  if (!auth.ok || !UUID.test(accountId) || !productId || productId.length > 120) return [];
+  const { data } = await db().from("products").select("raw").eq("account_id", accountId).eq("external_id", productId).maybeSingle();
+  return productVariants((data as { raw?: unknown } | null)?.raw);
+}
+
+const fmt = (n: number) => n.toLocaleString("en-US");
+
 export async function addTransferLine(_prev: TransferFormState, form: FormData): Promise<TransferFormState> {
   const auth = await authorizeAction("imports");
   if (!auth.ok) return auth;
@@ -175,28 +185,43 @@ export async function addTransferLine(_prev: TransferFormState, form: FormData):
   const points = await listPoints();
   const accountId = field(form, "account_id");
   const externalId = field(form, "product_id").slice(0, 120);
-  let product: { name: string; sku: string | null; image_url: string | null } | null = null;
+  let product: { name: string; sku: string | null; image_url: string | null; raw?: unknown } | null = null;
   if (accountId || externalId) {
     if (!UUID.test(accountId) || !externalId) return fail("Ese producto ya no está en el catálogo.");
-    const { data } = await db().from("products").select("name, sku, image_url").eq("account_id", accountId).eq("external_id", externalId).maybeSingle();
+    const { data } = await db().from("products").select("name, sku, image_url, raw").eq("account_id", accountId).eq("external_id", externalId).maybeSingle();
     if (!data) return fail("Ese producto ya no está en el catálogo.");
-    product = data as { name: string; sku: string | null; image_url: string | null };
+    product = data as { name: string; sku: string | null; image_url: string | null; raw?: unknown };
   }
-  const c = cleanLine(
-    { dest_id: field(form, "dest_id"), kind: field(form, "kind"), name: product?.name ?? field(form, "name"), sku: product?.sku ?? field(form, "sku"), qty: field(form, "qty") },
-    { points, origin_id: t.origin_id, country: t.dest_country },
-  );
-  if (!c.ok) return fail(c.msg);
-  const blocked = editable(t, c.row.dest_id);
+  const base = { dest_id: field(form, "dest_id"), kind: field(form, "kind"), name: product?.name ?? field(form, "name") };
+  const ctx = { points, origin_id: t.origin_id, country: t.dest_country };
+  // con variantes del catálogo: una línea por cada variante con cantidad (los datos de la variante salen de Drop, no del formulario)
+  const variants = product ? productVariants(product.raw) : [];
+  const grid = variantGrid(variants);
+  const order = new Map(grid ? grid.rows.flatMap((r) => grid.cols.map((c) => grid.at(r, c)?.id)).filter(Boolean).map((id, i) => [id!, i]) : []);
+  // en el orden de la cuadrícula (color y talla), o en el de Drop si van en lista
+  const asked = variants.filter((v) => field(form, `vq_${v.id}`).replace(/[,\s]/g, "") !== "")
+    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const lines: ReturnType<typeof cleanLine>[] = asked.length
+    ? asked.map((v) => cleanLine({ ...base, sku: v.sku ?? product?.sku ?? "", qty: field(form, `vq_${v.id}`), variant: v.name }, ctx))
+    : variants.length && [...form.keys()].some((k) => k.startsWith("vq_"))
+      ? [{ ok: false, msg: "Escribe cuántas salen de al menos una variante." }]
+      : [cleanLine({ ...base, sku: product?.sku ?? field(form, "sku"), qty: field(form, "qty"), variant: product ? "" : field(form, "variant") }, ctx)];
+  const bad = lines.find((l) => !l.ok);
+  if (bad && !bad.ok) return fail(bad.msg);
+  const rows = lines.flatMap((l) => (l.ok ? [l.row] : []));
+  const blocked = editable(t, rows[0].dest_id);
   if (blocked) return fail(blocked);
-  const position = t.items.reduce((m, i) => Math.max(m, i.position), -1) + 1;
-  const { error } = await db().from("transfer_items").insert({
-    transfer_id: t.id, ...c.row, account_id: product ? accountId : null, product_external_id: product ? externalId : null, image_url: product?.image_url ?? null,
-    position, created_at: new Date().toISOString(),
-  });
+  let position = t.items.reduce((m, i) => Math.max(m, i.position), -1);
+  const now = new Date().toISOString();
+  const { error } = await db().from("transfer_items").insert(rows.map((r, i) => ({
+    transfer_id: t.id, ...r, variant_id: asked[i]?.id ?? null, account_id: product ? accountId : null, product_external_id: product ? externalId : null,
+    image_url: product?.image_url ?? null, position: ++position, created_at: now,
+  })));
   if (error) return dbError("No se pudo agregar", error);
-  await logEvent(t.id, auth.user.id, `Producto agregado: ${c.row.name} (${c.row.qty.toLocaleString("en-US")} u. a ${pointName(points, c.row.dest_id)})`);
-  return done(t.id, `${c.row.name} agregado.`);
+  const total = rows.reduce((n, r) => n + r.qty, 0);
+  const detail = rows.length > 1 || rows[0].variant ? `: ${rows.map((r) => `${r.variant ?? ""} ${fmt(r.qty)}`.trim()).join(", ")}` : "";
+  await logEvent(t.id, auth.user.id, `Producto agregado: ${rows[0].name} (${fmt(total)} u. a ${pointName(points, rows[0].dest_id)}${detail})`);
+  return done(t.id, `${rows[0].name} agregado${rows.length > 1 ? ` (${rows.length} variantes)` : ""}.`);
 }
 
 export async function updateTransferLine(_prev: TransferFormState, form: FormData): Promise<TransferFormState> {
@@ -207,13 +232,13 @@ export async function updateTransferLine(_prev: TransferFormState, form: FormDat
   const line = t.items.find((i) => i.id === field(form, "item_id"));
   if (!line) return fail("Ese producto ya no está en el traslado.");
   const points = await listPoints();
-  const c = cleanLine({ dest_id: field(form, "dest_id"), kind: field(form, "kind"), name: line.name, sku: line.sku ?? "", qty: field(form, "qty") }, { points, origin_id: t.origin_id, country: t.dest_country });
+  const c = cleanLine({ dest_id: field(form, "dest_id"), kind: field(form, "kind"), name: line.name, sku: line.sku ?? "", qty: field(form, "qty"), variant: line.variant ?? "" }, { points, origin_id: t.origin_id, country: t.dest_country });
   if (!c.ok) return fail(c.msg);
   const blocked = editable(t, line.dest_id) ?? editable(t, c.row.dest_id);
   if (blocked) return fail(blocked);
   const { error } = await db().from("transfer_items").update({ dest_id: c.row.dest_id, kind: c.row.kind, qty: c.row.qty }).eq("id", line.id);
   if (error) return dbError("No se pudo guardar", error);
-  await logEvent(t.id, auth.user.id, `Producto editado: ${line.name} (${c.row.qty.toLocaleString("en-US")} u. a ${pointName(points, c.row.dest_id)})`);
+  await logEvent(t.id, auth.user.id, `Producto editado: ${lineLabel(line)} (${c.row.qty.toLocaleString("en-US")} u. a ${pointName(points, c.row.dest_id)})`);
   return done(t.id, "Guardado.");
 }
 
@@ -228,7 +253,7 @@ export async function removeTransferLine(_prev: TransferFormState, form: FormDat
   if (blocked) return fail(blocked);
   const { error } = await db().from("transfer_items").delete().eq("id", line.id);
   if (error) return dbError("No se pudo quitar", error);
-  await logEvent(t.id, auth.user.id, `Producto quitado: ${line.name}`);
+  await logEvent(t.id, auth.user.id, `Producto quitado: ${lineLabel(line)}`);
   return done(t.id, "Quitado.");
 }
 
