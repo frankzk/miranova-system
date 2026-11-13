@@ -9,6 +9,7 @@ export const PERMISSIONS = [
   { key: "products", label: "Productos", hint: "Catálogo, rendimiento, inventario y tienda × producto" },
   { key: "photos", label: "Fotos", hint: "Subir y borrar fotos y videos reales de productos (verlas y descargarlas va con Productos)" },
   { key: "imports", label: "Compras", hint: "Importaciones y compras a laboratorios: productos, guías, documentos, reparto y estados (costos, precios y pagos, solo con Dinero)" },
+  { key: "imports_view", label: "Compras (solo ver)", hint: "Ver importaciones y traslados con sus documentos, sin poder cambiar nada (por ejemplo, para Boxful). Sin laboratorios ni proveedores; costos y precios, solo con Dinero" },
   { key: "requests", label: "Solicitudes", hint: "Lo que piden las tiendas (producto, cantidad y países): verlas, cargarlas y cambiar su estado" },
   { key: "opportunities", label: "Oportunidades", hint: "Lista de a quién contactar y qué proponerle" },
   { key: "money", label: "Dinero", hint: "Página Dinero y liquidaciones: lo pendiente de liquidar y lo ya liquidado" },
@@ -38,6 +39,11 @@ export function can(u: Grantee | null | undefined, p: Permission): boolean {
   return u.is_owner || u.permissions.includes(p);
 }
 
+/** Compras: "edit" con el permiso completo, "view" con el de solo ver, o null. */
+export function importsAccess(u: Grantee | null | undefined): "edit" | "view" | null {
+  return can(u, "imports") ? "edit" : can(u, "imports_view") ? "view" : null;
+}
+
 /** Permisos efectivos (el dueño los tiene todos), en el orden de PERMISSIONS. */
 export function effectivePermissions(u: Grantee): Permission[] {
   return PERMISSION_KEYS.filter((p) => can(u, p));
@@ -56,6 +62,8 @@ export function normalizePermissions(values: readonly unknown[]): Permission[] {
   if (set.has("stores_edit")) set.add("stores");
   // subir fotos sin ver productos tampoco
   if (set.has("photos")) set.add("products");
+  // con Compras completo, "solo ver" sobra
+  if (set.has("imports")) set.delete("imports_view");
   return PERMISSION_KEYS.filter((p) => set.has(p));
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorizeRoute } from "@/lib/auth";
+import { authorizeRouteAny } from "@/lib/auth";
 import { countryByCode } from "@/lib/countries";
 import { todayIn } from "@/lib/format";
 import { allocationLabel, costKindLabel, counted, landedCosts, marginOf, receptionSummary, statusInfo, trackingUrl, transportLabel, type DropState } from "@/lib/imports";
@@ -13,7 +13,7 @@ import { buildXlsx, XLSX_TYPE, type Cell, type Sheet } from "@/lib/xlsx";
 const r2 = (n: number | null | undefined) => (n === null || n === undefined || !Number.isFinite(n) ? null : Math.round(n * 100) / 100);
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await authorizeRoute("imports");
+  const user = await authorizeRouteAny("imports", "imports_view");
   if (user instanceof Response) return user;
   const detail = await getImport((await params).id);
   if (!detail) return NextResponse.json({ error: "No existe" }, { status: 404 });

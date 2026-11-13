@@ -22,6 +22,8 @@ const app_users: Row[] = [
     ...base, id: "a0000000-0000-4000-8000-000000000002", username: "andrea", name: "Andrea Operación", password_hash: hash("demo1234"),
     permissions: ["orders", "stores", "stores_edit", "products", "opportunities"], is_owner: false,
   },
+  // Boxful: solo ve importaciones y traslados
+  { ...base, id: "a0000000-0000-4000-8000-000000000006", username: "boxful", name: "Prueba Boxful", password_hash: hash("demo1234"), permissions: ["imports_view"], is_owner: false },
 ];
 
 // app_settings: ajustes del panel (Ajustes → Correo); empieza vacío

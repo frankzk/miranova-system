@@ -9,11 +9,11 @@ import { InvoiceReader } from "@/components/invoice-reader";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import {
-  allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport,
+  allInDrop, allocationLabel, costKindLabel, counted, docKindLabel, DOC_KINDS, INBOUND, isActive, landedCosts, marginOf, MONEY_DOCS, needsReport, PRIVATE_DOCS,
   isNews, receptionSummary, recoveryShare, staleDays, STALE_DAYS, statusInfo, TRACKED_STATUSES, trackingUrl, transportLabel, whatsappMessage, type DropState,
   type ImportStatus,
 } from "@/lib/imports";
@@ -37,14 +37,16 @@ const pct = (x: number) => `${(x * 100).toFixed(0)} %`;
 const kb = (n: number | null) => (n ? (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`) : "");
 
 export default async function ImportPage({ params }: { params: Promise<{ id: string }> }) {
-  const [user, accounts, { id }] = await Promise.all([requirePermission("imports"), listAccounts(), params]);
+  const [user, accounts, { id }] = await Promise.all([requireAnyPermission("imports", "imports_view"), listAccounts(), params]);
   const detail = await getImport(id);
   if (!detail) notFound();
   const { imp, items, costs, docs, payments, events, people } = detail;
   const money = can(user, "money");
+  // con "Compras (solo ver)" se ve todo igual, sin botones para cambiar nada
+  const edit = can(user, "imports");
   const today = todayIn();
   const [prices, { choices, foreign }, drop, suppliers, trackKey, aiKey] = await Promise.all([
-    salePrices(items), catalogChoices(imp.dest_country), dropStates(items, today), listSuppliers(),
+    salePrices(items), edit ? catalogChoices(imp.dest_country) : Promise.resolve({ choices: [], foreign: [] }), dropStates(items, today), listSuppliers(),
     trackingKeys().then((k) => trackingProvider(imp.carrier, available(k))),
     integrationKey("anthropic").then(Boolean),
   ]);
@@ -79,7 +81,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
     return t + (m?.total ?? 0);
   }, 0);
   const recovery = priced ? recoveryShare(landed.totals.total, revenue) : null;
-  const visibleDocs = docs.filter((d) => money || !MONEY_DOCS.includes(d.kind));
+  const visibleDocs = docs.filter((d) => money || !PRIVATE_DOCS.includes(d.kind));
   const docName = new Map(docs.map((d) => [d.id, d]));
   const alert = needsReport(imp, today);
   const late = isActive(imp.status) && imp.eta !== null && imp.eta < today;
@@ -96,17 +98,21 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
         title={<span className="im-title">{imp.code} <span className="pill" data-tone={st.tone}>{st.label}</span></span>}
         sub={<>
           {imp.supplier ?? "Sin proveedor"}
-          {supplier?.whatsapp && <> (<a href={`https://wa.me/${supplier.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a>)</>}
+          {edit && supplier?.whatsapp && <> (<a href={`https://wa.me/${supplier.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a>)</>}
           {" "}· {imp.origin ?? "Origen sin indicar"} → <b>{country}</b> · {transportLabel(imp.transport)}
         </>}
         actions={<>
           <a className="btn" href={`/api/export/imports/${imp.id}`} download title="Descargar la importación en Excel"><IconDownload /> Excel</a>
-          <SideSheet trigger="Editar datos" title={`Editar ${imp.code}`} sub="Proveedor, país, transporte, guía y fechas">
-            <ImportHeaderForm action={updateImport} v={imp} countries={countries} suppliers={suppliers.map((x) => ({ id: x.id, name: x.name, origin: x.origin }))} />
-          </SideSheet>
-          <SideSheet trigger="Eliminar" triggerClass="btn btn-ghost btn-danger" title={`Eliminar ${imp.code}`}>
-            <DeleteImportForm action={deleteImport} importId={imp.id} />
-          </SideSheet>
+          {edit && (
+            <>
+              <SideSheet trigger="Editar datos" title={`Editar ${imp.code}`} sub="Proveedor, país, transporte, guía y fechas">
+                <ImportHeaderForm action={updateImport} v={imp} countries={countries} suppliers={suppliers.map((x) => ({ id: x.id, name: x.name, origin: x.origin }))} />
+              </SideSheet>
+              <SideSheet trigger="Eliminar" triggerClass="btn btn-ghost btn-danger" title={`Eliminar ${imp.code}`}>
+                <DeleteImportForm action={deleteImport} importId={imp.id} />
+              </SideSheet>
+            </>
+          )}
         </>}
       />
 
@@ -191,35 +197,37 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                       Con {PROVIDER_LABEL[trackKey]} ·{" "}
                       {imp.track_checked_at ? `revisado ${when(imp.track_checked_at)} · se revisa cada 3 horas` : "se revisa en la próxima sincronización (cada 3 horas)."}
                     </span>
-                    {trackable && <TrackRefreshForm action={refreshImportTracking} importId={imp.id} />}
+                    {trackable && edit && <TrackRefreshForm action={refreshImportTracking} importId={imp.id} />}
                   </div>
                 )}
               </div>
             )}
-            <StatusForm action={setImportStatus} importId={imp.id} current={imp.status} />
+            {edit && <StatusForm action={setImportStatus} importId={imp.id} current={imp.status} />}
           </div>
         </section>
 
-        <section className="panel" aria-labelledby="im-rep" data-alert={alert || undefined}>
+        {edit && <section className="panel" aria-labelledby="im-rep" data-alert={alert || undefined}>
           <div className="panel-head"><h2 id="im-rep">Aviso a la bodega</h2><span className="aside">Boxful · {country}</span></div>
           <div className="panel-body">
             {alert && <p className="im-warn">Llega {imp.eta && imp.eta < today ? "con retraso" : "en 3 días o menos"} y todavía no se avisó a la bodega.</p>}
             <p className="muted im-small">Copia el mensaje con los productos, la guía y la fecha, pégalo en el chat de Boxful y márcala como reportada.</p>
             <ReportBox action={setReported} importId={imp.id} reported={imp.reported_at} who={imp.reported_by ? people[imp.reported_by] ?? null : null} message={message} />
           </div>
-        </section>
+        </section>}
       </div>
 
       {/* productos */}
       <section className="table-wrap im-section" aria-labelledby="im-items">
         <div className="panel-head">
           <h2 id="im-items">Productos</h2>
-          <SideSheet trigger={<><IconPlus /> Agregar producto</>} triggerClass="btn btn-sm" title="Agregar producto" sub={`Del catálogo de ${country} o un producto nuevo`}>
-            <AddItemForm action={addImportItem} importId={imp.id} choices={choices} foreign={foreign} country={country} money={money} />
-          </SideSheet>
+          {edit && (
+            <SideSheet trigger={<><IconPlus /> Agregar producto</>} triggerClass="btn btn-sm" title="Agregar producto" sub={`Del catálogo de ${country} o un producto nuevo`}>
+              <AddItemForm action={addImportItem} importId={imp.id} choices={choices} foreign={foreign} country={country} money={money} />
+            </SideSheet>
+          )}
         </div>
         {items.length === 0 ? (
-          <p className="panel-body muted">Agrega los productos que vienen en esta importación.</p>
+          <p className="panel-body muted">{edit ? "Agrega los productos que vienen en esta importación." : "Todavía no tiene productos."}</p>
         ) : (
           <div className="table-scroll">
             <table className="table im-items">
@@ -262,7 +270,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                       </td>
                       <td className="nowrap">
                         <DropCell st={drop.get(i.id)!} status={imp.status} />
-                        {drop.get(i.id)?.kind === "unlinked" && choices.length > 0 && (
+                        {edit && drop.get(i.id)?.kind === "unlinked" && choices.length > 0 && (
                           <SideSheet trigger="Enlazar" triggerClass="btn btn-ghost btn-sm im-link" title={`Enlazar ${i.name}`} sub={`Con su producto en Drop ${country}`}>
                             <LinkItemForm action={linkImportItem} itemId={i.id} name={i.name} choices={choices} />
                           </SideSheet>
@@ -283,10 +291,14 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                         </td>
                       )}
                       <td className="nowrap r">
-                        <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={i.name} sub="Cantidad, costo, peso y precio">
-                          <EditItemForm action={updateImportItem} item={i} money={money} />
-                        </SideSheet>
-                        <RemoveButton action={removeImportItem} name="item_id" value={i.id} confirmText={`¿Quitar ${i.name} de la importación?`} />
+                        {edit && (
+                          <>
+                            <SideSheet trigger="Editar" triggerClass="btn btn-ghost btn-sm" title={i.name} sub="Cantidad, costo, peso y precio">
+                              <EditItemForm action={updateImportItem} item={i} money={money} />
+                            </SideSheet>
+                            <RemoveButton action={removeImportItem} name="item_id" value={i.id} confirmText={`¿Quitar ${i.name} de la importación?`} />
+                          </>
+                        )}
                       </td>
                     </tr>
                   );
@@ -317,7 +329,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
         <section className="panel im-section" aria-labelledby="im-recv">
           <div className="panel-head">
             <h2 id="im-recv">Recepción en bodega</h2>
-            <SideSheet
+            {edit && <SideSheet
               trigger={reception.started ? "Editar recepción" : "Registrar recepción"}
               triggerClass={reception.started ? "btn btn-sm" : "btn btn-sm btn-primary"}
               title="Recepción en bodega"
@@ -339,12 +351,12 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                 <p className="muted im-small">De lo que llegó dañado o de las cajas. Quedan en Documentos.</p>
                 <DocUpload importId={imp.id} money={money} fixedKind="photo" label="Subir fotos" />
               </div>
-            </SideSheet>
+            </SideSheet>}
           </div>
           <div className="panel-body">
             {!reception.started ? (
               <p className="muted im-small">
-                Cuando llegue a la bodega, anota cuánto llegó de cada producto y lo que vino dañado (con fotos). Lo que falte o llegue dañado se descuenta y el costo por unidad se calcula con las unidades buenas.
+                {edit ? "Cuando llegue a la bodega, anota" : "Cuando llegue a la bodega se anota"} cuánto llegó de cada producto y lo que vino dañado (con fotos). Lo que falte o llegue dañado se descuenta y el costo por unidad se calcula con las unidades buenas.
               </p>
             ) : (
               <>
@@ -403,12 +415,12 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                       <span className="tag">{costKindLabel(c.kind)}</span>
                       <span className="grow">{c.label}<span className="sub"> · {allocationLabel(c.allocation)}{c.allocation === "item" ? `: ${items.find((i) => i.id === c.item_id)?.name ?? "—"}` : ""}</span></span>
                       <span className="num strong">{usd(c.amount)}</span>
-                      <RemoveButton action={removeImportCost} name="cost_id" value={c.id} confirmText={`¿Quitar el costo "${c.label}"?`} />
+                      {edit && <RemoveButton action={removeImportCost} name="cost_id" value={c.id} confirmText={`¿Quitar el costo "${c.label}"?`} />}
                     </li>
                   ))}
                 </ul>
               )}
-              <AddCostForm action={addImportCost} importId={imp.id} items={items.map((i) => ({ id: i.id, name: i.name }))} />
+              {edit && <AddCostForm action={addImportCost} importId={imp.id} items={items.map((i) => ({ id: i.id, name: i.name }))} />}
             </div>
           </section>
 
@@ -424,13 +436,13 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                         <span className="nowrap">{day(p.paid_at)}</span>
                         <span className="grow">{p.method}{p.note && <span className="sub"> · {p.note}</span>}{d && <> · <a href={`/api/imports/doc/${d.id}`} target="_blank" rel="noreferrer">comprobante</a></>}</span>
                         <span className="num strong">{usd(p.amount)}</span>
-                        <RemoveButton action={removeImportPayment} name="payment_id" value={p.id} confirmText="¿Quitar este pago?" />
+                        {edit && <RemoveButton action={removeImportPayment} name="payment_id" value={p.id} confirmText="¿Quitar este pago?" />}
                       </li>
                     );
                   })}
                 </ul>
               )}
-              <AddPaymentForm action={addImportPayment} importId={imp.id} />
+              {edit && <AddPaymentForm action={addImportPayment} importId={imp.id} />}
             </div>
           </section>
         </div>
@@ -446,18 +458,18 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                   <li key={d.id}>
                     <span className="tag">{docKindLabel(d.kind)}</span>
                     <span className="grow clip"><a href={`/api/imports/doc/${d.id}`} target="_blank" rel="noreferrer">{d.filename ?? "archivo"}</a><span className="sub"> · {kb(d.size_bytes)}</span></span>
-                    {readable(d) && (
+                    {edit && readable(d) && (money || !MONEY_DOCS.includes(d.kind)) && (
                       <SideSheet trigger="Leer con IA" triggerClass="btn btn-ghost btn-sm im-ai-btn" title="Leer con IA" sub={d.filename ?? "Documento"}>
                         <InvoiceReader docId={d.id} docName={d.filename ?? "el documento"} importId={imp.id} money={money} action={addInvoiceLines} />
                       </SideSheet>
                     )}
                     <a className="btn btn-ghost btn-sm" href={`/api/imports/doc/${d.id}?dl=1`} aria-label={`Descargar ${d.filename ?? "archivo"}`}><IconDownload /></a>
-                    <RemoveButton action={removeImportDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />
+                    {edit && (money || !MONEY_DOCS.includes(d.kind)) && <RemoveButton action={removeImportDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />}
                   </li>
                 ))}
               </ul>
             )}
-            <DocUpload importId={imp.id} money={money} />
+            {edit && <DocUpload importId={imp.id} money={money} />}
           </div>
         </section>
 

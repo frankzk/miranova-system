@@ -7,8 +7,9 @@ import {
   AddLineForm, ArrivalForm, DeleteTransferForm, EditLineForm, ShipForm, TransferDocUpload, TransferHeaderForm,
 } from "@/components/transfer-forms";
 import { PageHead } from "@/components/ui";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { COUNTRIES, countryByCode } from "@/lib/countries";
+import { can } from "@/lib/permissions";
 import { fmtInt, todayIn } from "@/lib/format";
 import { catalogChoices } from "@/lib/imports-data";
 import { byDestination, dayLabel, destinationsFor, lineLabel, goodUnits, hasIssues, isLate, shortage, totals, transferStatus } from "@/lib/transfers";
@@ -29,7 +30,9 @@ const kb = (n: number | null) => (n ? (n > 1024 * 1024 ? `${(n / 1024 / 1024).to
 const DOC_LABEL: Record<string, string> = { manifest: "Manifiesto", photo: "Foto", other: "Documento" };
 
 export default async function TransferPage({ params }: { params: Promise<{ id: string }> }) {
-  const [, { id }] = await Promise.all([requirePermission("imports"), params]);
+  const [user, { id }] = await Promise.all([requireAnyPermission("imports", "imports_view"), params]);
+  // "Compras (solo ver)": se ve todo igual, sin botones para cambiar nada
+  const edit = can(user, "imports");
   if (!UUID.test(id)) notFound();
   const [t, points] = await Promise.all([getTransfer(id), listPoints()]);
   if (!t) notFound();
@@ -42,7 +45,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   const dests = destinationsFor(points, t.dest_country).filter((p) => p.id !== t.origin_id);
   const late = isLate(t, today);
   const closed = t.status === "cancelled" || t.status === "arrived";
-  const canAdd = !closed && dests.some((d) => !t.arrivals.some((a) => a.dest_id === d.id));
+  const canAdd = edit && !closed && dests.some((d) => !t.arrivals.some((a) => a.dest_id === d.id));
   // catálogo de Drop solo si se pueden agregar productos (pesa): el del país destino y, al buscar, los de otros países
   const catalog = canAdd ? await catalogChoices(t.dest_country).catch(() => ({ choices: [], foreign: [] })) : { choices: [], foreign: [] };
   const choices = [...catalog.choices, ...catalog.foreign.map((f) => ({ ...f, account_name: undefined, also: undefined }))];
@@ -61,7 +64,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
           {t.carrier && <> · lo lleva {t.carrier}</>}
           {t.reference && <> · manifiesto {t.reference}</>}
         </>}
-        actions={<>
+        actions={edit && <>
           {t.status === "preparing" && (
             <SideSheet trigger="Marcar como enviado" triggerClass="btn btn-primary" title={`Enviar ${t.code}`} sub={t.items.length ? `${t.items.length} ${t.items.length === 1 ? "producto" : "productos"} · ${fmtInt(tt.sent)} u.` : "Primero agrega los productos"}>
               <ShipForm action={shipTransfer} id={t.id} carrier={t.carrier} reference={t.reference} eta={t.eta} />
@@ -111,13 +114,13 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
       {groups.length === 0 && (
         <section className="panel">
           <div className="panel-head"><h2>Productos</h2></div>
-          <p className="panel-body muted">Agrega los productos que salen en este traslado, cada uno con la bodega a la que va.</p>
+          <p className="panel-body muted">{edit ? "Agrega los productos que salen en este traslado, cada uno con la bodega a la que va." : "Todavía no tiene productos."}</p>
         </section>
       )}
 
       {groups.map((g) => {
-        const editable = !closed && !g.arrival;
-        const canArrive = t.status === "transit" || (t.status === "arrived" && !!g.arrival);
+        const editable = edit && !closed && !g.arrival;
+        const canArrive = edit && (t.status === "transit" || (t.status === "arrived" && !!g.arrival));
         return (
           <section className="panel tr-dest" key={g.point.id} aria-labelledby={`tr-d-${g.point.id}`}>
             <div className="panel-head">
@@ -208,12 +211,12 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                     <span className="tag">{DOC_LABEL[d.kind] ?? "Documento"}</span>
                     <span className="grow clip"><a href={`/api/transfers/doc/${d.id}`} target="_blank" rel="noreferrer">{d.filename ?? "archivo"}</a><span className="sub"> · {kb(d.size_bytes)}</span></span>
                     <a className="btn btn-ghost btn-sm" href={`/api/transfers/doc/${d.id}?dl=1`} aria-label={`Descargar ${d.filename ?? "archivo"}`}><IconDownload /></a>
-                    <RemoveButton action={removeTransferDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />
+                    {edit && <RemoveButton action={removeTransferDocument} name="doc_id" value={d.id} label="Borrar" confirmText={`¿Borrar ${d.filename ?? "el archivo"}?`} />}
                   </li>
                 ))}
               </ul>
             )}
-            <TransferDocUpload transferId={t.id} />
+            {edit && <TransferDocUpload transferId={t.id} />}
             {t.notes && <p className="tr-notes"><b>Notas:</b> {t.notes}</p>}
           </div>
         </section>
