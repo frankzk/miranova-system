@@ -335,26 +335,31 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
 }
 
 /**
- * Boxful de Mireva: por ahora inicia sesión y busca (solo lectura, cada 6 h) dónde entrega Boxful las
- * liquidaciones; el diagnóstico queda en la cuenta para terminar la lectura con la forma real de la respuesta.
+ * Boxful de Mireva: inicia sesión y lee sus liquidaciones de los últimos 4 meses (solo lectura). Por ahora
+ * guarda una muestra de la respuesta en el diagnóstico de la cuenta (cada 6 h) para terminar la lectura con su
+ * forma real; todavía no escribe liquidaciones.
  */
 async function syncBoxfulAccount(acc: Account): Promise<SyncResult> {
   try {
     let session = await loadSession(acc);
-    const last = (acc.debug as { boxful_probe?: { at?: string } } | null)?.boxful_probe?.at;
+    const last = (acc.debug as { boxful_list?: { at?: string } } | null)?.boxful_list?.at;
     if (!last || Date.now() - Date.parse(last) > SETTLEMENT_PROBE_EVERY_MS) {
-      let probe;
+      const end = new Date();
+      const begin = new Date(end.getTime() - 120 * DAY);
+      let res;
       try {
-        probe = await boxful.probeSettlements(session);
+        res = await boxful.fetchSettlements(session, begin, end);
       } catch (e) {
         if (!(e instanceof SessionExpired)) throw e;
         session = await freshSession((await getAccount(acc.id))!);
-        probe = await boxful.probeSettlements(session);
+        res = await boxful.fetchSettlements(session, begin, end);
       }
       const fresh = (await getAccount(acc.id))!;
-      await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), boxful_probe: { at: new Date().toISOString(), ...probe } } });
+      const debug: Record<string, unknown> = { ...(fresh.debug ?? {}), boxful_list: { at: new Date().toISOString(), status: res.status, sample: res.text.slice(0, 12000) } };
+      delete debug.boxful_probe;
+      await updateAccount(acc.id, { debug: debug as Account["debug"] });
     }
-    const message = "Sesión iniciada en Boxful. Buscando dónde entrega las liquidaciones (diagnóstico guardado).";
+    const message = "Sesión iniciada en Boxful. Liquidaciones encontradas: falta terminar de leerlas (muestra guardada).";
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message, settlements_msg: message });
     return { ok: true, message, saved: 0, changed: 0 };
   } catch (e) {
