@@ -25,7 +25,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const file = [...form.values()].find((v): v is File => typeof v !== "string");
   if (!file) return Response.json({ error: "Falta el archivo" }, { status: 400 });
   // fotos y videos de productos, o documentos de importaciones (cada bucket con sus tipos)
-  const imports = rest[0] === "import-files";
+  // los traslados guardan lo mismo que las importaciones (PDF, fotos y Excel)
+  const imports = rest[0] === "import-files" || rest[0] === "transfer-files";
   const banking = rest[0] === "bank-documents";
   if (banking) {
     if (file.type !== "application/pdf") return Response.json({ error: "mime type not supported" }, { status: 415 });

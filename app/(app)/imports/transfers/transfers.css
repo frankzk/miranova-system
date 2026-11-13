@@ -1,0 +1,65 @@
+/* Compras › Traslados (usa también imports.css) */
+.tr-back { margin: 0 0 4px; font-size: var(--t-sm); }
+.tr-back a { color: var(--ink-2); }
+
+/* cuadro de rutas */
+.tr-routes tbody th[scope="row"] {
+  font-weight: 550; font-size: var(--t-sm); color: var(--ink); white-space: normal; min-width: 220px;
+  padding: 11px 14px; background: transparent; vertical-align: top;
+}
+.tr-routes tbody tr:last-child th { border-bottom: 0; }
+.tr-route { display: block; color: var(--ink); }
+.tr-routes th[scope="row"] .sub { display: block; font-weight: 400; }
+.tr-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-size: var(--t-sm); }
+.tr-ok svg { width: 14px; height: 14px; }
+
+/* por enviar */
+.tr-pending + .tr-pending { border-top: 1px solid var(--line); }
+.tr-pending-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 4px; flex-wrap: wrap; }
+.tr-pending-head h3 { margin: 0; font-size: var(--t-md, 15px); }
+.tr-pending-head h3 .sub { font-weight: 400; color: var(--ink-3); font-size: var(--t-sm); margin-left: 6px; }
+
+/* armar traslado */
+.tr-build { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.tr-build li { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 8px; }
+.tr-build li[data-off] { opacity: 0.55; }
+.tr-build-check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.tr-build-check input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.tr-build-check > span { display: grid; gap: 2px; min-width: 0; }
+.tr-build-check b { font-weight: 600; overflow-wrap: anywhere; }
+.tr-build-check span span { font-size: var(--t-xs); color: var(--ink-3); }
+.tr-build-fields { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
+.tr-build-fields .field { margin: 0; }
+@media (max-width: 520px) {
+  .tr-build-fields { grid-template-columns: 1fr 1fr; }
+  .tr-build-fields .field:last-child { grid-column: 1 / -1; }
+}
+
+/* detalle: una sección por bodega de destino */
+.tr-dest .panel-head { flex-wrap: wrap; gap: 8px 12px; }
+.tr-dest .panel-head .aside { margin-left: 0; flex: 1; }
+.tr-prod { display: flex; gap: 10px; align-items: flex-start; }
+.tr-prod img, .tr-prod .im-noimg { width: 36px; height: 36px; flex: none; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); background: var(--bg-app); }
+.tr-note { font-style: italic; }
+.tr-add { margin: 0 0 16px; }
+.tr-notes { margin: 12px 0 0; font-size: var(--t-sm); color: var(--ink-2); white-space: pre-line; }
+
+/* móvil: las tablas apiladas dicen qué es cada número */
+@media (max-width: 640px) {
+  .table.stack.tr-lines tr { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 10px; }
+  .table.stack.tr-pending-table tr { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+  .table.stack.tr-lines td[data-slot="id"], .table.stack.tr-pending-table td[data-slot="id"],
+  .table.stack.tr-pending-table td.tr-wide, .table.stack.tr-lines td.r, .table.stack.tr-pending-table td.r { grid-column: 1 / -1; grid-row: auto; }
+  .table.stack.tr-lines td[data-label], .table.stack.tr-pending-table td[data-label] { text-align: left; }
+  .table.stack.tr-lines td[data-label]::before, .table.stack.tr-pending-table td[data-label]::before {
+    content: attr(data-label); display: block; font-size: var(--t-xs); font-weight: 400; color: var(--ink-3);
+  }
+  .table.stack.tr-lines td.r, .table.stack.tr-pending-table td.r { display: flex; justify-content: flex-end; gap: 8px; }
+}
+
+/* bodegas */
+.tr-points tr[data-off] td { color: var(--ink-3); }
+.tr-checks { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.tr-checks legend { padding: 0; margin-bottom: 6px; font-size: var(--t-sm); font-weight: 550; color: var(--ink-2); }
+.tr-checks label { display: flex; gap: 8px; align-items: center; font-size: var(--t-sm); }
+.tr-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 12px; }

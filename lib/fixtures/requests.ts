@@ -30,6 +30,11 @@ const store_request_items: Row[] = [
   { id: "e1000000-0000-4000-8000-000000000002", request_id: store_requests[0].id, position: 1, product: "SommaSleep Spray Oral Antirronquidos", quantity: 400, created_at: at(1) },
 ];
 store_requests[0].quantity = 900;
+// Vital Market reparte el colágeno entre los países (sale en "Por enviar" de Honduras, El Salvador y Costa Rica)
+store_request_items.push({
+  id: "e1000000-0000-4000-8000-000000000003", request_id: store_requests[1].id, position: 0, product: "Colágeno Hidrolizado", quantity: 1200,
+  country_quantities: { HN: 300, SV: 200, CR: 100, GT: 600 }, created_at: at(3),
+});
 
 // productos nuevos (lo que piden y todavía no está en Drop): la crema del cliente potencial, sin
 // vincular, y el mini ventilador, ya vinculado con el MINI FAN de Drop Honduras
