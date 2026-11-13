@@ -72,6 +72,8 @@ test("estados de Drop", () => {
   assert.deepEqual(settlementStatus("failed"), { status: "rejected", label: "Fallida" });
   assert.deepEqual(settlementStatus("pending"), { status: "pending", label: "Pendiente" });
   assert.deepEqual(settlementStatus("processing"), { status: "pending", label: "En proceso" });
+  // así lo manda Drop mientras procesa una solicitud
+  assert.deepEqual(settlementStatus("in_process"), { status: "pending", label: "En proceso" });
   assert.deepEqual(settlementStatus(null), { status: "pending", label: "Pendiente" });
   assert.deepEqual(settlementStatus("raro"), { status: "pending", label: "raro" });
 });

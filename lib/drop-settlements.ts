@@ -47,7 +47,7 @@ export function settlementStatus(raw: unknown): { status: DropStatus; label: str
   if (/^(failed|failure|error)$/.test(s)) return { status: "rejected", label: "Fallida" };
   if (/^(cancell?ed|voided)$/.test(s)) return { status: "rejected", label: "Cancelada" };
   if (/^(reversed|returned|refunded)$/.test(s)) return { status: "rejected", label: "Revertida" };
-  if (/^(processing|in_?progress|approved|sent|in_?transit)$/.test(s)) return { status: "pending", label: "En proceso" };
+  if (/^(processing|in_?process|in_?progress|approved|sent|in_?transit|on_?hold)$/.test(s)) return { status: "pending", label: "En proceso" };
   return { status: "pending", label: s ? (s === "pending" || s === "requested" || s === "created" ? "Pendiente" : s) : "Pendiente" };
 }
 
