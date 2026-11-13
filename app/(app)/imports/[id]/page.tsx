@@ -20,6 +20,7 @@ import {
 import { catalogChoices, dropStates, getImport, listSuppliers, salePrices } from "@/lib/imports-data";
 import { available, carrierOf, PROVIDER_LABEL, trackingKeys, trackingProvider } from "@/lib/carrier-tracking";
 import { integrationKey } from "@/lib/integrations";
+import { trackPlace } from "@/lib/track-place";
 import { trackAlert, trackStatusInfo } from "@/lib/tracking17";
 import { can } from "@/lib/permissions";
 import {
@@ -55,6 +56,8 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
     aiKey && d.kind !== "photo" && ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(d.content_type) && (d.size_bytes ?? 0) <= 20 * 1024 * 1024;
   // seguimiento automático: solo si lo guardado es de la guía actual
   const tracked = imp.tracking_number && imp.track_registered === imp.tracking_number ? imp : null;
+  // dónde va: país de origen, en tránsito o país de destino
+  const place = tracked ? trackPlace({ status: tracked.track_status, location: tracked.track_location }, imp) : null;
   const trackable = Boolean(imp.tracking_number) && TRACKED_STATUSES.includes(imp.status as ImportStatus);
   const stale = staleDays(imp, events.find((e) => isNews(e.kind))?.at ?? null, today);
   // costos y pagos del historial: solo con permiso de Dinero
@@ -178,6 +181,11 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
                   <b>Seguimiento automático</b>
                   {tracked?.track_status && <span className="pill" data-tone={trackStatusInfo(tracked.track_status).tone}>{trackStatusInfo(tracked.track_status).label}</span>}
                 </div>
+                {place && (
+                  <p className="im-where im-where-lg" data-phase={place.phase}>
+                    {place.label}{place.city && place.phase !== "delivered" ? <span className="sub"> · {place.city}</span> : null}
+                  </p>
+                )}
                 {tracked?.track_event && (
                   <p className="im-track-event">
                     {tracked.track_event}

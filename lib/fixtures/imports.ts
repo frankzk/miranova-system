@@ -29,6 +29,9 @@ export const fixtures: FixtureModule = {
         ordered_at: date(-10), eta: date(2), arrived_at: null, transport: "courier", carrier: "DHL", tracking_number: "1234567890", tracking_url: null,
         weight_kg: 42, reported_at: null, reported_by: null, notes: "Pedido mixto: peladores y mini ventiladores.", created_by: OWNER,
         created_at: iso(-12), updated_at: iso(-1),
+        // lo último que dijo DHL (el seguimiento automático lo actualiza cada 3 horas)
+        track_registered: "1234567890", track_status: "InTransit", track_sub_status: "transit", track_event: "Salió de la instalación de DHL · CINCINNATI HUB - USA",
+        track_location: "CINCINNATI HUB - USA", track_event_at: iso(-0.2), track_eta: date(3), track_checked_at: iso(-0.1), track_error: null,
       },
       {
         id: B, code: `IMP-${new Date().getFullYear()}-002`, supplier_id: S2, supplier: "Shenzhen Gadgets", origin: "China", dest_country: "GT", status: "quote",

@@ -42,6 +42,8 @@ export type ImportRow = {
   track_status?: string | null;
   track_sub_status?: string | null;
   track_event?: string | null;
+  /** lugar de la última novedad, tal como lo manda la paquetera */
+  track_location?: string | null;
   track_event_at?: string | null;
   track_eta?: string | null;
   track_checked_at?: string | null;
