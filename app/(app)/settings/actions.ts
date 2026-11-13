@@ -50,7 +50,9 @@ export async function createAccount(form: FormData) {
   // Cuenta de dropshipper dedicada a espiar el catálogo (no baja órdenes).
   const catalogOnly = form.get("catalog_only") === "on";
 
-  const name = field(form, "name") || `${p.id === "soydrop" ? "Drop" : "Dropi"} ${country.name}`;
+  const name = field(form, "name") || `${p.id === "soydrop" ? "Drop" : p.id === "boxful" ? "Boxful" : "Dropi"} ${country.name}`;
+  // Boxful: solo liquidaciones (no baja pedidos, no tiene historial que cargar)
+  const settlementsOnly = p.id === "boxful";
 
   // evita duplicados (p. ej. doble clic): misma plataforma + correo + país
   const dup = await db()
@@ -75,9 +77,9 @@ export async function createAccount(form: FormData) {
       password_enc: encrypt(password),
       totp_secret_enc: totp ? encrypt(totp) : null,
       enabled: p.ready,
-      catalog_only: catalogOnly,
-      // una cuenta de catálogo no baja historial de órdenes
-      backfill_cursor: catalogOnly ? null : new Date(Date.now() - 45 * 86_400_000).toISOString(),
+      catalog_only: catalogOnly && !settlementsOnly,
+      // una cuenta de catálogo (o de solo liquidaciones) no baja historial de órdenes
+      backfill_cursor: catalogOnly || settlementsOnly ? null : new Date(Date.now() - 45 * 86_400_000).toISOString(),
     })
     .select("id")
     .single();

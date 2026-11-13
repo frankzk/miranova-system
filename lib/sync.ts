@@ -1,6 +1,7 @@
 import "server-only";
 import { getAccount, updateAccount, type Account } from "./accounts";
 import { connectorFor, PlatformError, SessionExpired, type Connector, type Session } from "./connectors";
+import { boxful } from "./connectors/boxful";
 import { SOYDROP_BALANCE_PAGE_SIZE, SOYDROP_CATALOG_PAGE_SIZE, SOYDROP_PAGE_SIZE, SOYDROP_PRODUCTS_PAGE_SIZE, STOCK_MOVEMENTS_PAGE_SIZE } from "./connectors/soydrop";
 import { todayIn } from "./format";
 import { advanceImports, linkNewProducts, productsToWatch } from "./imports-data";
@@ -34,6 +35,7 @@ const OPEN_REFRESH_EVERY_MS = 6 * 3_600_000; // pedidos abiertos fuera de la ven
 const OPEN_REFRESH_MAX_DAYS = 120;
 const MAX_CATALOG_PAGES = 300; // catálogo de la competencia: puede ser grande
 const WALLET_PROBE_EVERY_MS = 6 * 3_600_000; // si no se encontró la billetera, reintentar cada 6 h
+const SETTLEMENT_PROBE_EVERY_MS = 6 * 3_600_000; // Boxful: diagnóstico de la ruta de liquidaciones
 const SETTLEMENTS_EVERY_MS = 30 * 60_000; // liquidaciones de Drop (en la billetera)
 const SETTLEMENTS_WINDOW_DAYS = 30; // después de la primera lectura completa, se relee este tramo…
 const MAX_BALANCE_PAGES = 300; // …o hasta la liquidación pendiente más vieja; tope de páginas de 100
@@ -126,6 +128,8 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
 
   // Cuenta de dropshipper dedicada a espiar el catálogo: baja solo el catálogo, no órdenes.
   if (acc.catalog_only) return syncCatalogAccount(acc, deadline);
+  // Boxful (Mireva): solo las liquidaciones de Conciliación, no pedidos.
+  if (acc.platform === "boxful") return syncBoxfulAccount(acc);
 
   const c = connectorFor(acc.platform, acc.country, acc.timezone);
   const pageSize = c.pageSize ?? SOYDROP_PAGE_SIZE;
@@ -327,6 +331,39 @@ async function syncAccountData(accountId: string, deadline: number): Promise<Syn
     console.error(`sync ${acc.name}`, e);
     await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message });
     return { ok: false, message, saved, changed };
+  }
+}
+
+/**
+ * Boxful de Mireva: por ahora inicia sesión y busca (solo lectura, cada 6 h) dónde entrega Boxful las
+ * liquidaciones; el diagnóstico queda en la cuenta para terminar la lectura con la forma real de la respuesta.
+ */
+async function syncBoxfulAccount(acc: Account): Promise<SyncResult> {
+  try {
+    let session = await loadSession(acc);
+    const last = (acc.debug as { boxful_probe?: { at?: string } } | null)?.boxful_probe?.at;
+    if (!last || Date.now() - Date.parse(last) > SETTLEMENT_PROBE_EVERY_MS) {
+      let probe;
+      try {
+        probe = await boxful.probeSettlements(session);
+      } catch (e) {
+        if (!(e instanceof SessionExpired)) throw e;
+        session = await freshSession((await getAccount(acc.id))!);
+        probe = await boxful.probeSettlements(session);
+      }
+      const fresh = (await getAccount(acc.id))!;
+      await updateAccount(acc.id, { debug: { ...(fresh.debug ?? {}), boxful_probe: { at: new Date().toISOString(), ...probe } } });
+    }
+    const message = "Sesión iniciada en Boxful. Buscando dónde entrega las liquidaciones (diagnóstico guardado).";
+    await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: true, last_sync_msg: message, settlements_msg: message });
+    return { ok: true, message, saved: 0, changed: 0 };
+  } catch (e) {
+    const message = e instanceof PlatformError || e instanceof SessionExpired
+      ? e.message
+      : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
+    console.error(`boxful sync ${acc.name}`, e);
+    await updateAccount(acc.id, { last_sync_at: new Date().toISOString(), last_sync_ok: false, last_sync_msg: message }).catch(() => {});
+    return { ok: false, message, saved: 0, changed: 0 };
   }
 }
 

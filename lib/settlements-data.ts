@@ -40,7 +40,7 @@ export async function settlementData(company: Company): Promise<{
   const [s, ex, acc] = await Promise.all([
     allSettlements(company),
     db().from("settlement_exempt_entries").select("id,entry_id,reason,created_by,created_at").eq("company", company).is("revoked_at", null),
-    db().from("accounts").select("id,name,settlements_sync_at,settlements_msg").eq("platform", "soydrop").eq("catalog_only", false).eq("enabled", true).order("name"),
+    db().from("accounts").select("id,name,settlements_sync_at,settlements_msg").in("platform", ["soydrop", "boxful"]).eq("catalog_only", false).eq("enabled", true).order("name"),
   ]);
   // sin la migración todavía: la conciliación de siempre sigue funcionando
   if (missing(s.error) || missing(ex.error)) return { settlements: [], exempt: [], sources: [], ready: false };
