@@ -171,6 +171,11 @@ class Query {
   in(c: string, v: any[]) { this.filters.push((r) => v.includes(r[c])); return this; }
   neq(c: string, v: any) { this.filters.push((r) => r[c] !== v); return this; }
   is(c: string, v: any) { this.filters.push((r) => (r[c] ?? null) === v); return this; }
+  not(c: string, op: string, v: any) {
+    if (op === "is") this.filters.push((r) => (r[c] ?? null) !== v);
+    else if (op === "eq") this.filters.push((r) => r[c] !== v);
+    return this;
+  }
   lt(c: string, v: any) { this.filters.push((r) => r[c] < v); return this; }
   gt(c: string, v: any) { this.filters.push((r) => r[c] > v); return this; }
   ilike(c: string, v: string) { this.filters.push((r) => String(r[c] ?? "").toLowerCase().includes(v.replace(/[%*]/g, "").toLowerCase())); return this; }

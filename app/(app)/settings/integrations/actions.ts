@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { KeyFormState } from "@/components/assistant-keys";
 import type { ImportFormState } from "@/components/import-forms";
 import { authorizeAction } from "@/lib/auth";
 import { carrierTracker, PROVIDER_LABEL, trackingKeys, type Carrier } from "@/lib/carrier-tracking";
 import { saveIntegrations } from "@/lib/integrations";
+import { createAssistantKey, listAssistantKeys, revokeAssistantKey } from "@/lib/problem-notices-data";
 import { trackStatusInfo } from "@/lib/tracking17";
 
 // Ajustes → Integraciones: solo el dueño. Las claves se guardan cifradas y nunca se muestran.
@@ -71,4 +73,36 @@ export async function testTrackingAction(_prev: ImportFormState, form: FormData)
   } catch (e) {
     return fail(e instanceof Error ? e.message : `No se pudo consultar a ${label}.`);
   }
+}
+
+// ─── Asistentes (MCP) ───
+
+/** Crea una llave para un asistente; la devuelve una sola vez. */
+export async function createAssistantKeyAction(_prev: KeyFormState, form: FormData): Promise<KeyFormState> {
+  const auth = await authorizeAction();
+  if (!auth.ok) return { ok: false, msg: auth.msg };
+  if (!auth.user.is_owner) return { ok: false, msg: "Solo el dueño puede crear llaves." };
+  const name = field(form, "name").replace(/\s+/g, " ").slice(0, 60);
+  if (!name) return { ok: false, msg: "Ponle un nombre (por ejemplo, Grok)." };
+  const keys = await listAssistantKeys();
+  if (keys === null) return { ok: false, msg: "Falta aplicar la migración de asistentes." };
+  if (keys.filter((k) => !k.revoked_at).length >= 10) return { ok: false, msg: "Ya hay 10 llaves activas: revoca alguna antes de crear otra." };
+  try {
+    const key = await createAssistantKey(name, auth.user.id);
+    revalidatePath("/settings/integrations");
+    return { ok: true, msg: "Llave creada.", key };
+  } catch (e) {
+    return { ok: false, msg: `No se pudo crear: ${e instanceof Error ? e.message : "error"}` };
+  }
+}
+
+export async function revokeAssistantKeyAction(_prev: ImportFormState, form: FormData): Promise<ImportFormState> {
+  const auth = await authorizeAction();
+  if (!auth.ok) return fail(auth.msg);
+  if (!auth.user.is_owner) return fail("Solo el dueño puede revocar llaves.");
+  const id = field(form, "id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Esa llave no existe.");
+  await revokeAssistantKey(id);
+  revalidatePath("/settings/integrations");
+  return { ok: true, msg: "Revocada." };
 }
