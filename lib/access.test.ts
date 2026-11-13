@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hashPassword, makeSessionToken, readSessionToken, verifyPassword } from "./passwords.ts";
-import { can, effectivePermissions, normalizePermissions, passwordProblem, permissionFlags, ungrantable, USERNAME_RE } from "./permissions.ts";
+import { can, effectivePermissions, importsAccess, normalizePermissions, passwordProblem, permissionFlags, ungrantable, USERNAME_RE } from "./permissions.ts";
 
 const UID = "11111111-2222-4333-8444-555555555555";
 const SECRET = "test-secret";
@@ -40,6 +40,13 @@ test("permisos: el dueño puede todo; los demás solo lo marcado", () => {
 
 test("permisos del formulario: claves desconocidas fuera, editar tiendas incluye verlas", () => {
   assert.deepEqual(normalizePermissions(["money", "admin", "stores_edit", "money"]), ["stores", "stores_edit", "money"]);
+  // Compras completo deja sin efecto "solo ver"
+  assert.deepEqual(normalizePermissions(["imports_view", "imports"]), ["imports"]);
+  assert.deepEqual(normalizePermissions(["imports_view"]), ["imports_view"]);
+  assert.equal(importsAccess({ is_owner: false, permissions: ["imports_view"] }), "view");
+  assert.equal(importsAccess({ is_owner: false, permissions: ["imports"] }), "edit");
+  assert.equal(importsAccess({ is_owner: false, permissions: [] }), null);
+  assert.equal(importsAccess({ is_owner: true, permissions: [] }), "edit");
 });
 
 test("solo se otorgan permisos que uno mismo tiene", () => {

@@ -5,7 +5,7 @@ import { ImportsSubnav } from "@/components/imports-subnav";
 import { SideSheet } from "@/components/side-sheet";
 import { BuildTransferForm, NewTransferForm, SettleForm } from "@/components/transfer-forms";
 import { PageHead } from "@/components/ui";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { COUNTRIES, countryByCode } from "@/lib/countries";
 import { fmtInt, todayIn } from "@/lib/format";
 import { can } from "@/lib/permissions";
@@ -35,8 +35,10 @@ const VIEWS = [
 const shortDay = (d: string | null) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("es-HN", { day: "numeric", month: "short", timeZone: "UTC" }).replace(/\./g, "") : "—");
 
 export default async function TransfersPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const [user, points, transfers, docs, sp] = await Promise.all([requirePermission("imports"), listPoints(), listTransfers(), documentKinds(), searchParams]);
-  const pending = await listPending(transfers, points);
+  const [user, points, transfers, docs, sp] = await Promise.all([requireAnyPermission("imports", "imports_view"), listPoints(), listTransfers(), documentKinds(), searchParams]);
+  // "Compras (solo ver)": sin crear ni armar, y sin los repartos (son de Solicitudes y Laboratorios)
+  const edit = can(user, "imports");
+  const pending = edit ? await listPending(transfers, points) : [];
   const money = can(user, "money");
   const today = todayIn();
   const pointOf = new Map(points.map((p) => [p.id, p]));
@@ -144,8 +146,8 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
         </>}
         actions={
           <>
-            <Link className="btn" href="/imports/transfers/bodegas">Bodegas</Link>
-            {!noPoints && (
+            {edit && <Link className="btn" href="/imports/transfers/bodegas">Bodegas</Link>}
+            {edit && !noPoints && (
               <SideSheet trigger={<><IconPlus /> Nuevo traslado</>} triggerClass="btn btn-primary" title="Nuevo traslado" sub="De dónde sale y a qué país va; después agregas los productos">
                 <NewTransferForm action={createTransfer} points={points} countries={countries} />
               </SideSheet>
@@ -153,7 +155,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
           </>
         }
       />
-      <ImportsSubnav money={money} />
+      <ImportsSubnav money={money} full={edit} />
 
       {noPoints ? (
         <div className="empty">
@@ -251,49 +253,51 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                 <span className="aside">Traslados preparándose: cuando salgan, márcalos como enviados (o ponles la fecha de salida) y pasan a En ruta</span>
               </div>
               {preparing.length === 0 ? (
-                <p className="panel-note subtle">No hay traslados preparándose. Ármalos desde los repartos de abajo o con “Nuevo traslado”.</p>
+                <p className="panel-note subtle">{edit ? "No hay traslados preparándose. Ármalos desde los repartos de abajo o con “Nuevo traslado”." : "No hay traslados preparándose."}</p>
               ) : transferTable(preparing)}
             </section>
-            <section className="panel" aria-labelledby="tr-pending-h">
-              <div className="panel-head">
-                <h2 id="tr-pending-h">Repartos por enviar</h2>
-                <span className="aside">Lo repartido a otros países en Solicitudes y Laboratorios, menos lo que ya salió</span>
-              </div>
-              {pending.length === 0 ? (
-                <p className="panel-note subtle">Nada por enviar. Cuando en Solicitudes («Editar reparto») o en Laboratorios repartan unidades a Honduras, El Salvador o Costa Rica, aparecen aquí para armar el traslado.</p>
-              ) : (
-                [...pendingBy.entries()].map(([c, list]) => (
-                  <div className="tr-pending" key={c}>
-                    <div className="tr-pending-head">
-                      <h3>{countryName(c)} <span className="sub">{list.length} {list.length === 1 ? "producto" : "productos"} · {fmtInt(list.reduce((s, r) => s + r.pending, 0))} u.</span></h3>
-                      {origins.length > 0 && (
-                        <SideSheet trigger={<><IconPlus /> Armar traslado</>} triggerClass="btn btn-sm" title={`Traslado a ${countryName(c)}`} sub="Marca lo que sale junto, cuántas unidades y a qué bodega va">
-                          <BuildTransferForm action={buildTransfer} country={c} countryName={countryName(c)} rows={list} points={points} />
-                        </SideSheet>
-                      )}
+            {edit && (
+              <section className="panel" aria-labelledby="tr-pending-h">
+                <div className="panel-head">
+                  <h2 id="tr-pending-h">Repartos por enviar</h2>
+                  <span className="aside">Lo repartido a otros países en Solicitudes y Laboratorios, menos lo que ya salió</span>
+                </div>
+                {pending.length === 0 ? (
+                  <p className="panel-note subtle">Nada por enviar. Cuando en Solicitudes («Editar reparto») o en Laboratorios repartan unidades a Honduras, El Salvador o Costa Rica, aparecen aquí para armar el traslado.</p>
+                ) : (
+                  [...pendingBy.entries()].map(([c, list]) => (
+                    <div className="tr-pending" key={c}>
+                      <div className="tr-pending-head">
+                        <h3>{countryName(c)} <span className="sub">{list.length} {list.length === 1 ? "producto" : "productos"} · {fmtInt(list.reduce((s, r) => s + r.pending, 0))} u.</span></h3>
+                        {origins.length > 0 && (
+                          <SideSheet trigger={<><IconPlus /> Armar traslado</>} triggerClass="btn btn-sm" title={`Traslado a ${countryName(c)}`} sub="Marca lo que sale junto, cuántas unidades y a qué bodega va">
+                            <BuildTransferForm action={buildTransfer} country={c} countryName={countryName(c)} rows={list} points={points} />
+                          </SideSheet>
+                        )}
+                      </div>
+                      <div className="table-scroll">
+                        <table className="table stack tr-pending-table">
+                          <thead><tr><th>Producto</th><th>De</th><th>Bodega</th><th className="r">Repartido</th><th className="r">Enviado</th><th className="r">Falta</th><th><span className="sr-only">Acciones</span></th></tr></thead>
+                          <tbody>
+                            {list.map((r) => (
+                              <tr key={r.source}>
+                                <td data-slot="id"><span className="strong">{r.product}</span><div className="sub">{r.kind === "maquila" ? "Maquilado" : "Importado"}</div></td>
+                                <td className="tr-wide">{r.from}<div className="sub">{r.state} · {shortDay(r.date)}</div></td>
+                                <td className="tr-wide" data-label="Bodega">{r.dest_id ? pointName(r.dest_id) : <span className="subtle">se elige al armar</span>}</td>
+                                <td className="num" data-label="Repartido">{fmtInt(r.allocated)}</td>
+                                <td className="num" data-label="Enviado">{r.sent ? fmtInt(r.sent) : <span className="subtle">0</span>}</td>
+                                <td className="num strong" data-label="Falta">{fmtInt(r.pending)}</td>
+                                <td className="r"><SettleForm action={settlePending} source={r.source} product={r.product} /></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    <div className="table-scroll">
-                      <table className="table stack tr-pending-table">
-                        <thead><tr><th>Producto</th><th>De</th><th>Bodega</th><th className="r">Repartido</th><th className="r">Enviado</th><th className="r">Falta</th><th><span className="sr-only">Acciones</span></th></tr></thead>
-                        <tbody>
-                          {list.map((r) => (
-                            <tr key={r.source}>
-                              <td data-slot="id"><span className="strong">{r.product}</span><div className="sub">{r.kind === "maquila" ? "Maquilado" : "Importado"}</div></td>
-                              <td className="tr-wide">{r.from}<div className="sub">{r.state} · {shortDay(r.date)}</div></td>
-                              <td className="tr-wide" data-label="Bodega">{r.dest_id ? pointName(r.dest_id) : <span className="subtle">se elige al armar</span>}</td>
-                              <td className="num" data-label="Repartido">{fmtInt(r.allocated)}</td>
-                              <td className="num" data-label="Enviado">{r.sent ? fmtInt(r.sent) : <span className="subtle">0</span>}</td>
-                              <td className="num strong" data-label="Falta">{fmtInt(r.pending)}</td>
-                              <td className="r"><SettleForm action={settlePending} source={r.source} product={r.product} /></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))
-              )}
-            </section>
+                  ))
+                )}
+              </section>
+            )}
             </>
           )}
         </>

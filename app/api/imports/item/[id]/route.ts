@@ -1,4 +1,4 @@
-import { authorizeRoute } from "@/lib/auth";
+import { authorizeRouteAny } from "@/lib/auth";
 import { signedRead } from "@/lib/imports-data";
 import { db } from "@/lib/supabase";
 
@@ -7,7 +7,7 @@ import { db } from "@/lib/supabase";
 const TTL_S = 3600;
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await authorizeRoute("imports");
+  const user = await authorizeRouteAny("imports", "imports_view");
   if (user instanceof Response) return user;
   const id = (await params).id;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return Response.json({ error: "No existe" }, { status: 404 });

@@ -62,6 +62,9 @@ function PermissionChecks({ value, lockedPerms, allLocked }: { value: readonly s
     if (k === "stores" && !on) next.delete("stores_edit");
     if (k === "photos" && on) next.add("products");
     if (k === "products" && !on) next.delete("photos");
+    // Compras completo y "solo ver" se excluyen
+    if (k === "imports" && on) next.delete("imports_view");
+    if (k === "imports_view" && on) next.delete("imports");
     setSel(next);
   };
   return (

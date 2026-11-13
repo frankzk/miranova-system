@@ -6,7 +6,7 @@ import { ImportsSubnav } from "@/components/imports-subnav";
 import { SideSheet } from "@/components/side-sheet";
 import { PageHead } from "@/components/ui";
 import { listAccounts } from "@/lib/accounts";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { countryByCode, COUNTRIES } from "@/lib/countries";
 import { fmtInt, fmtMoney, todayIn } from "@/lib/format";
 import { ARRIVED, importChecklist, isActive, isLate, needsReport, staleDays, statusInfo, trackingUrl } from "@/lib/imports";
@@ -35,8 +35,10 @@ const VIEWS = [
 const shortDay = (d: string | null) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("es-HN", { day: "numeric", month: "short", timeZone: "UTC" }) : "—");
 
 export default async function ImportsPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const [user, accounts, all, suppliers, sp] = await Promise.all([requirePermission("imports"), listAccounts(), listImports(), listSuppliers(), searchParams]);
+  const [user, accounts, all, suppliers, sp] = await Promise.all([requireAnyPermission("imports", "imports_view"), listAccounts(), listImports(), listSuppliers(), searchParams]);
   const money = can(user, "money");
+  // "Compras (solo ver)": sin crear ni avisos internos
+  const edit = can(user, "imports");
   const today = todayIn();
   const view = VIEWS.find((v) => v.id === one(sp, "v")) ?? VIEWS[0];
   const country = one(sp, "c");
@@ -71,17 +73,19 @@ export default async function ImportsPage({ searchParams }: { searchParams: Prom
         sub={<>
           {fmtInt(active.length)} {active.length === 1 ? "activa" : "activas"}
           {money && active.length > 0 && <> · {fmtMoney(inTransit, "USD")} en camino</>}
-          {toReport > 0 && <> · <span className="im-alert-text">{toReport} sin avisar a la bodega</span></>}
+          {edit && toReport > 0 && <> · <span className="im-alert-text">{toReport} sin avisar a la bodega</span></>}
           {lateCount > 0 && <> · <span className="im-alert-text">{lateCount} {lateCount === 1 ? "atrasada" : "atrasadas"}</span></>}
           {staleCount > 0 && <> · <span className="im-warn-text">{staleCount} sin novedades</span></>}
         </>}
         actions={
-          <SideSheet trigger={<><IconPlus /> Nueva importación</>} triggerClass="btn btn-primary" title="Nueva importación" sub="Después agregas los productos, costos y documentos">
-            <NewImportForm action={createImport} countries={countries} defaultCountry={defaultCountry} suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, origin: s.origin }))} />
-          </SideSheet>
+          edit && (
+            <SideSheet trigger={<><IconPlus /> Nueva importación</>} triggerClass="btn btn-primary" title="Nueva importación" sub="Después agregas los productos, costos y documentos">
+              <NewImportForm action={createImport} countries={countries} defaultCountry={defaultCountry} suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, origin: s.origin }))} />
+            </SideSheet>
+          )
         }
       />
-      <ImportsSubnav money={money} />
+      <ImportsSubnav money={money} full={edit} />
 
       <nav className="tabs" aria-label="Importaciones">
         {VIEWS.map((v) => (

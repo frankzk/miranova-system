@@ -11,7 +11,7 @@ import { NavPending } from "./nav-pending";
 export type SideAccount = { id: string; name: string; tone: "success" | "danger" | "neutral" | "warning"; meta: string };
 
 // cada sección solo aparece con su permiso (la página igual lo vuelve a revisar)
-const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permission; match: (p: string) => boolean }[] = [
+const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permission; alsoPerm?: Permission; match: (p: string) => boolean }[] = [
   { href: "/", label: "Inicio", icon: IconHome, match: (p: string) => p === "/" },
   { href: "/business", label: "Negocio", icon: IconChart, perm: "business", match: (p: string) => p.startsWith("/business") },
   { href: "/delivery-rates", label: "Tasas de entrega", icon: IconChart, perm: "business", match: (p: string) => p.startsWith("/delivery-rates") },
@@ -19,7 +19,7 @@ const NAV: { href: string; label: string; icon: typeof IconHome; perm?: Permissi
   { href: "/orders", label: "Órdenes", icon: IconOrders, perm: "orders", match: (p: string) => p.startsWith("/orders") },
   { href: "/stores", label: "Tiendas", icon: IconStore, perm: "stores", match: (p: string) => p.startsWith("/stores") },
   { href: "/products", label: "Productos", icon: IconBox, perm: "products", match: (p: string) => p.startsWith("/products") },
-  { href: "/imports", label: "Compras", icon: IconShip, perm: "imports", match: (p: string) => p.startsWith("/imports") },
+  { href: "/imports", label: "Compras", icon: IconShip, perm: "imports", alsoPerm: "imports_view", match: (p: string) => p.startsWith("/imports") },
   { href: "/requests", label: "Solicitudes", icon: IconInbox, perm: "requests", match: (p: string) => p.startsWith("/requests") },
   { href: "/money", label: "Dinero", icon: IconMoney, perm: "money", match: (p: string) => p.startsWith("/money") },
   { href: "/reconciliation", label: "Conciliación bancaria", icon: IconMoney, perm: "reconciliation", match: (p: string) => p.startsWith("/reconciliation") },
@@ -142,7 +142,7 @@ export function AppFrame({
             ...(perms.accounts || perms.users
               ? [{ href: perms.accounts ? "/settings" : "/settings/users", label: "Ajustes", icon: IconAccounts, match: (p: string) => p.startsWith("/settings") }]
               : []),
-          ].filter((n) => !locked && (!("perm" in n) || !n.perm || perms[n.perm as Permission])).map(({ href, label, icon: Icon, match }) => (
+          ].filter((n) => !locked && (!("perm" in n) || !n.perm || perms[n.perm as Permission] || ("alsoPerm" in n && !!n.alsoPerm && perms[n.alsoPerm as Permission]))).map(({ href, label, icon: Icon, match }) => (
             <Link key={href} href={href} aria-current={match(pathname) ? "page" : undefined}>
               <Icon />
               {label}

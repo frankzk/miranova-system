@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Vistas de Compras: importaciones, laboratorios, traslados, proveedores y (con permiso de Dinero) los reportes. */
-export function ImportsSubnav({ money }: { money: boolean }) {
+/**
+ * Vistas de Compras: importaciones, laboratorios, traslados, proveedores y (con permiso de Dinero) los reportes.
+ * Con "Compras (solo ver)" (`full` en false), solo importaciones y traslados.
+ */
+export function ImportsSubnav({ money, full = true }: { money: boolean; full?: boolean }) {
   const path = usePathname();
   const items = [
     { href: "/imports", label: "Importaciones" },
-    { href: "/imports/labs", label: "Laboratorios" },
+    ...(full ? [{ href: "/imports/labs", label: "Laboratorios" }] : []),
     { href: "/imports/transfers", label: "Traslados" },
-    { href: "/imports/suppliers", label: "Proveedores" },
-    ...(money ? [{ href: "/imports/reports", label: "Reportes" }] : []),
+    ...(full ? [{ href: "/imports/suppliers", label: "Proveedores" }] : []),
+    ...(money && full ? [{ href: "/imports/reports", label: "Reportes" }] : []),
   ];
   return (
     <nav className="segmented subnav" aria-label="Vista de compras">

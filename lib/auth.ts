@@ -54,6 +54,13 @@ export async function requirePermission(p: Permission): Promise<SessionUser> {
   return u;
 }
 
+/** Páginas: exige alguno de los permisos; sin ninguno, lleva a "Sin acceso" (con el primero). */
+export async function requireAnyPermission(...ps: Permission[]): Promise<SessionUser> {
+  const u = await requireUser();
+  if (!ps.some((p) => can(u, p))) redirect(`/sin-acceso?p=${ps[0]}`);
+  return u;
+}
+
 export type ActionAuth = { ok: true; user: SessionUser } | { ok: false; msg: string };
 
 /** Acciones del servidor: el usuario si tiene el permiso; si no, el mensaje para mostrar. */
@@ -71,6 +78,14 @@ export async function authorizeRoute(...perms: Permission[]): Promise<SessionUse
   if (!u || u.must_change_password) return Response.json({ error: "No autorizado" }, { status: 401 });
   const missing = perms.find((p) => !can(u, p));
   if (missing) return Response.json({ error: `Sin permiso de ${permissionLabel(missing)}` }, { status: 403 });
+  return u;
+}
+
+/** Rutas de API: el usuario si tiene alguno de los permisos, o la respuesta 401/403. */
+export async function authorizeRouteAny(...perms: Permission[]): Promise<SessionUser | Response> {
+  const u = await currentUser();
+  if (!u || u.must_change_password) return Response.json({ error: "No autorizado" }, { status: 401 });
+  if (!perms.some((p) => can(u, p))) return Response.json({ error: `Sin permiso de ${permissionLabel(perms[0])}` }, { status: 403 });
   return u;
 }
 
