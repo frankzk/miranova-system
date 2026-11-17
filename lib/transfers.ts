@@ -4,7 +4,7 @@
 // servidor, cliente y pruebas.
 
 import { LAB_DESTINATIONS, labStatus, type LabPurchase } from "./lab-purchases.ts";
-import { norm, OPEN_STATUSES, requestAllocation, requestItems, requestStatus, type StoreRequest } from "./store-requests.ts";
+import { norm, requestAllocation, requestItems, requestStatus, TO_SEND_STATUSES, type StoreRequest } from "./store-requests.ts";
 
 export const TRANSFER_STATUSES = [
   { id: "preparing", label: "Preparando", tone: "neutral" },
@@ -337,7 +337,8 @@ export function pendingToSend(input: {
     if (row.allocated - sent > 0) out.push({ ...row, sent, pending: row.allocated - sent });
   };
   for (const r of input.requests) {
-    if (!(OPEN_STATUSES as readonly string[]).includes(r.status)) continue;
+    // ya salió hacia el destino (o terminó, o se descartó): no queda nada por enviar
+    if (!(TO_SEND_STATUSES as readonly string[]).includes(r.status)) continue;
     // el mismo producto escrito dos veces en una solicitud se suma (como en Lo más pedido)
     const merged = new Map<string, { product: string; byCountry: Record<string, number> }>();
     for (const it of requestItems(r)) {

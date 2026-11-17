@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   cleanProductName, cleanRequest, demandByProduct, filterRequests, inScope, isDay, isOverdue, isRequestPhotoPath, matchesRequest, norm, parseRequestFilters, prospectSuggestions,
-  requestItems, requestPhotoProblem, requestPhotoType, requestProductIndex, storeSuggestions, type StoreRequest,
+  OPEN_STATUSES, REQUEST_STATUSES, requestItems, requestPhotoProblem, requestPhotoType, requestProductIndex, requestStatus, storeSuggestions,
+  type StoreRequest,
 } from "./store-requests.ts";
 
 const ALLOWED = ["HN", "GT", "SV", "CR"];
@@ -152,6 +153,9 @@ test("fechas y origen: solicitud por defecto hoy, no futura; llegada no antes de
   assert.equal(isOverdue({ status: "done", arrival_at: "2026-10-22" }, today), false);
   assert.equal(isOverdue({ status: "in_progress", arrival_at: today }, today), false);
   assert.equal(isOverdue({ status: "pending", arrival_at: null }, today), false);
+  // los pasos intermedios siguen abiertos; ingresada o descartada, no
+  assert.equal(isOverdue({ status: "dest_verified", arrival_at: "2026-10-22" }, today), true);
+  assert.equal(isOverdue({ status: "dropped", arrival_at: "2026-10-22" }, today), false);
 });
 
 test("varios productos en una solicitud: filas vacías fuera, el mismo producto se suma, total y resumen", () => {
@@ -293,4 +297,14 @@ test("producto nuevo: se reconoce en las líneas sin importar mayúsculas ni til
   assert.equal(idx.get("crema hidratante nida")?.id, "1");
   assert.equal(idx.get(norm("  CREMA hidratante  NÍDA "))?.id, "1");
   assert.equal(idx.get("crema"), undefined);
+});
+
+test("estados de la solicitud: el recorrido completo, en orden", () => {
+  assert.deepEqual(REQUEST_STATUSES.map((s) => s.label), [
+    "Solicitado por el cliente", "Solicitado al laboratorio", "Recibido en Drop Guatemala", "En tránsito a país de destino",
+    "Recibido y verificado en destino", "Ingresado a inventario Drop", "Descartada",
+  ]);
+  assert.deepEqual([...OPEN_STATUSES], ["pending", "lab_requested", "gt_received", "in_progress", "dest_verified"]);
+  assert.equal(requestStatus("in_progress").label, "En tránsito a país de destino");
+  assert.equal(requestStatus("raro").label, "Solicitado por el cliente");
 });

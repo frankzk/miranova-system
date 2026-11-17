@@ -117,6 +117,11 @@ test("por enviar: repartos a otros países menos lo enviado; Guatemala no cuenta
   ]);
   // solicitudes cerradas no cuentan; una de un solo país va completa a ese país
   assert.equal(pendingToSend({ requests: [req({ status: "done" })], labs: [], points: POINTS, sent: new Map(), settled: new Set() }).length, 0);
+  // ya salió hacia el destino o llegó: nada por enviar; en Guatemala o pedido al laboratorio: sí
+  for (const status of ["in_progress", "dest_verified", "dropped"] as const)
+    assert.equal(pendingToSend({ requests: [req({ status })], labs: [], points: POINTS, sent: new Map(), settled: new Set() }).length, 0, status);
+  for (const status of ["pending", "lab_requested", "gt_received"] as const)
+    assert.ok(pendingToSend({ requests: [req({ status })], labs: [], points: POINTS, sent: new Map(), settled: new Set() }).length > 0, status);
   const single = pendingToSend({
     requests: [req({ countries: ["SV"], items: [{ product: "Autogrip", quantity: 300 }] })], labs: [], points: POINTS, sent: new Map(), settled: new Set(),
   });
