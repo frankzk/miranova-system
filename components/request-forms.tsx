@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { createRequestProduct, linkRequestProduct, searchDropProducts, startRequestPhotoUpload } from "@/app/(app)/requests/actions";
 import { IconClose, IconPlus, IconUpload } from "./icons";
 import {
-  CLIENT_KINDS, cleanProductName, MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, REQUEST_TYPES, requestPhotoProblem, type ClientKind,
+  CLIENT_KINDS, cleanProductName, MAX_ITEMS, norm, requestAllocation, ORIGIN_SUGGESTIONS, REQUEST_STATUSES, REQUEST_TYPES, requestPhotoProblem, requestStatus, type ClientKind,
   type DropProductRef, type ProspectSuggestion, type RequestItem, type RequestProduct, type RequestStatus, type RequestType, type StoreSuggestion,
 } from "@/lib/store-requests";
 import { useSheet } from "./side-sheet";
@@ -453,15 +453,27 @@ export function RequestForm({
 /** Estado desde la lista: se guarda al elegirlo. */
 export function RequestStatusSelect({ action, id, status }: { action: Action; id: string; status: RequestStatus }) {
   const [state, run, pending] = useActionState(action, null);
+  const [value, setValue] = useState<RequestStatus>(status);
+  // si no se pudo guardar, vuelve a mostrar el estado que tiene
+  useEffect(() => {
+    if (state && !state.ok) setValue(status);
+  }, [state, status]);
+  // los nombres son largos: se ve una caja que puede ocupar dos líneas y encima va el selector real, invisible
   return (
     <form action={run} className="rq-status">
       <input type="hidden" name="id" value={id} />
-      <select
-        className="select" name="status" defaultValue={status} disabled={pending} aria-label="Estado de la solicitud"
-        data-status={status} onChange={(e) => e.currentTarget.form?.requestSubmit()}
-      >
-        {REQUEST_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-      </select>
+      <span className="rq-status-box" data-status={value} data-busy={pending || undefined}>
+        <span className="rq-status-text" aria-hidden="true">{requestStatus(value).label}</span>
+        <select
+          className="rq-status-native" name="status" value={value} disabled={pending} aria-label="Estado de la solicitud"
+          onChange={(e) => {
+            setValue(e.currentTarget.value as RequestStatus);
+            e.currentTarget.form?.requestSubmit();
+          }}
+        >
+          {REQUEST_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+      </span>
       {state && !state.ok && <p className="im-msg" data-ok="false" role="alert">{state.msg}</p>}
     </form>
   );

@@ -4,17 +4,25 @@
 
 import { normalizePhone } from "./store-contacts.ts";
 
+// En el orden del recorrido. Los ids de siempre se conservan (pending, in_progress, done) para no tocar los datos:
+// in_progress es "En tránsito a país de destino".
 export const REQUEST_STATUSES = [
-  { id: "pending", label: "Solicitado", tone: "warning" },
-  { id: "in_progress", label: "En tránsito", tone: "info" },
-  { id: "done", label: "Llegó a Drop", tone: "success" },
+  { id: "pending", label: "Solicitado por el cliente", tone: "warning" },
+  { id: "lab_requested", label: "Solicitado al laboratorio", tone: "accent" },
+  { id: "gt_received", label: "Recibido en Drop Guatemala", tone: "info" },
+  { id: "in_progress", label: "En tránsito a país de destino", tone: "info" },
+  { id: "dest_verified", label: "Recibido y verificado en destino", tone: "accent" },
+  { id: "done", label: "Ingresado a inventario Drop", tone: "success" },
   { id: "dropped", label: "Descartada", tone: "neutral" },
 ] as const;
 
 export type RequestStatus = (typeof REQUEST_STATUSES)[number]["id"];
 
-/** Las que todavía esperan respuesta. */
-export const OPEN_STATUSES: readonly RequestStatus[] = ["pending", "in_progress"];
+/** Las que todavía no terminan (ni ingresadas a Drop ni descartadas). */
+export const OPEN_STATUSES: readonly RequestStatus[] = ["pending", "lab_requested", "gt_received", "in_progress", "dest_verified"];
+
+/** Las que todavía no salen hacia el país de destino: lo repartido a otros países sigue "Por enviar" (Traslados). */
+export const TO_SEND_STATUSES: readonly RequestStatus[] = ["pending", "lab_requested", "gt_received"];
 
 export const isRequestStatus = (v: unknown): v is RequestStatus => REQUEST_STATUSES.some((s) => s.id === v);
 export const requestStatus = (id: string) => REQUEST_STATUSES.find((s) => s.id === id) ?? REQUEST_STATUSES[0];
@@ -369,7 +377,7 @@ export function storeSuggestions(
 /** Pestañas de la lista. */
 export const REQUEST_VIEWS = [
   { id: "abiertas", label: "Abiertas", statuses: OPEN_STATUSES },
-  { id: "atendidas", label: "Llegó a Drop", statuses: ["done"] },
+  { id: "atendidas", label: "Ingresadas a Drop", statuses: ["done"] },
   { id: "descartadas", label: "Descartadas", statuses: ["dropped"] },
   { id: "todas", label: "Todas", statuses: null },
 ] as const satisfies readonly { id: string; label: string; statuses: readonly RequestStatus[] | null }[];

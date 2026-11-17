@@ -36,11 +36,28 @@
 .rq-table .rq-notes { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rq-countries-cell { font-size: var(--t-sm); color: var(--ink-2); }
 .rq-status { display: grid; gap: 4px; }
-.rq-status .select { height: 30px; min-width: 124px; font-weight: 550; }
-.rq-status .select[data-status="pending"] { color: var(--warning); }
-.rq-status .select[data-status="in_progress"] { color: var(--info); }
-.rq-status .select[data-status="done"] { color: var(--success); }
-.rq-status .select[data-status="dropped"] { color: var(--ink-3); }
+.rq-status-box {
+  position: relative; display: inline-flex; align-items: center; min-height: 30px; width: 168px; max-width: 100%;
+  padding: 4px 28px 4px 10px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--bg-surface);
+  font-size: var(--t-sm); font-weight: 550; line-height: 1.25; color: var(--ink-2); box-shadow: var(--shadow-sm);
+}
+.rq-status-box::after {
+  content: ""; position: absolute; right: 11px; top: 50%; width: 6px; height: 6px; margin-top: -5px;
+  border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); opacity: .7; pointer-events: none;
+}
+.rq-status-box:hover { border-color: #c1cad3; }
+.rq-status-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.rq-status-box[data-busy] { opacity: .6; }
+.rq-status-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: inherit; }
+.rq-status-native:disabled { cursor: progress; }
+.rq-status-box[data-status="pending"] { color: var(--warning); }
+.rq-status-box[data-status="lab_requested"] { color: var(--accent-ink); }
+.rq-status-box[data-status="gt_received"] { color: var(--info); }
+.rq-status-box[data-status="in_progress"] { color: var(--info); }
+.rq-status-box[data-status="dest_verified"] { color: var(--accent-ink); }
+.rq-status-box[data-status="done"] { color: var(--success); }
+.rq-status-box[data-status="dropped"] { color: var(--ink-3); }
+@media (max-width: 640px) { .rq-status-box { width: 100%; } }
 
 /* formulario */
 .rq-hint { margin: -4px 0 0; font-size: var(--t-xs); color: var(--success); }
