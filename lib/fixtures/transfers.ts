@@ -49,6 +49,9 @@ const transfer_items: Row[] = [
   I(7, 2, "boxful_sv", "import", "Autogrip", 250, { received_qty: 246, received_note: "Faltaron 4 en el bulto 3" }),
   I(8, 3, "bodega_cr", "import", "Mini ventilador portátil", 120),
   I(9, 4, "miranova_sps", "maquila", "Gotas de magnesio", 100, { source: "lab:f0000000-0000-4000-8000-000000000003:miranova_hn" }),
+  // el mismo producto en dos variantes: en la llegada cada fila tiene que decir cuál es
+  I(10, 1, "miranova_sps", "import", "Brasier Corrector de Postura con Refuerzo Lumbar", 120, { variant: "Beige / M" }),
+  I(11, 1, "miranova_sps", "import", "Brasier Corrector de Postura con Refuerzo Lumbar", 80, { variant: "Negro / XL" }),
 ];
 
 const transfer_arrivals: Row[] = [

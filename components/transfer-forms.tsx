@@ -331,7 +331,7 @@ export function EditLineForm({ action, transferId, item, dests }: { action: Acti
 
 // ─── Llegada a una bodega ───
 
-export type ArrivalLine = { id: string; name: string; qty: number; received_qty: number | null; damaged_qty: number; received_note: string | null };
+export type ArrivalLine = { id: string; name: string; variant?: string | null; qty: number; received_qty: number | null; damaged_qty: number; received_note: string | null };
 
 /** Lo que llegó a una bodega, producto por producto (campos controlados: no se pierden si algo falla). */
 export function ArrivalForm({ action, transferId, destId, lines, arrivedAt, note, minDate }: {
@@ -362,23 +362,25 @@ export function ArrivalForm({ action, transferId, destId, lines, arrivedAt, note
         {lines.map((l) => {
           const r = v[l.id];
           const diff = r.recv === "" ? null : Number(r.recv.replace(/[,\s]/g, "")) - l.qty;
+          const label = l.variant ? `${l.name} · ${l.variant}` : l.name;
           return (
             <li key={l.id}>
               <div className="im-recv-name">
-                <b>{l.name}</b>
+                <b title={l.name}>{l.name}</b>
+                {l.variant && <i className="tr-variant">{l.variant}</i>}
                 <span>Salieron {l.qty.toLocaleString("en-US")}{diff !== null && !Number.isNaN(diff) && diff !== 0 && <em data-bad={diff < 0 || undefined}> · {diff < 0 ? `merma ${-diff}` : `sobran ${diff}`}</em>}</span>
               </div>
               <label className="field">
                 <span>Llegaron</span>
-                <input className="input" name={`recv_${l.id}`} inputMode="numeric" pattern="[0-9][0-9,]*" required value={r.recv} onChange={(e) => set(l.id, "recv", e.target.value)} aria-label={`Llegaron de ${l.name}`} />
+                <input className="input" name={`recv_${l.id}`} inputMode="numeric" pattern="[0-9][0-9,]*" required value={r.recv} onChange={(e) => set(l.id, "recv", e.target.value)} aria-label={`Llegaron de ${label}`} />
               </label>
               <label className="field">
                 <span>Dañadas</span>
-                <input className="input" name={`dmg_${l.id}`} inputMode="numeric" pattern="[0-9][0-9,]*" value={r.dmg} onChange={(e) => set(l.id, "dmg", e.target.value)} placeholder="0" aria-label={`Dañadas de ${l.name}`} />
+                <input className="input" name={`dmg_${l.id}`} inputMode="numeric" pattern="[0-9][0-9,]*" value={r.dmg} onChange={(e) => set(l.id, "dmg", e.target.value)} placeholder="0" aria-label={`Dañadas de ${label}`} />
               </label>
               <label className="field im-recv-note">
                 <span>Nota <span className="hint">opcional</span></span>
-                <input className="input" name={`note_${l.id}`} maxLength={300} value={r.note} onChange={(e) => set(l.id, "note", e.target.value)} placeholder="Caja golpeada, faltó un bulto…" aria-label={`Nota de ${l.name}`} />
+                <input className="input" name={`note_${l.id}`} maxLength={300} value={r.note} onChange={(e) => set(l.id, "note", e.target.value)} placeholder="Caja golpeada, faltó un bulto…" aria-label={`Nota de ${label}`} />
               </label>
             </li>
           );
