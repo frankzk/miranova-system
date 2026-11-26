@@ -132,7 +132,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                 <SideSheet trigger={g.arrival ? "Corregir llegada" : "Registrar llegada"} triggerClass={g.arrival ? "btn btn-ghost btn-sm" : "btn btn-primary btn-sm"} title={`Llegada a ${g.point.name}`} sub={`${t.code} · ${fmtInt(g.totals.sent)} u. salieron`}>
                   <ArrivalForm
                     action={registerArrival} transferId={t.id} destId={g.point.id} arrivedAt={g.arrival?.arrived_at ?? null} note={g.arrival?.note ?? null} minDate={t.shipped_at}
-                    lines={g.items.map((i) => ({ id: i.id, name: lineLabel(i), qty: i.qty, received_qty: i.received_qty, damaged_qty: i.damaged_qty, received_note: i.received_note }))}
+                    lines={g.items.map((i) => ({ id: i.id, name: i.name, variant: i.variant ?? null, qty: i.qty, received_qty: i.received_qty, damaged_qty: i.damaged_qty, received_note: i.received_note }))}
                   />
                 </SideSheet>
               )}
